@@ -24,7 +24,10 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all"
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "shortDescription": "Service Manager - NSSM & native service manager",
+    "longDescription": "GUI untuk mengelola Windows Service NSSM, Apache, dan PostgreSQL."
   }
 }

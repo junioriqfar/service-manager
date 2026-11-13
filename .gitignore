@@ -28,6 +28,9 @@ service-manager-rs/target/
 # Tauri generated schemas
 service-manager-rs/crates/sm-gui/gen/
 
+# Release artifacts
+service-manager-rs/dist/
+
 # OS / editor
 Thumbs.db
 Desktop.ini

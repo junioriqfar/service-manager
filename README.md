@@ -149,15 +149,24 @@ Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
 
 ## Implementasi Rust
 
-Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0-5** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, GUI Tauri, batch async anti-freeze, updater CLI, security hardening, dan unit test.
+Versi Rust tersedia di folder [`service-manager-rs/`](service-manager-rs/README.md). Status: **Phase 0-6 selesai** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, GUI Tauri, batch async anti-freeze, updater CLI, security hardening, release & CI, dan unit test.
 
 ```powershell
 cd service-manager-rs
 cargo run -p sm-gui
+cargo run -p sm-gui --bin sm-diag
 cargo run -p sm-updater -- check --project kasirin
 ```
 
-Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md), [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md).
+Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md), [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md), [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md).
+
+Build portable:
+
+```powershell
+cd service-manager-rs
+.\Build-Release.ps1
+# hasil: dist\ServiceManager-RS-<versi>.zip
+```
 
 ```powershell
 cd service-manager-rs

@@ -22,6 +22,15 @@ Build debug menghasilkan `service-manager-rs\target\debug\sm-gui.exe`. Build rel
 cargo build --release -p sm-gui
 ```
 
+Paket portable (GUI + updater + contoh config + docs):
+
+```powershell
+cd service-manager-rs
+.\Build-Release.ps1
+```
+
+Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
+
 ## Fitur
 
 - Tabel service: status, nama, display name, jenis, application, startup, restart.

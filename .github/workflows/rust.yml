@@ -1,0 +1,48 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test, lint, and package (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: service-manager-rs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service-manager-rs
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build release and portable ZIP
+        shell: pwsh
+        run: ./Build-Release.ps1
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-manager-rs-portable
+          path: service-manager-rs/dist/*.zip
+          if-no-files-found: error

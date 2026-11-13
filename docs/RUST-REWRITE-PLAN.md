@@ -19,9 +19,11 @@ Dokumen perencanaan lengkap untuk menulis ulang **Service Manager** (PowerShell 
 | 3. GUI | **Selesai** | `service-manager-rs/crates/sm-gui` |
 | 4. Updater | **Selesai** | `service-manager-rs/crates/sm-updater` |
 | 5. Security & hardening | **Selesai** | `sm-win/dpapi.rs`, `sm-core/security.rs`, credential helper |
-| 6. Rilis | Belum | - |
+| 6. Rilis | **Selesai** | `Build-Release.ps1`, `.github/workflows`, `docs/RUST-RELEASE.md` |
 
-Test Phase 0-5: 169 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation, argumen NSSM/native, discovery parsing, mock process runner, batch scheduler async, state GUI, log tail/export/rotation, CLI parsing, scan project, runner timeout, seluruh matriks update, redaksi log, DPAPI round-trip, dan credential helper). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator. GUI telah diverifikasi runtime memuat `services.json` (10 service) melalui WebView2 remote debugging. Updater telah diverifikasi end-to-end dengan repository Git lokal: list, check, update fast-forward, dan blokir migration.
+Test Phase 0-6: 172 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation, argumen NSSM/native, discovery parsing, mock process runner, batch scheduler async, state GUI, log tail/export/rotation, CLI parsing, scan project, runner timeout, seluruh matriks update, redaksi log, DPAPI round-trip, dan credential helper). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator. GUI telah diverifikasi runtime memuat `services.json` (10 service) melalui WebView2 remote debugging. Updater telah diverifikasi end-to-end dengan repository Git lokal: list, check, update fast-forward, dan blokir migration. Portable release dibuat oleh `Build-Release.ps1`; installer NSIS didokumentasikan dan membutuhkan Tauri CLI.
+
+Catatan rilis: instalasi MSI/NSIS belum ditandatangani dan belum dijalankan pada pipeline ini; artefak utama yang diverifikasi adalah binary release + ZIP portable.
 
 ---
 

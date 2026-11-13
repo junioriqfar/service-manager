@@ -1,6 +1,6 @@
 # Service Manager RS
 
-Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-5 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, updater CLI, security hardening, test).
+Implementasi Service Manager dalam Rust. Status: **Phase 0-6 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, updater CLI, security hardening, release & CI, test).
 
 Rencana lengkap: [../docs/RUST-REWRITE-PLAN.md](../docs/RUST-REWRITE-PLAN.md).
 
@@ -13,9 +13,17 @@ service-manager-rs/
    ├─ sm-core/     # model, validasi, ordering, aturan update
    ├─ sm-config/   # services.json & projects.json, backup, atomic write
    ├─ sm-win/      # SCM, NSSM/native, discover/import, elevation, DPAPI
-   ├─ sm-gui/      # Tauri GUI + batch async scheduler + log rotation
+   ├─ sm-gui/      # Tauri GUI + batch async scheduler + sm-diag
    └─ sm-updater/  # CLI updater Laravel + credential helper
 ```
+
+Binary:
+
+| Binary | Fungsi |
+| --- | --- |
+| `sm-gui.exe` | GUI Tauri |
+| `sm-updater.exe` | Updater Laravel + credential helper |
+| `sm-diag.exe` | Diagnosa headless (config, NSSM, admin, status service) |
 
 ## Build dan Test
 
@@ -35,6 +43,19 @@ cargo run -p sm-updater -- list
 cargo run -p sm-updater -- check --project kasirin
 cargo run -p sm-updater -- update --project kasirin
 ```
+
+## Release
+
+```powershell
+# Portable ZIP (dist\ServiceManager-RS-<versi>.zip)
+.\Build-Release.ps1
+
+# Portable + installer NSIS (butuh cargo-tauri)
+cargo install tauri-cli --version "^2"
+.\Build-Release.ps1 -Bundle
+```
+
+Panduan lengkap: [docs/RUST-RELEASE.md](../docs/RUST-RELEASE.md). CI: `.github/workflows/rust.yml` dan `release.yml`.
 
 Test default berjalan tanpa Administrator. Test yang mengubah service (start/stop/install/restart) membutuhkan Administrator dan dijalankan manual di server uji:
 
@@ -125,4 +146,4 @@ Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir
 | 3. GUI | Selesai |
 | 4. Updater | Selesai |
 | 5. Security & hardening | Selesai |
-| 6. Release | Belum |
+| 6. Release | Selesai |

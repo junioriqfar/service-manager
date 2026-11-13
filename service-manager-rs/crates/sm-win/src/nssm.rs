@@ -132,7 +132,11 @@ impl<'a> Nssm<'a> {
             return Err(error);
         }
 
-        self.apply(config)
+        if let Err(error) = self.apply(config) {
+            self.remove_ignore_errors(&config.name);
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub fn apply(&self, config: &ServiceConfig) -> Result<(), NssmError> {
@@ -490,5 +494,20 @@ mod tests {
         assert!(matches!(error, NssmError::CommandFailed { .. }));
         let calls = runner.calls();
         assert_eq!(calls[1].1, vec!["remove", "my-app", "confirm"]);
+    }
+
+    #[test]
+    fn nssm_install_cleans_up_when_apply_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = fake_nssm(&temp);
+        // Semua perintah nssm sukses; delayed-start SCM gagal karena service tidak ada.
+        let runner = MockRunner::default();
+        let nssm = Nssm::new(&path, &runner);
+        let error = nssm.install(&service()).unwrap_err();
+        assert!(matches!(error, NssmError::Scm(_)));
+        assert!(runner
+            .calls()
+            .iter()
+            .any(|(_, args)| args == &vec!["remove", "my-app", "confirm"]));
     }
 }

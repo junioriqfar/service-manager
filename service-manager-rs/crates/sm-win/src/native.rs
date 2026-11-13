@@ -279,7 +279,18 @@ pub fn install_with_timeout(
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         if scm::service_exists(&config.name)? {
-            return apply(config, runner, &sc_exe_path());
+            return match apply(config, runner, &sc_exe_path()) {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    let options = crate::scm::WaitOptions {
+                        timeout: Duration::from_secs(30),
+                        ..crate::scm::WaitOptions::default()
+                    };
+                    let _ = scm::stop_service(&config.name, &options);
+                    let _ = remove(config, runner);
+                    Err(error)
+                }
+            };
         }
         thread::sleep(Duration::from_millis(400));
     }

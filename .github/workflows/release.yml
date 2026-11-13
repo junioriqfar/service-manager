@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish portable ZIP
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: service-manager-rs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service-manager-rs
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build portable ZIP
+        shell: pwsh
+        run: ./Build-Release.ps1
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: service-manager-rs/dist/*.zip
+          draft: false
+          prerelease: false
