@@ -7,5 +7,6 @@ pub use error::ConfigError;
 pub use paths::ConfigPaths;
 pub use projects::{load_projects, save_projects, ProjectsFile};
 pub use services::{
-    backup_services, load_services_lenient, load_services_strict, save_services, ServicesLoadResult,
+    backup_services, load_services_lenient, load_services_strict, parse_services_json,
+    save_services, ServicesLoadResult,
 };

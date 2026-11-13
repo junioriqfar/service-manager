@@ -1,6 +1,6 @@
 # Service Manager RS
 
-Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-2 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, test).
+Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-3 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, test).
 
 Rencana lengkap: [../docs/RUST-REWRITE-PLAN.md](../docs/RUST-REWRITE-PLAN.md).
 
@@ -12,7 +12,8 @@ service-manager-rs/
 └─ crates/
    ├─ sm-core/     # model, validasi, ordering, aturan update
    ├─ sm-config/   # services.json & projects.json, backup, atomic write
-   └─ sm-win/      # SCM, NSSM/native wrapper, discover/import, elevation
+   ├─ sm-win/      # SCM, NSSM/native wrapper, discover/import, elevation
+   └─ sm-gui/      # Tauri GUI + batch async scheduler
 ```
 
 ## Build dan Test
@@ -22,6 +23,11 @@ cd service-manager-rs
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
+
+# GUI
+cargo run -p sm-gui
+# dari target/debug, arahkan config ke folder aplikasi:
+$env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
 ```
 
 Test default berjalan tanpa Administrator. Test yang mengubah service (start/stop/install/restart) membutuhkan Administrator dan dijalankan manual di server uji:
@@ -67,6 +73,20 @@ Modul `sm-win::elevation` menyediakan cek token Administrator dan relaunch via `
 
 Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguhan. Enumerasi read-only diuji terhadap service Windows yang ada.
 
+## GUI Tauri (Phase 3)
+
+`sm-gui` menyediakan UI setara WinForms: tabel service, form tambah/edit, import, backup/restore, log viewer, dan banner elevasi. Detail ada di [docs/RUST-GUI.md](../docs/RUST-GUI.md).
+
+Batch Start/Stop/Restart berjalan di background:
+
+- lapisan dependensi dari `sm-core::start_layers`;
+- maksimal 4 operasi paralel;
+- `spawn_blocking` untuk panggilan SCM;
+- progress per service via event Tauri;
+- tombol Cancel dengan penghentian kooperatif.
+
+Test GUI mencakup scheduler batch (urutan dependensi, stop reversal, paralelisme, failure isolation, cancellation), state, dan log/export.
+
 ## Status Fase
 
 | Fase | Status |
@@ -74,7 +94,7 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 | 0. Fondasi | Selesai |
 | 1. Core SCM | Selesai |
 | 2. NSSM & native | Selesai |
-| 3. GUI | Belum |
+| 3. GUI | Selesai |
 | 4. Updater | Belum |
 | 5. Security & hardening | Belum |
 | 6. Release | Belum |

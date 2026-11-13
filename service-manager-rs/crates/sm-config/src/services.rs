@@ -129,6 +129,13 @@ pub fn load_services_lenient(path: &Path, backup_dir: &Path) -> ServicesLoadResu
     }
 }
 
+/// Parse isi JSON (object `{version, services}` atau array legacy) tanpa menyentuh disk.
+pub fn parse_services_json(raw: &str) -> Result<Vec<ServiceConfig>, ConfigError> {
+    let mut services = parse_services(raw).map_err(ConfigError::Invalid)?;
+    fill_timestamps(&mut services);
+    Ok(services)
+}
+
 /// Baca config secara ketat untuk CLI. Config rusak tetap dicadangkan lebih dulu.
 pub fn load_services_strict(
     path: &Path,
@@ -366,6 +373,18 @@ mod tests {
         assert_eq!(count, 20);
         assert!(!backup.join("services-20260101-000000-000.json").exists());
         assert!(backup.join("services-20260101-000000-024.json").exists());
+    }
+
+    #[test]
+    fn parses_json_text_without_disk_access() {
+        let services = parse_services_json(
+            r#"{"version":1,"services":[{"name":"demo","executable":"C:\\demo.exe"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(services.len(), 1);
+        assert_eq!(services[0].display_name, "demo");
+        assert!(!services[0].added_at.is_empty());
+        assert!(parse_services_json("{ broken").is_err());
     }
 
     #[test]

@@ -25,6 +25,9 @@ secrets.json
 service-manager-rs/target/
 **/*.rs.bk
 
+# Tauri generated schemas
+service-manager-rs/crates/sm-gui/gen/
+
 # OS / editor
 Thumbs.db
 Desktop.ini

@@ -1,6 +1,7 @@
 pub mod discovery;
 pub mod elevation;
 pub mod error;
+pub mod manager;
 pub mod native;
 pub mod nssm;
 pub mod process;
@@ -13,6 +14,7 @@ pub use discovery::{
 };
 pub use elevation::{command_line, is_elevated, quote_argument, relaunch_elevated, ElevationError};
 pub use error::ScmError;
+pub use manager::{apply_service, install_service, remove_service, ManagerError};
 pub use native::{apply as apply_native, install_plan, NativeCommand, NativeError};
 pub use nssm::{apply_commands as nssm_apply_commands, Nssm, NssmCommand, NssmError};
 pub use process::{CommandOutput, CommandRunner, ProcessError, SystemRunner};

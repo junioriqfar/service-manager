@@ -88,8 +88,10 @@ pub fn decode_output(bytes: &[u8]) -> String {
 
     if bytes.len() >= 2 && odd_nuls > even_nuls && odd_nuls * 4 >= bytes.len() {
         let units: Vec<u16> = bytes
-            .chunks_exact(2)
-            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|chunk| u16::from_le_bytes(*chunk))
             .collect();
         String::from_utf16_lossy(&units)
             .trim_end_matches('\0')
