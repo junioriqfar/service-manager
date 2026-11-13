@@ -1,0 +1,28 @@
+# Runtime configuration - machine specific, may contain internal paths/IPs
+services.json
+projects.json
+services-export-*.json
+services-broken-*.json
+
+# Runtime artifacts
+logs/
+backup/
+
+# Secrets and credentials - never commit
+.env
+.env.*
+*.token
+*.secret
+*.pfx
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+credentials.json
+secrets.json
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/

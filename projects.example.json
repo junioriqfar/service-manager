@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "scanRoots": [
+    "D:\\Projects\\PHPProjects"
+  ],
+  "allowedClientIPs": [
+    "127.0.0.1",
+    "::1"
+  ],
+  "gitPath": "C:\\laragon\\bin\\git\\cmd\\git.exe",
+  "phpPath": "C:\\laragon\\bin\\php\\php.exe",
+  "composerPath": "C:\\laragon\\bin\\composer\\composer.bat",
+  "npmPath": "C:\\Program Files\\nodejs\\npm.cmd",
+  "logDir": "C:\\tools\\ServiceManager\\logs",
+  "projects": {
+    "contoh-project": {
+      "enabled": true,
+      "branch": "main",
+      "composer": "auto",
+      "build": "auto",
+      "queueRestart": true,
+      "postUpdateCommand": ""
+    }
+  }
+}

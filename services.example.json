@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "services": [
+    {
+      "name": "my-node-app",
+      "displayName": "My Node App",
+      "serviceType": "nssm",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "arguments": "index.js",
+      "workingDirectory": "C:\\apps\\my-node-app",
+      "apacheRoot": "",
+      "apacheConfig": "",
+      "pgData": "",
+      "pgAccount": "",
+      "stdoutLog": "C:\\apps\\my-node-app\\logs\\out.log",
+      "stderrLog": "C:\\apps\\my-node-app\\logs\\err.log",
+      "startup": "auto",
+      "restartOnCrash": true,
+      "restartDelaySec": 5,
+      "dependencies": ["Tcpip"]
+    },
+    {
+      "name": "Apache2.4",
+      "displayName": "Apache 2.4",
+      "serviceType": "apache",
+      "executable": "C:\\Apache24\\bin\\httpd.exe",
+      "arguments": "",
+      "workingDirectory": "C:\\Apache24",
+      "apacheRoot": "C:\\Apache24",
+      "apacheConfig": "conf/httpd.conf",
+      "pgData": "",
+      "pgAccount": "",
+      "stdoutLog": "",
+      "stderrLog": "",
+      "startup": "auto",
+      "restartOnCrash": false,
+      "restartDelaySec": 5,
+      "dependencies": []
+    },
+    {
+      "name": "postgresql-16",
+      "displayName": "PostgreSQL 16",
+      "serviceType": "postgresql",
+      "executable": "C:\\Program Files\\PostgreSQL\\16\\bin\\pg_ctl.exe",
+      "arguments": "",
+      "workingDirectory": "C:\\Program Files\\PostgreSQL\\16\\data",
+      "apacheRoot": "",
+      "apacheConfig": "",
+      "pgData": "C:\\Program Files\\PostgreSQL\\16\\data",
+      "pgAccount": "NT AUTHORITY\\NetworkService",
+      "stdoutLog": "",
+      "stderrLog": "",
+      "startup": "auto",
+      "restartOnCrash": false,
+      "restartDelaySec": 5,
+      "dependencies": []
+    }
+  ]
+}
