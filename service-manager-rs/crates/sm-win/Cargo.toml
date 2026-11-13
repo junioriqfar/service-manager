@@ -1,0 +1,16 @@
+[package]
+name = "sm-win"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Windows platform integration for Service Manager"
+
+[dependencies]
+sm-core = { path = "../sm-core" }
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

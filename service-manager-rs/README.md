@@ -1,6 +1,6 @@
 # Service Manager RS
 
-Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0 selesai** (workspace, domain model, kompatibilitas config, test).
+Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-1 selesai** (workspace, domain model, kompatibilitas config, SCM core, test).
 
 Rencana lengkap: [../docs/RUST-REWRITE-PLAN.md](../docs/RUST-REWRITE-PLAN.md).
 
@@ -11,7 +11,8 @@ service-manager-rs/
 ├─ Cargo.toml
 └─ crates/
    ├─ sm-core/     # model, validasi, ordering, aturan update
-   └─ sm-config/   # services.json & projects.json, backup, atomic write
+   ├─ sm-config/   # services.json & projects.json, backup, atomic write
+   └─ sm-win/      # SCM (status/start/stop), delayed start, elevation
 ```
 
 ## Build dan Test
@@ -23,7 +24,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini semua test berjalan tanpa membutuhkan Administrator. Test yang menyentuh Windows Service akan ditandai `#[ignore]` dan dijalankan manual di server uji.
+Test default berjalan tanpa Administrator. Test yang mengubah service (start/stop/install/restart) membutuhkan Administrator dan dijalankan manual di server uji:
+
+```powershell
+cargo test -p sm-win -- --ignored
+```
+
+Test read-only memakai service bawaan `EventLog` untuk memverifikasi query status, sehingga tidak mengubah sistem.
 
 ## Kompatibilitas Config
 
@@ -39,12 +46,24 @@ Saat ini semua test berjalan tanpa membutuhkan Administrator. Test yang menyentu
 | --- | --- |
 | `SERVICE_MANAGER_HOME` | Folder config/log/backup. Default: folder executable. |
 
+## SCM Core (Phase 1)
+
+Modul `sm-win::scm` menyediakan:
+
+- `query_status` / `service_exists` — status numerik SCM (`Running`, `Stopped`, pending, dst.) dan PID.
+- `start_service` / `stop_service` / `restart_service` — idempoten untuk kondisi sudah berjalan/berhenti.
+- `wait_for_state` — polling dengan timeout, interval, dan `CancellationToken` berbasis `Arc<AtomicBool>`.
+- `set_startup` / `set_delayed_start` — `ChangeServiceConfigW` + `ChangeServiceConfig2W`.
+- `delete_service` — `DeleteService`, aman bila service sudah tidak ada.
+
+Modul `sm-win::elevation` menyediakan cek token Administrator dan relaunch via `ShellExecuteW` (`runas`), termasuk quoting argumen ala `CommandToArgvW`.
+
 ## Status Fase
 
 | Fase | Status |
 | --- | --- |
 | 0. Fondasi | Selesai |
-| 1. Core SCM | Belum |
+| 1. Core SCM | Selesai |
 | 2. NSSM & native | Belum |
 | 3. GUI | Belum |
 | 4. Updater | Belum |
