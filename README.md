@@ -146,6 +146,10 @@ Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
 | `Akses remote gagal` pada Project Update | Simpan kredensial Git lewat `Store-GitCredential.ps1` atau login sekali via RDP/console. Browser tidak bisa muncul via SSH. |
 | Update diblokir karena migration | Jalankan migration secara manual, lalu ulangi update. |
 
+## Roadmap
+
+Rencana migrasi ke Rust (arsitektur, pemetaan fitur, fase, estimasi, dan risiko) tersedia di [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md).
+
 ## Lisensi
 
 Belum ditentukan.
