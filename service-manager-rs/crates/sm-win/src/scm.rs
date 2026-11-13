@@ -15,12 +15,12 @@ use windows::Win32::Foundation::{
 use windows::Win32::System::Services::{
     ChangeServiceConfig2W, ChangeServiceConfigW, CloseServiceHandle, ControlService, DeleteService,
     OpenSCManagerW, OpenServiceW, QueryServiceStatusEx, StartServiceW, ENUM_SERVICE_TYPE,
-    SC_MANAGER_CONNECT, SC_STATUS_PROCESS_INFO, SERVICE_AUTO_START, SERVICE_CHANGE_CONFIG,
-    SERVICE_CONFIG_DELAYED_AUTO_START_INFO, SERVICE_CONTINUE_PENDING, SERVICE_CONTROL_STOP,
-    SERVICE_DELAYED_AUTO_START_INFO, SERVICE_DEMAND_START, SERVICE_ERROR, SERVICE_NO_CHANGE,
-    SERVICE_PAUSED, SERVICE_PAUSE_PENDING, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START,
-    SERVICE_START_PENDING, SERVICE_START_TYPE, SERVICE_STATUS, SERVICE_STATUS_PROCESS,
-    SERVICE_STOP, SERVICE_STOPPED, SERVICE_STOP_PENDING,
+    SC_MANAGER_CONNECT, SC_MANAGER_ENUMERATE_SERVICE, SC_STATUS_PROCESS_INFO, SERVICE_AUTO_START,
+    SERVICE_CHANGE_CONFIG, SERVICE_CONFIG_DELAYED_AUTO_START_INFO, SERVICE_CONTINUE_PENDING,
+    SERVICE_CONTROL_STOP, SERVICE_DELAYED_AUTO_START_INFO, SERVICE_DEMAND_START, SERVICE_ERROR,
+    SERVICE_NO_CHANGE, SERVICE_PAUSED, SERVICE_PAUSE_PENDING, SERVICE_QUERY_STATUS,
+    SERVICE_RUNNING, SERVICE_START, SERVICE_START_PENDING, SERVICE_START_TYPE, SERVICE_STATUS,
+    SERVICE_STATUS_PROCESS, SERVICE_STOP, SERVICE_STOPPED, SERVICE_STOP_PENDING,
 };
 
 use crate::error::ScmError;
@@ -122,7 +122,7 @@ impl WaitOptions {
     }
 }
 
-struct ScmHandle(windows::Win32::System::Services::SC_HANDLE);
+pub(crate) struct ScmHandle(pub(crate) windows::Win32::System::Services::SC_HANDLE);
 
 impl Drop for ScmHandle {
     fn drop(&mut self) {
@@ -130,7 +130,7 @@ impl Drop for ScmHandle {
     }
 }
 
-struct ServiceHandle(windows::Win32::System::Services::SC_HANDLE);
+pub(crate) struct ServiceHandle(pub(crate) windows::Win32::System::Services::SC_HANDLE);
 
 impl Drop for ServiceHandle {
     fn drop(&mut self) {
@@ -138,7 +138,7 @@ impl Drop for ServiceHandle {
     }
 }
 
-fn wide(value: &str) -> Vec<u16> {
+pub(crate) fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
@@ -154,15 +154,21 @@ fn map_service_error(name: &str, error: WinError) -> ScmError {
     }
 }
 
-fn open_scm() -> Result<ScmHandle> {
-    let handle = unsafe { OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT) }
-        .map_err(|error| {
-            ScmError::Windows(format!("Gagal membuka Service Control Manager: {error}"))
-        })?;
+pub(crate) fn open_scm() -> Result<ScmHandle> {
+    let handle = unsafe {
+        OpenSCManagerW(
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE,
+        )
+    }
+    .map_err(|error| {
+        ScmError::Windows(format!("Gagal membuka Service Control Manager: {error}"))
+    })?;
     Ok(ScmHandle(handle))
 }
 
-fn open_service(scm: &ScmHandle, name: &str, access: u32) -> Result<ServiceHandle> {
+pub(crate) fn open_service(scm: &ScmHandle, name: &str, access: u32) -> Result<ServiceHandle> {
     let name_wide = wide(name);
     let handle = unsafe { OpenServiceW(scm.0, PCWSTR(name_wide.as_ptr()), access) }
         .map_err(|error| map_service_error(name, error))?;

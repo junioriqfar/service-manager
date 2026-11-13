@@ -15,13 +15,13 @@ Dokumen perencanaan lengkap untuk menulis ulang **Service Manager** (PowerShell 
 | --- | --- | --- |
 | 0. Fondasi | **Selesai** | `service-manager-rs/crates/sm-core`, `sm-config` |
 | 1. Core SCM | **Selesai** | `service-manager-rs/crates/sm-win` |
-| 2. NSSM & native | Belum | - |
+| 2. NSSM & native | **Selesai** | `service-manager-rs/crates/sm-win` |
 | 3. GUI | Belum | - |
 | 4. Updater | Belum | - |
 | 5. Security & hardening | Belum | - |
 | 6. Rilis | Belum | - |
 
-Test Phase 0-1: 58 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator.
+Test Phase 0-2: 94 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation, argumen NSSM/native, discovery parsing, mock process runner). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator.
 
 ---
 

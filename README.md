@@ -149,7 +149,7 @@ Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
 
 ## Implementasi Rust
 
-Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0-1** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core (status/start/stop/delayed), dan unit test.
+Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0-2** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, dan unit test.
 
 ```powershell
 cd service-manager-rs

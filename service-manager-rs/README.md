@@ -1,6 +1,6 @@
 # Service Manager RS
 
-Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-1 selesai** (workspace, domain model, kompatibilitas config, SCM core, test).
+Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-2 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, test).
 
 Rencana lengkap: [../docs/RUST-REWRITE-PLAN.md](../docs/RUST-REWRITE-PLAN.md).
 
@@ -12,7 +12,7 @@ service-manager-rs/
 └─ crates/
    ├─ sm-core/     # model, validasi, ordering, aturan update
    ├─ sm-config/   # services.json & projects.json, backup, atomic write
-   └─ sm-win/      # SCM (status/start/stop), delayed start, elevation
+   └─ sm-win/      # SCM, NSSM/native wrapper, discover/import, elevation
 ```
 
 ## Build dan Test
@@ -58,13 +58,22 @@ Modul `sm-win::scm` menyediakan:
 
 Modul `sm-win::elevation` menyediakan cek token Administrator dan relaunch via `ShellExecuteW` (`runas`), termasuk quoting argumen ala `CommandToArgvW`.
 
+## NSSM, Native, dan Import (Phase 2)
+
+- `sm-win::nssm` — install/remove/apply config NSSM, termasuk `Application`, `AppParameters`, `AppDirectory`, log rotation, `AppExit`, restart delay, dependensi, dan recovery action `sc failure`.
+- `sm-win::native` — install/uninstall Apache (`httpd -k install`) dan PostgreSQL (`pg_ctl register`), apply `sc config` untuk display/start/dependency, delayed start, dan failure actions.
+- `sm-win::discovery` — enumerasi service Windows via `EnumServicesStatusExW` + `QueryServiceConfigW`, klasifikasi `nssm.exe`/`httpd.exe`/`pg_ctl.exe`, parsing command line (`-d`, `-f`, `-D`), pembacaan `PGDATA`, log Apache/PostgreSQL, dan nilai NSSM.
+- `sm-win::process` — abstraksi `CommandRunner` (nyata dan mock) serta decoding output UTF-8/UTF-16LE.
+
+Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguhan. Enumerasi read-only diuji terhadap service Windows yang ada.
+
 ## Status Fase
 
 | Fase | Status |
 | --- | --- |
 | 0. Fondasi | Selesai |
 | 1. Core SCM | Selesai |
-| 2. NSSM & native | Belum |
+| 2. NSSM & native | Selesai |
 | 3. GUI | Belum |
 | 4. Updater | Belum |
 | 5. Security & hardening | Belum |
