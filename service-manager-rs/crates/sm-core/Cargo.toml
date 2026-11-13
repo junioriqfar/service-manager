@@ -1,0 +1,14 @@
+[package]
+name = "sm-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Domain model and pure business rules for Service Manager"
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true

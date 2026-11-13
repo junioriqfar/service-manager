@@ -21,6 +21,10 @@ id_ed25519*
 credentials.json
 secrets.json
 
+# Rust build artifacts
+service-manager-rs/target/
+**/*.rs.bk
+
 # OS / editor
 Thumbs.db
 Desktop.ini

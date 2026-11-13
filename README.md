@@ -54,6 +54,7 @@ ServiceManager/
 ├─ Store-GitCredential.ps1   # Helper penyimpanan kredensial Git (DPAPI)
 ├─ services.example.json     # Contoh konfigurasi service
 ├─ projects.example.json     # Contoh konfigurasi project updater
+├─ service-manager-rs/       # Implementasi Rust (bertahap)
 ├─ services.json             # Konfigurasi runtime (tidak di-commit)
 ├─ projects.json             # Konfigurasi runtime (tidak di-commit)
 ├─ backup/                   # Backup config otomatis (tidak di-commit)
@@ -146,9 +147,18 @@ Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
 | `Akses remote gagal` pada Project Update | Simpan kredensial Git lewat `Store-GitCredential.ps1` atau login sekali via RDP/console. Browser tidak bisa muncul via SSH. |
 | Update diblokir karena migration | Jalankan migration secara manual, lalu ulangi update. |
 
+## Implementasi Rust
+
+Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0 (fondasi)** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, dan unit test.
+
+```powershell
+cd service-manager-rs
+cargo test --workspace
+```
+
 ## Roadmap
 
-Rencana migrasi ke Rust (arsitektur, pemetaan fitur, fase, estimasi, dan risiko) tersedia di [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md).
+Rencana migrasi ke Rust (arsitektur, pemetaan fitur, fase, estimasi, dan risiko) tersedia di [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md). Status implementasi diperbarui di [service-manager-rs/README.md](service-manager-rs/README.md).
 
 ## Lisensi
 

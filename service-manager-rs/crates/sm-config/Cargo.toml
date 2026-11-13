@@ -1,0 +1,16 @@
+[package]
+name = "sm-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "services.json and projects.json compatibility layer"
+
+[dependencies]
+sm-core = { path = "../sm-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
