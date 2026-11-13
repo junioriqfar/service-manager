@@ -169,8 +169,9 @@ Aturan dependensi: `sm-core` tidak boleh bergantung pada `sm-win`; `sm-gui` dan 
 
 - Satu `AppState` di Rust: `Vec<ServiceConfig>` + status cache + selected service.
 - UI memanggil command Tauri (`list_services`, `start_service`, `save_service`, dst.).
-- Operasi lambat (start/stop, import, backup) dijalankan di `spawn_blocking`.
+- Operasi lambat (start/stop, import, backup) dijalankan di `spawn_blocking`; **UI thread tidak pernah menunggu operasi service**.
 - Event push dari Rust ke UI untuk progress/log live (`service-status-changed`, `log-appended`, `operation-progress`).
+- Batch Start/Stop/Restart memakai scheduler dependensi, concurrency terbatas, progress per service, dan tombol Cancel. Detail lengkap di [Bagian 9](#9-model-concurrency-dan-responsivitas-ui).
 
 ---
 
@@ -326,9 +327,173 @@ pub struct ProjectOverride {
 
 ---
 
-## 9. Project Updater (sm-updater)
+## 9. Model Concurrency dan Responsivitas UI
 
-### 9.1 Perintah CLI
+Bagian ini menjawab masalah utama versi PowerShell: tombol **Restart Semua** memblokir UI karena seluruh operasi dan penantian status berjalan sinkron di UI thread. Di Rust, UI thread **tidak boleh** melakukan operasi service sama sekali.
+
+### 9.1 Prinsip
+
+1. **UI thread hanya untuk render dan dispatch command**; tidak ada I/O, `sleep`, atau penantian service di UI thread.
+2. **Semua panggilan Win32 dan penantian service bersifat blocking** dan wajib dijalankan di blocking thread pool (`tokio::task::spawn_blocking`).
+3. **Satu service = satu operasi aktif**. Start/Stop/Restart untuk service yang sama diserialisasi; request kedua menunggu atau ditolak dengan pesan "operasi sedang berjalan".
+4. **Batch menghormati dependensi**: start berurutan per lapisan, service independen dalam satu lapisan boleh paralel dengan batas concurrency.
+5. **Progress dan hasil dikirim sebagai event**, bukan dikembalikan setelah semua selesai.
+6. **Bisa dibatalkan** (CancellationToken) tanpa membekukan UI.
+
+### 9.2 Runtime dan Thread Model
+
+| Thread / Task | Tanggung jawab | Blocking? |
+| --- | --- | --- |
+| Main/UI thread (Tauri) | Render, terima input, tampilkan event | Tidak |
+| Tokio worker | Orkestrasi batch, scheduling, event emit | Tidak |
+| Blocking pool | Panggilan SCM, `Wait-ServiceState`, spawn proses NSSM/Apache/PostgreSQL | Ya |
+| Status poller | Refresh status tiap 3 detik (satu task, tidak tumpang tindih) | Tidak (delegasi ke blocking pool) |
+| Log tailer | Baca delta file log tiap 2 detik | Tidak (I/O async/blocking pendek) |
+| Updater | Jalankan git/composer/npm/php | Proses terpisah (`sm-updater`), tidak di UI thread |
+
+Konfigurasi awal:
+
+```rust
+// sm-gui/src/state.rs
+pub struct RuntimeConfig {
+    pub max_parallel_ops: usize,   // default 4
+    pub service_timeout: Duration, // default 60s, dapat diubah per aksi
+    pub status_interval: Duration, // default 3s
+    pub log_interval: Duration,    // default 2s
+}
+```
+
+### 9.3 Scheduler Batch (Start All / Stop All / Restart All)
+
+Batch **tidak** dijalankan sebagai satu loop blocking. Alurnya:
+
+1. Hitung lapisan dependensi dari `sm-core::ordering`:
+   - **Start**: lapisan 0 (tanpa dependensi) lebih dulu, lalu lapisan berikutnya.
+   - **Stop/Restart**: urutan dibalik (dependent lebih dulu).
+2. Untuk setiap lapisan, jalankan service secara paralel dengan `Semaphore` (default 4).
+3. Tunggu seluruh service di lapisan selesai sebelum lanjut ke lapisan berikutnya (agar dependensi terpenuhi).
+4. Kirim event `batch-progress` setiap satu service selesai (`queued`, `running`, `succeeded`, `failed`, `cancelled`).
+5. Kumpulkan laporan akhir; kegagalan satu service **tidak** otomatis menghentikan service lain (dapat dikonfigurasi `stop_on_error`).
+
+Contoh implementasi:
+
+```rust
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
+
+pub async fn run_batch(
+    app: AppHandle,
+    services: Vec<ServiceConfig>,
+    action: BatchAction,
+    cancel: CancellationToken,
+) -> BatchReport {
+    let layers = sm_core::ordering::layers_for(&services, action);
+    let semaphore = Arc::new(Semaphore::new(4));
+    let mut report = BatchReport::default();
+
+    for layer in layers {
+        let mut set = JoinSet::new();
+
+        for svc in layer {
+            if cancel.is_cancelled() {
+                report.push(svc.name, OpState::Cancelled);
+                continue;
+            }
+
+            let permit = semaphore.clone().acquire_owned().await.unwrap();
+            let cancel = cancel.clone();
+            let app = app.clone();
+
+            set.spawn(async move {
+                let _permit = permit; // batasi concurrency
+                let name = svc.name.clone();
+                app.emit_progress(&name, OpState::Running);
+
+                // Panggilan SCM/proses adalah blocking -> blocking pool
+                let result = tokio::task::spawn_blocking(move || {
+                    sm_win::execute(&svc, action, &cancel)
+                })
+                .await;
+
+                let state = match result {
+                    Ok(Ok(())) => OpState::Succeeded,
+                    Ok(Err(err)) => OpState::Failed(err.to_string()),
+                    Err(join_err) => OpState::Failed(join_err.to_string()),
+                };
+                app.emit_progress(&name, state.clone());
+                (name, state)
+            });
+        }
+
+        while let Some(joined) = set.join_next().await {
+            if let Ok((name, state)) = joined {
+                report.push(name, state);
+            }
+        }
+    }
+
+    report
+}
+```
+
+Catatan penting:
+
+- `spawn_blocking` tidak bisa di-abort paksa. Karena itu `sm_win::execute` harus memakai **wait loop dengan timeout kecil** (mis. `WaitForSingleObject`/polling 250 ms) yang mengecek `CancellationToken`, sehingga pembatalan berlaku dalam hitungan detik.
+- Untuk `Restart`, urutan operasi per service: stop -> tunggu `Stopped` -> start -> tunggu `Running`.
+- Service yang sudah berjalan (start) atau sudah berhenti (stop) dilewati (idempoten).
+
+### 9.4 Lock per Service
+
+- `HashMap<ServiceName, Arc<Mutex<()>>>` atau actor per service.
+- Command UI menolak operasi baru bila service yang sama sedang diproses.
+- Tombol Start/Stop/Restart untuk baris tersebut berstatus disabled selama operasi berjalan.
+- Mencegah race: `Start` dan `Stop` bersamaan pada service yang sama tidak boleh terjadi.
+
+### 9.5 Status Polling dan Refresh
+
+- **Satu** task poller berjalan terus; tidak membuat task baru setiap klik Refresh.
+- Klik Refresh hanya memicu permintaan segera (channel) dan di-coalesce bila poller sedang berjalan.
+- Status grid diperbarui sebagai diff per baris, bukan rebuild seluruh grid, agar tidak flicker.
+- Poller berhenti saat jendela ditutup (`CancellationToken`).
+
+### 9.6 Log Viewer
+
+- Log tailer membaca **delta** dengan `seek` dari offset terakhir; bukan membaca ulang seluruh file.
+- Batas baca per tick (mis. 256 KB) agar file besar tidak memblokir.
+- Auto-refresh 2 detik dapat dimatikan; saat pengguna scroll ke atas, posisi tidak dipaksa ke bawah.
+- Bila service diganti, offset di-reset.
+
+### 9.7 Pembatalan (Cancel)
+
+- Tombol **Batalkan** pada dialog progress batch.
+- Efek: tidak ada service baru yang dijadwalkan; operasi yang sedang berjalan diberi kesempatan selesai, atau dihentikan setelah timeout.
+- Status akhir dilaporkan jujur: `cancelled`, bukan `failed`.
+
+### 9.8 Target Performa
+
+| Metrik | Target |
+| --- | --- |
+| UI tetap responsif saat batch 10+ service | Tidak ada freeze; frame tetap berjalan |
+| Waktu dispatch command | < 16 ms di UI thread |
+| Restart 10 service (masing-masing ~2 detik) | Selesai < 15 detik dengan concurrency 4 dan dependensi memadai |
+| Progress update | Dikirim per service, bukan hanya di akhir |
+| Status poll | Tidak pernah tumpang tindih |
+| Memori log tail | Konstan (offset-based), tidak tumbuh dengan ukuran file |
+
+### 9.9 Pengujian Concurrency
+
+- **Dummy slow service** (mis. executable yang sleep 5 detik) untuk memastikan UI tetap responsif dan Cancel bekerja.
+- Stress test 20 service batch berulang; deteksi deadlock dan kebocoran task.
+- Test race: Start+Stop pada service yang sama harus diserialisasi.
+- Test dependensi: service B bergantung pada A; B tidak boleh start sebelum A `Running`.
+- Test cancellation: setelah Cancel, tidak ada operasi baru yang dimulai.
+- Ukur waktu UI thread dengan instrumentation (log bila command > 16 ms).
+
+## 10. Project Updater (sm-updater)
+
+### 10.1 Perintah CLI
 
 ```
 sm-updater                     # menu interaktif
@@ -342,7 +507,7 @@ sm-updater --config PATH ...
 
 Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
-### 9.2 Algoritma
+### 10.2 Algoritma
 
 1. Muat config + validasi path tool.
 2. Scan `scanRoots` + override manual.
@@ -360,11 +525,11 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
    - tulis log + kembalikan status.
 5. Ringkas hasil dan exit code.
 
-### 9.3 Status Hasil
+### 10.3 Status Hasil
 
 `up-to-date`, `check`, `updated`, `dirty`, `blocked-migration`, `failed` (sama dengan versi PowerShell).
 
-### 9.4 Aturan Langkah Kondisional
+### 10.4 Aturan Langkah Kondisional
 
 | Perubahan | Aksi |
 | --- | --- |
@@ -376,7 +541,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 | Kode berubah + `queueRestart` | `php artisan queue:restart` |
 | `database/migrations/*` | Blokir Auto |
 
-### 9.5 Eksekusi Proses
+### 10.5 Eksekusi Proses
 
 - Gunakan `std::process::Command` dengan argumen array (tanpa `cmd /c`).
 - Set env: `GCM_CREDENTIAL_STORE=dpapi`, `GCM_INTERACTIVE=never`, `GIT_TERMINAL_PROMPT=0`.
@@ -386,7 +551,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 10. Keamanan
+## 11. Keamanan
 
 - **Tanpa secret di repo**: `.gitignore` tetap berlaku; config runtime tidak di-commit.
 - **DPAPI**: jika perlu menyimpan rahasia sendiri, gunakan `CryptProtectData` dengan scope user + machine, simpan ciphertext saja.
@@ -399,7 +564,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 11. Error Handling dan Logging
+## 12. Error Handling dan Logging
 
 - Error domain: `ConfigError`, `ServiceError`, `NssmError`, `NativeServiceError`, `GitError`, `UpdateError`, `ElevationError`.
 - Pesan UI dalam Bahasa Indonesia; detail teknis di `logs/app.log`.
@@ -409,9 +574,9 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 12. Strategi Pengujian
+## 13. Strategi Pengujian
 
-### 12.1 Unit Test (`cargo test`)
+### 13.1 Unit Test (`cargo test`)
 
 - Parsing/serialisasi `services.json` dan `projects.json` (termasuk field hilang/unknown).
 - Normalisasi default (startup, delay, displayName, tipe tidak dikenal).
@@ -420,7 +585,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 - Validasi nama service/path.
 - Redaksi log.
 
-### 12.2 Integration Test (Windows-only, CI `windows-latest`)
+### 13.2 Integration Test (Windows-only, CI `windows-latest`)
 
 - Buat service uji memakai executable dummy (mis. `cmd.exe /c ping -t 127.0.0.1`) melalui NSSM bila tersedia.
 - Install -> start -> status -> stop -> hapus.
@@ -429,7 +594,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 - Config rusak -> backup otomatis + fallback kosong.
 - Git test repo lokal (bare remote) untuk alur check/update/migration-block.
 
-### 12.3 Manual Test Matrix
+### 13.3 Manual Test Matrix
 
 | Skenario | Harapan |
 | --- | --- |
@@ -444,14 +609,14 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 | Working tree kotor | Project dilewati, status `dirty` |
 | Log besar | Tail dibatasi, UI tetap responsif |
 
-### 12.4 Uji Kompatibilitas
+### 13.4 Uji Kompatibilitas
 
 - Jalankan Rust dan PowerShell pada `services.json` yang sama; bandingkan daftar service, status, dan hasil operasi.
 - Simpan fixture config dari versi PowerShell sebagai golden sample.
 
 ---
 
-## 13. Build, Distribusi, dan CI
+## 14. Build, Distribusi, dan CI
 
 - **Build**: `cargo build --release --workspace`; GUI dibundel Tauri.
 - **Installer**: MSI/NSIS via Tauri bundler; sertakan shortcut dan manifest admin.
@@ -465,21 +630,21 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 14. Fase Implementasi
+## 15. Fase Implementasi
 
 | Fase | Deliverable | Estimasi |
 | --- | --- | --- |
 | 0. Fondasi | Workspace, CI, model data, config read/write + backup, test golden | 3-5 hari |
 | 1. Core SCM | `sm-win::scm`, status, start/stop, delayed start, dependency ordering | 4-6 hari |
 | 2. NSSM & native | Install/uninstall/apply config NSSM, Apache, PostgreSQL | 4-6 hari |
-| 3. GUI utama | Tauri shell, grid, status/timer, log viewer, dialog service, import, backup/restore | 7-10 hari |
+| 3. GUI utama | Tauri shell, grid, status/timer, log viewer, dialog service, import, backup/restore, **batch async + progress + Cancel** | 8-11 hari |
 | 4. Updater | `sm-updater` CLI, git flow, langkah kondisional, log, migration guard | 5-7 hari |
 | 5. Hardening | Elevasi, error handling, redaksi log, manual test matrix, performance | 3-5 hari |
 | 6. Rilis | Installer, dokumentasi, migrasi config, pilot di server | 2-4 hari |
 
 **Total:** ±30-45 person-days (1 pengembang Rust berpengalaman).
 
-### 14.1 Rencana Rollout
+### 15.1 Rencana Rollout
 
 1. **Paralel**: Rust dipasang di folder terpisah, membaca `services.json` yang sama (mode read-only untuk daftar).
 2. **Pilot**: gunakan Rust untuk start/stop/status harian; PowerShell sebagai cadangan.
@@ -488,7 +653,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 15. Risiko dan Mitigasi
+## 16. Risiko dan Mitigasi
 
 | Risiko | Dampak | Mitigasi |
 | --- | --- | --- |
@@ -499,16 +664,19 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 | Config lama tidak kompatibel | Kehilangan data | Golden test + backup otomatis + tidak mengubah format |
 | Antivirus/code signing | Binary diblokir | Code signing, checksum rilis, dokumentasi whitelist |
 | Scope creep (fitur baru) | Mundur dari jadwal | Patuhi non-tujuan fase awal |
+| Batch paralel membebani SCM/CPU | Service gagal start atau server lambat | Batasi concurrency (default 4), rate limit, timeout, dan pengujian stress |
 
 ---
 
-## 16. Kriteria Penerimaan
+## 17. Kriteria Penerimaan
 
 - [ ] `services.json` dan `projects.json` versi 1 terbaca dan tertulis tanpa kehilangan data.
 - [ ] Semua operasi service NSSM/Apache/PostgreSQL berhasil di server uji.
 - [ ] Import service terpasang bekerja untuk ketiga tipe.
 - [ ] Delayed start, restart on crash, dan urutan dependensi berfungsi.
 - [ ] Log viewer menampilkan tail dan auto-refresh.
+- [ ] **Restart Semua / Start Semua / Stop Semua tidak membekukan UI**, menampilkan progress per service, dan dapat dibatalkan.
+- [ ] Batch menghormati dependensi: service dependent tidak start sebelum dependensinya `Running`.
 - [ ] Backup otomatis (maks. 20) dan restore config berfungsi.
 - [ ] `sm-updater` lulus seluruh matriks keputusan update dan memblokir migration.
 - [ ] Tidak ada kredensial/token di repositori maupun log.
@@ -518,7 +686,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 17. Pertanyaan Terbuka
+## 18. Pertanyaan Terbuka
 
 1. Apakah target minimum Windows 10 21H2 atau perlu Windows Server 2016? (menentukan WebView2/Tauri).
 2. Apakah aplikasi harus berjalan tanpa WebView2 (memaksa GUI native `Slint`/`egui`)?
@@ -529,7 +697,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 18. Referensi Kode Acuan
+## 19. Referensi Kode Acuan
 
 | Topik | Lokasi saat ini |
 | --- | --- |
@@ -546,7 +714,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 
 ---
 
-## 19. Langkah Berikutnya
+## 20. Langkah Berikutnya
 
 1. Setujui keputusan GUI (Tauri vs native) dan target Windows minimum.
 2. Buat workspace `service-manager-rs` + CI.
