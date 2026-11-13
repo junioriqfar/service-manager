@@ -1,0 +1,26 @@
+[package]
+name = "sm-updater"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Safe Laravel project updater for Service Manager"
+
+[lib]
+name = "sm_updater"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sm-updater"
+path = "src/main.rs"
+
+[dependencies]
+sm-core = { path = "../sm-core" }
+sm-config = { path = "../sm-config" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+wait-timeout = "0.2"
+
+[dev-dependencies]
+tempfile.workspace = true

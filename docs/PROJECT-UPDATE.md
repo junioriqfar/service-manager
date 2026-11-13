@@ -2,6 +2,8 @@
 
 `ProjectUpdate.ps1` memperbarui project Laravel dari Git dengan alur yang aman. Script dirancang untuk dijalankan di server (misalnya lewat SSH/Task Scheduler) tanpa interaksi browser.
 
+> Implementasi Rust tersedia sebagai `sm-updater` dengan alur dan konfigurasi yang sama. Lihat [RUST-UPDATER.md](RUST-UPDATER.md).
+
 ## Cara Kerja
 
 1. Memindai `scanRoots` untuk folder yang memenuhi syarat project Laravel:

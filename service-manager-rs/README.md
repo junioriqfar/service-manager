@@ -1,6 +1,6 @@
 # Service Manager RS
 
-Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-3 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, test).
+Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-4 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, updater CLI, test).
 
 Rencana lengkap: [../docs/RUST-REWRITE-PLAN.md](../docs/RUST-REWRITE-PLAN.md).
 
@@ -13,7 +13,8 @@ service-manager-rs/
    ├─ sm-core/     # model, validasi, ordering, aturan update
    ├─ sm-config/   # services.json & projects.json, backup, atomic write
    ├─ sm-win/      # SCM, NSSM/native wrapper, discover/import, elevation
-   └─ sm-gui/      # Tauri GUI + batch async scheduler
+   ├─ sm-gui/      # Tauri GUI + batch async scheduler
+   └─ sm-updater/  # CLI updater Laravel (git/composer/npm)
 ```
 
 ## Build dan Test
@@ -28,6 +29,11 @@ cargo fmt --all -- --check
 cargo run -p sm-gui
 # dari target/debug, arahkan config ke folder aplikasi:
 $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
+
+# Updater CLI
+cargo run -p sm-updater -- list
+cargo run -p sm-updater -- check --project kasirin
+cargo run -p sm-updater -- update --project kasirin
 ```
 
 Test default berjalan tanpa Administrator. Test yang mengubah service (start/stop/install/restart) membutuhkan Administrator dan dijalankan manual di server uji:
@@ -87,6 +93,19 @@ Batch Start/Stop/Restart berjalan di background:
 
 Test GUI mencakup scheduler batch (urutan dependensi, stop reversal, paralelisme, failure isolation, cancellation), state, dan log/export.
 
+## Updater CLI (Phase 4)
+
+`sm-updater` adalah implementasi Rust dari `ProjectUpdate.ps1`:
+
+```powershell
+sm-updater list
+sm-updater check --project kasirin
+sm-updater update --project kasirin
+sm-updater update            # semua project enabled
+```
+
+Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir migration, composer/npm/build/artisan kondisional, `postUpdateCommand`, log ganda (aplikasi + `storage/logs`), timeout, dan exit code. Detail ada di [docs/RUST-UPDATER.md](../docs/RUST-UPDATER.md).
+
 ## Status Fase
 
 | Fase | Status |
@@ -95,6 +114,6 @@ Test GUI mencakup scheduler batch (urutan dependensi, stop reversal, paralelisme
 | 1. Core SCM | Selesai |
 | 2. NSSM & native | Selesai |
 | 3. GUI | Selesai |
-| 4. Updater | Belum |
+| 4. Updater | Selesai |
 | 5. Security & hardening | Belum |
 | 6. Release | Belum |

@@ -5,6 +5,7 @@ members = [
     "crates/sm-config",
     "crates/sm-win",
     "crates/sm-gui",
+    "crates/sm-updater",
 ]
 
 [workspace.package]

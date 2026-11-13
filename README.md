@@ -110,20 +110,19 @@ Ringkasan `services.json`:
 
 ## Project Update
 
-Panduan lengkap ada di [docs/PROJECT-UPDATE.md](docs/PROJECT-UPDATE.md).
+Panduan PowerShell ada di [docs/PROJECT-UPDATE.md](docs/PROJECT-UPDATE.md). Implementasi Rust tersedia di [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md).
 
 ```powershell
-# Menu interaktif
+# PowerShell
 .\ProjectUpdate.ps1
-
-# Daftar project yang terdeteksi
 .\ProjectUpdate.ps1 -Mode List
-
-# Cek update tanpa mengubah file
 .\ProjectUpdate.ps1 -Mode Check -Project kasirin
-
-# Update semua project aktif (pull + composer + build)
 .\ProjectUpdate.ps1 -Mode Auto -All
+
+# Rust (dari folder service-manager-rs)
+cargo run -p sm-updater -- list
+cargo run -p sm-updater -- check --project kasirin
+cargo run -p sm-updater -- update --project kasirin
 ```
 
 ## Keamanan
@@ -149,14 +148,15 @@ Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
 
 ## Implementasi Rust
 
-Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0-3** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, GUI Tauri, batch async anti-freeze, dan unit test.
+Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0-4** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, GUI Tauri, batch async anti-freeze, updater CLI, dan unit test.
 
 ```powershell
 cd service-manager-rs
 cargo run -p sm-gui
+cargo run -p sm-updater -- check --project kasirin
 ```
 
-Panduan GUI: [docs/RUST-GUI.md](docs/RUST-GUI.md).
+Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md).
 
 ```powershell
 cd service-manager-rs
