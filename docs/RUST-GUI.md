@@ -30,6 +30,7 @@ cargo build --release -p sm-gui
 - Import service terpasang (NSSM/Apache/PostgreSQL) via enumerasi SCM.
 - Log viewer: stdout + stderr, auto-refresh 2 detik, batas 128 KB dan 600 baris, tombol buka file.
 - Backup config ke `services-export-<timestamp>.json`; restore dari file JSON.
+- Log aplikasi (`logs/app.log`) di-redaksi dan dirotasi otomatis pada 5 MB (`app.log.1`).
 - Banner peringatan bila tidak berjalan sebagai Administrator + tombol elevasi UAC.
 - Status bar: jumlah terdaftar/terpasang/berjalan.
 
@@ -80,7 +81,7 @@ Start-Process .\target\debug\sm-gui.exe
 
 ## Keterbatasan Saat Ini
 
-- Pemilihan file executable/log masih berupa input path (file picker ditambahkan pada fase hardening).
+- Pemilihan file executable/log masih berupa input path (file picker ditambahkan pada fase berikutnya).
 - Installer MSI/NSIS dan code signing belum dibuat (fase rilis).
 - Batch write operation membutuhkan Administrator; GUI menampilkan banner dan tombol elevasi.
 - Rename service saat edit belum didukung (nama service dikunci).

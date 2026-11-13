@@ -132,6 +132,7 @@ cargo run -p sm-updater -- update --project kasirin
 - Kredensial Git disimpan di Windows Credential Manager melalui Git Credential Manager dengan `GCM_CREDENTIAL_STORE=dpapi`, **bukan** di dalam repositori.
 - Gunakan Personal Access Token (PAT) dengan scope minimal (`read_repository` atau `repo` bila perlu push) dan rotasi secara berkala.
 - `Store-GitCredential.ps1` membaca token sebagai `SecureString` dan meneruskannya ke `git credential approve` tanpa menulis token ke disk/script.
+- Versi Rust memakai `sm-updater credential store` (DPAPI/GCM), redaksi log, dan rotasi `app.log`. Lihat [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md).
 
 Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
 
@@ -148,7 +149,7 @@ Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
 
 ## Implementasi Rust
 
-Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0-4** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, GUI Tauri, batch async anti-freeze, updater CLI, dan unit test.
+Versi Rust dikembangkan bertahap di folder [`service-manager-rs/`](service-manager-rs/README.md). Status saat ini: **Phase 0-5** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, GUI Tauri, batch async anti-freeze, updater CLI, security hardening, dan unit test.
 
 ```powershell
 cd service-manager-rs
@@ -156,7 +157,7 @@ cargo run -p sm-gui
 cargo run -p sm-updater -- check --project kasirin
 ```
 
-Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md).
+Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md), [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md).
 
 ```powershell
 cd service-manager-rs

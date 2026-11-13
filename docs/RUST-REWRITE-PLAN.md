@@ -18,10 +18,10 @@ Dokumen perencanaan lengkap untuk menulis ulang **Service Manager** (PowerShell 
 | 2. NSSM & native | **Selesai** | `service-manager-rs/crates/sm-win` |
 | 3. GUI | **Selesai** | `service-manager-rs/crates/sm-gui` |
 | 4. Updater | **Selesai** | `service-manager-rs/crates/sm-updater` |
-| 5. Security & hardening | Belum | - |
+| 5. Security & hardening | **Selesai** | `sm-win/dpapi.rs`, `sm-core/security.rs`, credential helper |
 | 6. Rilis | Belum | - |
 
-Test Phase 0-4: 148 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation, argumen NSSM/native, discovery parsing, mock process runner, batch scheduler async, state GUI, log tail/export, CLI parsing, scan project, runner timeout, dan seluruh matriks update). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator. GUI telah diverifikasi runtime memuat `services.json` (10 service) melalui WebView2 remote debugging. Updater telah diverifikasi end-to-end dengan repository Git lokal: list, check, update fast-forward, dan blokir migration.
+Test Phase 0-5: 169 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation, argumen NSSM/native, discovery parsing, mock process runner, batch scheduler async, state GUI, log tail/export/rotation, CLI parsing, scan project, runner timeout, seluruh matriks update, redaksi log, DPAPI round-trip, dan credential helper). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator. GUI telah diverifikasi runtime memuat `services.json` (10 service) melalui WebView2 remote debugging. Updater telah diverifikasi end-to-end dengan repository Git lokal: list, check, update fast-forward, dan blokir migration.
 
 ---
 

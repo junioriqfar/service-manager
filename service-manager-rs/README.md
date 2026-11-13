@@ -1,6 +1,6 @@
 # Service Manager RS
 
-Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-4 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, updater CLI, test).
+Implementasi bertahap Service Manager dalam Rust. Status saat ini: **Phase 0-5 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, updater CLI, security hardening, test).
 
 Rencana lengkap: [../docs/RUST-REWRITE-PLAN.md](../docs/RUST-REWRITE-PLAN.md).
 
@@ -12,9 +12,9 @@ service-manager-rs/
 └─ crates/
    ├─ sm-core/     # model, validasi, ordering, aturan update
    ├─ sm-config/   # services.json & projects.json, backup, atomic write
-   ├─ sm-win/      # SCM, NSSM/native wrapper, discover/import, elevation
-   ├─ sm-gui/      # Tauri GUI + batch async scheduler
-   └─ sm-updater/  # CLI updater Laravel (git/composer/npm)
+   ├─ sm-win/      # SCM, NSSM/native, discover/import, elevation, DPAPI
+   ├─ sm-gui/      # Tauri GUI + batch async scheduler + log rotation
+   └─ sm-updater/  # CLI updater Laravel + credential helper
 ```
 
 ## Build dan Test
@@ -106,6 +106,15 @@ sm-updater update            # semua project enabled
 
 Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir migration, composer/npm/build/artisan kondisional, `postUpdateCommand`, log ganda (aplikasi + `storage/logs`), timeout, dan exit code. Detail ada di [docs/RUST-UPDATER.md](../docs/RUST-UPDATER.md).
 
+## Security Hardening (Phase 5)
+
+- `sm-win::dpapi` — enkripsi/dekripsi DPAPI dengan entropy opsional + test round-trip.
+- `sm-core::redact_secrets` — redaksi token provider, Bearer, password=, dan userinfo URL.
+- Log aplikasi GUI di-redaksi dan dirotasi otomatis pada 5 MB (`app.log.1`).
+- `sm-updater credential store` — simpan PAT lewat Git Credential Manager (DPAPI), token dibaca tanpa echo dan tidak pernah ditulis ke log/file.
+- Elevasi UAC via banner GUI dan `ShellExecuteW runas`.
+- Detail: [docs/RUST-SECURITY.md](../docs/RUST-SECURITY.md).
+
 ## Status Fase
 
 | Fase | Status |
@@ -115,5 +124,5 @@ Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir
 | 2. NSSM & native | Selesai |
 | 3. GUI | Selesai |
 | 4. Updater | Selesai |
-| 5. Security & hardening | Belum |
+| 5. Security & hardening | Selesai |
 | 6. Release | Belum |

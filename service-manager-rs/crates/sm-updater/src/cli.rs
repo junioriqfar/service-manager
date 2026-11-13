@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use sm_config::{load_projects, ConfigPaths, ProjectsFile};
 
+use crate::credential::{store_credential, verify_remote, CredentialRequest, GitCredentialSink};
 use crate::runner::SystemRunner;
 use crate::scan::{discover_projects, ProjectInfo};
 use crate::update::{update_project, UpdateOptions, UpdateStatus};
@@ -73,6 +74,10 @@ pub fn parse_args(values: &[String]) -> Result<Args, String> {
 }
 
 pub fn run(values: &[String]) -> i32 {
+    if values.first().map(String::as_str) == Some("credential") {
+        return run_credential(&values[1..]);
+    }
+
     let args = match parse_args(values) {
         Ok(args) => args,
         Err(message) => {
@@ -298,6 +303,189 @@ fn read_line(prompt: &str) -> Option<String> {
     Some(buffer.trim().to_string())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CredentialArgs {
+    pub host: String,
+    pub username: String,
+    pub project: PathBuf,
+    pub git: Option<PathBuf>,
+    pub help: bool,
+}
+
+impl Default for CredentialArgs {
+    fn default() -> Self {
+        Self {
+            host: "gitlab.com".to_string(),
+            username: "oauth2".to_string(),
+            project: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            git: None,
+            help: false,
+        }
+    }
+}
+
+pub fn parse_credential_args(values: &[String]) -> Result<CredentialArgs, String> {
+    let mut args = CredentialArgs::default();
+    let mut index = 0usize;
+    let mut saw_store = false;
+
+    while index < values.len() {
+        match values[index].as_str() {
+            "store" => saw_store = true,
+            "--help" | "-h" => args.help = true,
+            "--host" => {
+                index += 1;
+                args.host = values
+                    .get(index)
+                    .ok_or_else(|| "--host membutuhkan nilai.".to_string())?
+                    .clone();
+            }
+            "--username" => {
+                index += 1;
+                args.username = values
+                    .get(index)
+                    .ok_or_else(|| "--username membutuhkan nilai.".to_string())?
+                    .clone();
+            }
+            "--project" => {
+                index += 1;
+                args.project = PathBuf::from(
+                    values
+                        .get(index)
+                        .ok_or_else(|| "--project membutuhkan path.".to_string())?,
+                );
+            }
+            "--git" => {
+                index += 1;
+                args.git = Some(PathBuf::from(
+                    values
+                        .get(index)
+                        .ok_or_else(|| "--git membutuhkan path.".to_string())?,
+                ));
+            }
+            other => return Err(format!("Argumen credential tidak dikenal: {other}")),
+        }
+        index += 1;
+    }
+
+    if !saw_store && !args.help {
+        return Err("Gunakan 'sm-updater credential store'.".to_string());
+    }
+    Ok(args)
+}
+
+fn resolve_git_path() -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("SERVICE_MANAGER_GIT") {
+        let path = PathBuf::from(value);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    for candidate in [
+        r"C:\laragon\bin\git\cmd\git.exe",
+        r"C:\Program Files\Git\cmd\git.exe",
+    ] {
+        let path = PathBuf::from(candidate);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    let output = std::process::Command::new("where")
+        .arg("git")
+        .output()
+        .ok()?;
+    let first = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let path = PathBuf::from(first);
+    if path.is_file() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn run_credential(values: &[String]) -> i32 {
+    let args = match parse_credential_args(values) {
+        Ok(args) => args,
+        Err(message) => {
+            eprintln!("{message}");
+            return 2;
+        }
+    };
+    if args.help {
+        print_usage();
+        return 0;
+    }
+
+    let Some(git_path) = args.git.clone().or_else(resolve_git_path) else {
+        eprintln!("Git tidak ditemukan. Gunakan --git PATH.");
+        return 1;
+    };
+    if !git_path.is_file() {
+        eprintln!("Git tidak ditemukan: {}", git_path.display());
+        return 1;
+    }
+    if !args.project.is_dir() {
+        eprintln!("Folder project tidak ditemukan: {}", args.project.display());
+        return 1;
+    }
+    if args.host.trim().is_empty() {
+        eprintln!("Host Git wajib diisi.");
+        return 1;
+    }
+    if args.username.trim().is_empty() {
+        eprintln!("Username Git wajib diisi.");
+        return 1;
+    }
+
+    println!(
+        "User   : {}",
+        std::env::var("USERNAME").unwrap_or_else(|_| "(unknown)".to_string())
+    );
+    println!(
+        "Server : {}",
+        std::env::var("COMPUTERNAME").unwrap_or_else(|_| "(unknown)".to_string())
+    );
+    println!(
+        "Menyimpan kredensial Git untuk {} (akun {}).",
+        args.host, args.username
+    );
+    println!("Gunakan Personal Access Token dengan akses read_repository.");
+
+    let token = match rpassword::prompt_password("Token: ") {
+        Ok(token) => token,
+        Err(error) => {
+            eprintln!("Gagal membaca token: {error}");
+            return 1;
+        }
+    };
+
+    let request = CredentialRequest {
+        host: args.host,
+        username: args.username,
+        token,
+        git_path,
+        project_path: args.project,
+    };
+
+    if let Err(error) = store_credential(&request, &GitCredentialSink) {
+        eprintln!("{error}");
+        return 1;
+    }
+    if let Err(error) = verify_remote(&request) {
+        eprintln!("Kredensial tersimpan, tetapi verifikasi remote gagal:");
+        eprintln!("{error}");
+        return 1;
+    }
+
+    println!("Kredensial berhasil disimpan dan remote bisa diakses.");
+    0
+}
+
 fn print_usage() {
     println!(
         "Service Manager Project Updater
@@ -309,9 +497,12 @@ Penggunaan:
   sm-updater update [--project NAMA]  Update project
   sm-updater --all                    Proses semua project aktif
   sm-updater --config PATH            Path projects.json
+  sm-updater credential store         Simpan PAT Git (DPAPI/Credential Manager)
+      --host HOST --username USER --project PATH [--git PATH]
 
 Environment:
   SERVICE_MANAGER_HOME                Folder config default
+  SERVICE_MANAGER_GIT                 Path git.exe untuk credential helper
   GCM_CREDENTIAL_STORE=dpapi          (diset otomatis)
   GCM_INTERACTIVE=never               (diset otomatis)
   GIT_TERMINAL_PROMPT=0               (diset otomatis)"
@@ -374,6 +565,53 @@ mod tests {
     #[test]
     fn help_flag_is_recognized() {
         assert!(parse_args(&args(&["--help"])).unwrap().help);
+    }
+
+    #[test]
+    fn parses_credential_store_defaults() {
+        let parsed = parse_credential_args(&args(&["store"])).unwrap();
+        assert_eq!(parsed.host, "gitlab.com");
+        assert_eq!(parsed.username, "oauth2");
+        assert!(!parsed.help);
+    }
+
+    #[test]
+    fn parses_credential_flags() {
+        let parsed = parse_credential_args(&args(&[
+            "store",
+            "--host",
+            "github.com",
+            "--username",
+            "junioriqfar",
+            "--project",
+            r"C:\apps\demo",
+            "--git",
+            r"C:\git\git.exe",
+        ]))
+        .unwrap();
+        assert_eq!(parsed.host, "github.com");
+        assert_eq!(parsed.username, "junioriqfar");
+        assert_eq!(parsed.project, PathBuf::from(r"C:\apps\demo"));
+        assert_eq!(parsed.git, Some(PathBuf::from(r"C:\git\git.exe")));
+    }
+
+    #[test]
+    fn credential_requires_store_subcommand() {
+        assert!(parse_credential_args(&args(&["--host", "github.com"])).is_err());
+        assert!(parse_credential_args(&args(&["store", "--host"])).is_err());
+    }
+
+    #[test]
+    fn credential_missing_git_fails_before_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = run_credential(&args(&[
+            "store",
+            "--git",
+            r"C:\definitely-missing\git.exe",
+            "--project",
+            temp.path().to_str().unwrap(),
+        ]));
+        assert_eq!(code, 1);
     }
 
     #[test]

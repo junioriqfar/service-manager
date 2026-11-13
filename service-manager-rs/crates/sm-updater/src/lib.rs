@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod credential;
 pub mod log;
 pub mod runner;
 pub mod scan;

@@ -26,6 +26,7 @@ impl UpdateLogger {
     }
 
     pub fn log(&self, message: &str) {
+        let message = sm_core::redact_secrets(message);
         let line = format!(
             "{} {}\r\n",
             chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
@@ -70,5 +71,18 @@ mod tests {
         assert!(project_log.is_file());
         assert!(fs::read_to_string(run_log).unwrap().contains("hello"));
         assert!(fs::read_to_string(project_log).unwrap().contains("hello"));
+    }
+
+    #[test]
+    fn log_redacts_secrets() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        fs::create_dir_all(&project).unwrap();
+        let logger = UpdateLogger::new(&temp.path().join("logs"), &project, "20260101-000000");
+        logger.log("token=ghp_abcdefghijklmnop12345 password=hunter2");
+        let content = fs::read_to_string(logger.run_log_path()).unwrap();
+        assert!(!content.contains("ghp_abcdefghijklmnop12345"));
+        assert!(!content.contains("hunter2"));
+        assert!(content.contains("[REDACTED]"));
     }
 }

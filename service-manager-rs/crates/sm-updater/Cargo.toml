@@ -21,6 +21,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
 wait-timeout = "0.2"
+rpassword = "7"
 
 [dev-dependencies]
 tempfile.workspace = true

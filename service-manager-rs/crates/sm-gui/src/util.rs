@@ -7,6 +7,7 @@ use sm_core::ServiceConfig;
 
 pub const LOG_MAX_BYTES: u64 = 131_072;
 pub const LOG_MAX_LINES: usize = 600;
+pub const APP_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
 pub fn read_log_tail(path: &Path, max_bytes: u64) -> String {
     if !path.is_file() {
@@ -111,18 +112,29 @@ pub fn open_path(path: &Path) -> Result<(), String> {
 
 pub fn append_app_log(paths: &ConfigPaths, message: &str) {
     let _ = fs::create_dir_all(paths.logs_dir());
+    let log_path = paths.app_log_path();
+    rotate_app_log(&log_path);
+    let message = sm_core::redact_secrets(message);
     let line = format!(
         "{}  {}\r\n",
         chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
         message
     );
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(paths.app_log_path())
-    {
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
         let _ = file.write_all(line.as_bytes());
     }
+}
+
+fn rotate_app_log(path: &Path) {
+    let Ok(metadata) = fs::metadata(path) else {
+        return;
+    };
+    if metadata.len() <= APP_LOG_MAX_BYTES {
+        return;
+    }
+    let rotated = path.with_file_name("app.log.1");
+    let _ = fs::remove_file(&rotated);
+    let _ = fs::rename(path, rotated);
 }
 
 #[cfg(test)]
@@ -224,5 +236,32 @@ mod tests {
         assert!(content.contains("hello"));
         assert!(content.contains("world"));
         assert!(content.lines().count() >= 2);
+    }
+
+    #[test]
+    fn app_log_redacts_secrets() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        append_app_log(&paths, "token=ghp_abcdefghijklmnop12345");
+        let content = fs::read_to_string(paths.app_log_path()).unwrap();
+        assert!(!content.contains("ghp_abcdefghijklmnop12345"));
+        assert!(content.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn app_log_rotates_when_large() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        fs::create_dir_all(paths.logs_dir()).unwrap();
+        fs::write(
+            paths.app_log_path(),
+            vec![b'x'; APP_LOG_MAX_BYTES as usize + 1],
+        )
+        .unwrap();
+        append_app_log(&paths, "after rotation");
+        assert!(paths.logs_dir().join("app.log.1").is_file());
+        let content = fs::read_to_string(paths.app_log_path()).unwrap();
+        assert!(content.contains("after rotation"));
+        assert!(content.len() < 1024);
     }
 }

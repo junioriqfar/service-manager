@@ -2,6 +2,8 @@
 
 Dokumen ini menjelaskan praktik keamanan dan hal-hal yang **tidak boleh** dimasukkan ke repositori.
 
+> Implementasi Rust memiliki kontrol tambahan (DPAPI, redaksi log, credential helper). Lihat [RUST-SECURITY.md](RUST-SECURITY.md).
+
 ## Jangan Commit Kredensial
 
 Jangan pernah menambahkan ke Git:

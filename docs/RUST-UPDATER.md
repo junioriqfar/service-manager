@@ -75,11 +75,26 @@ File `.bat`/`.cmd` (composer, npm) dijalankan melalui `cmd.exe /c`, sehingga tid
 
 Log berisi perintah yang dijalankan, output (maksimal 60 baris per perintah), commit/file berubah, dan rollback hint.
 
+## Simpan Kredensial Git
+
+Gunakan subcommand credential (padanan `Store-GitCredential.ps1`):
+
+```powershell
+sm-updater credential store `
+  --host gitlab.com `
+  --username oauth2 `
+  --project D:\Projects\PHPProjects\open-po `
+  --git C:\laragon\bin\git\cmd\git.exe
+```
+
+Token diminta tanpa echo, dikirim ke `git credential approve` melalui stdin, lalu diverifikasi dengan `git ls-remote --heads origin`. Token tidak pernah ditulis ke log/file. Default host `gitlab.com`, username `oauth2`, project = folder aktif; `--git` dicari otomatis dari `SERVICE_MANAGER_GIT`, Laragon, Program Files, atau `where git`.
+
 ## Keamanan
 
 - Env otomatis: `GCM_CREDENTIAL_STORE=dpapi`, `GCM_INTERACTIVE=never`, `GIT_TERMINAL_PROMPT=0`.
 - Preflight autentikasi sebelum menyentuh working tree.
-- Tidak ada token/password di log atau config.
+- Tidak ada token/password di log atau config; log di-redaksi dengan `sm_core::redact_secrets`.
+- DPAPI tersedia di `sm-win::dpapi` untuk kebutuhan enkripsi lokal lain.
 - Perintah dijalankan dengan argumen array (tanpa shell string) kecuali `postUpdateCommand` yang memang PowerShell.
 - Timeout eksplisit: preflight 30 detik, fetch/merge 120 detik, tool 300 detik.
 
