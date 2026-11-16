@@ -58,7 +58,7 @@ fn entry(service: &ServiceConfig) -> DiagnosticEntry {
 
 pub fn render(diagnostic: &Diagnostic) -> String {
     let mut lines = Vec::new();
-    lines.push("Service Manager - diagnosa".to_string());
+    lines.push("Service Manager - diagnostics".to_string());
     lines.push(format!("Home          : {}", diagnostic.home));
     lines.push(format!("Config        : {}", diagnostic.services_path));
     lines.push(format!("Projects      : {}", diagnostic.projects_path));
@@ -68,11 +68,11 @@ pub fn render(diagnostic: &Diagnostic) -> String {
     ));
     lines.push(format!("Administrator : {}", diagnostic.admin));
     if let Some(warning) = &diagnostic.warning {
-        lines.push(format!("Peringatan    : {warning}"));
+        lines.push(format!("Warning       : {warning}"));
     }
     lines.push(format!("Service       : {}", diagnostic.entries.len()));
     if diagnostic.entries.is_empty() {
-        lines.push("  (tidak ada service di config)".to_string());
+        lines.push("  (no services in config)".to_string());
     } else {
         for entry in &diagnostic.entries {
             lines.push(format!(
@@ -105,8 +105,8 @@ mod tests {
         let paths = ConfigPaths::new(temp.path());
         let diagnostic = collect(&paths);
         let text = render(&diagnostic);
-        assert!(text.contains("Service Manager - diagnosa"));
-        assert!(text.contains("tidak ada service"));
+        assert!(text.contains("Service Manager - diagnostics"));
+        assert!(text.contains("no services in config"));
         assert_eq!(diagnostic.entries.len(), 0);
     }
 

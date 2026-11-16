@@ -104,6 +104,10 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 
 `sm-gui` menyediakan UI setara WinForms: tabel service, form tambah/edit, import, backup/restore, log viewer, dan banner elevasi. Detail ada di [docs/RUST-GUI.md](../docs/RUST-GUI.md).
 
+- UI sepenuhnya Bahasa Inggris.
+- Tombol **Browse…** membuka file picker (Application) dan folder picker (Working Directory).
+- Klik kanan baris service menampilkan context menu Edit/Install/Start/Stop/Restart/Open Log/Delete.
+
 Batch Start/Stop/Restart berjalan di background:
 
 - lapisan dependensi dari `sm-core::start_layers`;

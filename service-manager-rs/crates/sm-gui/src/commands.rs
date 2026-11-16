@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -82,7 +83,7 @@ pub fn elevate(app: AppHandle) -> Result<(), String> {
 pub fn read_log(state: State<'_, AppState>, name: String) -> Result<LogView, String> {
     let config = state
         .find(&name)
-        .ok_or_else(|| format!("Service '{name}' tidak ada di config."))?;
+        .ok_or_else(|| format!("Service '{name}' is not in the config."))?;
     let mut paths = Vec::new();
     if !config.stdout_log.trim().is_empty() {
         paths.push(config.stdout_log.trim().to_string());
@@ -98,7 +99,7 @@ pub fn read_log(state: State<'_, AppState>, name: String) -> Result<LogView, Str
 
     Ok(LogView {
         path: if paths.is_empty() {
-            "(belum ada path log)".to_string()
+            "(no log path)".to_string()
         } else {
             paths.join("; ")
         },
@@ -110,14 +111,14 @@ pub fn read_log(state: State<'_, AppState>, name: String) -> Result<LogView, Str
 pub fn open_log(state: State<'_, AppState>, name: String) -> Result<(), String> {
     let config = state
         .find(&name)
-        .ok_or_else(|| format!("Service '{name}' tidak ada di config."))?;
+        .ok_or_else(|| format!("Service '{name}' is not in the config."))?;
     let path = if !config.stdout_log.trim().is_empty() {
         config.stdout_log.trim()
     } else if !config.stderr_log.trim().is_empty() {
         config.stderr_log.trim()
     } else {
         return Err(format!(
-            "Service '{name}' belum punya path log. Atur lewat Edit."
+            "Service '{name}' has no log path. Set it via Edit."
         ));
     };
     util::open_path(std::path::Path::new(path))
@@ -139,6 +140,64 @@ pub fn open_path(path: String) -> Result<(), String> {
     util::open_path(std::path::Path::new(&path))
 }
 
+fn dialog_directory(current: Option<&str>) -> Option<PathBuf> {
+    let current = current?.trim();
+    if current.is_empty() {
+        return None;
+    }
+    let path = Path::new(current);
+    if path.is_dir() {
+        return Some(path.to_path_buf());
+    }
+    path.parent()
+        .filter(|parent| parent.is_dir())
+        .map(Path::to_path_buf)
+}
+
+/// Buka dialog file executable di main thread (COM/STA).
+#[tauri::command]
+pub async fn pick_executable(
+    app: AppHandle,
+    current: Option<String>,
+) -> Result<Option<String>, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let mut dialog = rfd::FileDialog::new().add_filter("Executable", &["exe"]);
+        if let Some(directory) = dialog_directory(current.as_deref()) {
+            dialog = dialog.set_directory(directory);
+        }
+        let selected = dialog
+            .pick_file()
+            .map(|path| path.to_string_lossy().to_string());
+        let _ = sender.send(selected);
+    })
+    .map_err(|error| error.to_string())?;
+
+    receiver.await.map_err(|error| error.to_string())
+}
+
+/// Buka dialog folder di main thread (COM/STA).
+#[tauri::command]
+pub async fn pick_directory(
+    app: AppHandle,
+    current: Option<String>,
+) -> Result<Option<String>, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let mut dialog = rfd::FileDialog::new();
+        if let Some(directory) = dialog_directory(current.as_deref()) {
+            dialog = dialog.set_directory(directory);
+        }
+        let selected = dialog
+            .pick_folder()
+            .map(|path| path.to_string_lossy().to_string());
+        let _ = sender.send(selected);
+    })
+    .map_err(|error| error.to_string())?;
+
+    receiver.await.map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub async fn save_service(
     state: State<'_, AppState>,
@@ -153,7 +212,7 @@ pub async fn save_service(
     state.upsert(service.clone(), edit)?;
     state.log(&format!(
         "{} service: {}",
-        if edit { "Edit" } else { "Tambah" },
+        if edit { "Edit" } else { "Add" },
         service.name
     ));
 
@@ -167,7 +226,7 @@ pub async fn save_service(
         })
         .await
         .map_err(|error| error.to_string())??;
-        state.log(&format!("Terapkan config service: {}", service.name));
+        state.log(&format!("Apply service config: {}", service.name));
     }
 
     Ok(state.rows())
@@ -180,7 +239,7 @@ pub async fn delete_service(
 ) -> Result<Vec<ServiceRow>, String> {
     let config = state
         .find(&name)
-        .ok_or_else(|| format!("Service '{name}' tidak ada di config."))?;
+        .ok_or_else(|| format!("Service '{name}' is not in the config."))?;
     let nssm_path = state.nssm_path.clone();
     let runner = state.runner.clone();
     let config_for_remove = config.clone();
@@ -193,7 +252,7 @@ pub async fn delete_service(
     .map_err(|error| error.to_string())??;
 
     state.remove_config(&config.name)?;
-    state.log(&format!("Hapus service: {}", config.name));
+    state.log(&format!("Delete service: {}", config.name));
     Ok(state.rows())
 }
 
@@ -205,7 +264,7 @@ pub async fn install_service(
 ) -> Result<Vec<ServiceRow>, String> {
     let config = state
         .find(&name)
-        .ok_or_else(|| format!("Service '{name}' tidak ada di config."))?;
+        .ok_or_else(|| format!("Service '{name}' is not in the config."))?;
     let nssm_path = state.nssm_path.clone();
     let runner = state.runner.clone();
     let config_for_install = config.clone();
@@ -243,7 +302,7 @@ async fn single_operation(
     operation: Operation,
 ) -> Result<Vec<ServiceRow>, String> {
     if state.find(&name).is_none() {
-        return Err(format!("Service '{name}' tidak ada di config."));
+        return Err(format!("Service '{name}' is not in the config."));
     }
 
     let operation_name = name.clone();
@@ -324,7 +383,7 @@ fn parse_batch_action(action: &str) -> Result<BatchAction, String> {
         "start" => Ok(BatchAction::Start),
         "stop" => Ok(BatchAction::Stop),
         "restart" => Ok(BatchAction::Restart),
-        other => Err(format!("Aksi batch tidak dikenal: {other}")),
+        other => Err(format!("Unknown batch action: {other}")),
     }
 }
 
@@ -349,12 +408,12 @@ pub async fn run_batch_action(
     let batch_action = parse_batch_action(&action)?;
     let services = state.installed_services();
     if services.is_empty() {
-        return Err("Tidak ada service terpasang untuk diproses.".to_string());
+        return Err("No installed services to process.".to_string());
     }
 
     let cancel = state
         .begin_batch()
-        .ok_or_else(|| "Operasi batch lain sedang berjalan.".to_string())?;
+        .ok_or_else(|| "Another batch operation is already running.".to_string())?;
     let total = services.len();
     let _ = app.emit(
         "batch-started",
@@ -378,7 +437,7 @@ pub async fn run_batch_action(
 
     state.finish_batch();
     state.log(&format!(
-        "Batch {action} selesai: {} service.",
+        "Batch {action} finished: {} service(s).",
         outcomes.len()
     ));
 
@@ -467,7 +526,7 @@ pub async fn import_services(
         state.replace_services(services);
     }
     state.save()?;
-    state.log(&format!("Import service: {imported}."));
+    state.log(&format!("Import services: {imported}."));
     Ok(state.rows())
 }
 
@@ -493,12 +552,51 @@ pub fn restore_config(
     let mut seen = std::collections::HashSet::new();
     for service in &services {
         if !seen.insert(service.name.to_ascii_lowercase()) {
-            return Err(format!("Nama service duplikat di config: {}", service.name));
+            return Err(format!(
+                "Duplicate service name in config: {}",
+                service.name
+            ));
         }
     }
 
     state.replace_services(services);
     state.save()?;
-    state.log("Restore config dari file.");
+    state.log("Restore config from file.");
     Ok(state.rows())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dialog_directory_accepts_existing_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().to_string_lossy().to_string();
+        assert_eq!(
+            dialog_directory(Some(&path)),
+            Some(temp.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn dialog_directory_uses_parent_for_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("app.exe");
+        std::fs::write(&file, b"dummy").unwrap();
+        assert_eq!(
+            dialog_directory(Some(&file.to_string_lossy())),
+            Some(temp.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn dialog_directory_ignores_empty_and_missing_values() {
+        assert_eq!(dialog_directory(None), None);
+        assert_eq!(dialog_directory(Some("  ")), None);
+        assert_eq!(
+            dialog_directory(Some(r"C:\definitely-missing\app.exe")),
+            None
+        );
+    }
 }

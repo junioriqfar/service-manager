@@ -6,11 +6,11 @@ use crate::scm::ServiceState;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ScmError {
-    #[error("Service '{0}' tidak ditemukan.")]
+    #[error("Service '{0}' was not found.")]
     NotFound(String),
-    #[error("Service '{0}' tidak merespons dalam {1:?} (status akhir: {2}).")]
+    #[error("Service '{0}' did not respond within {1:?} (last state: {2}).")]
     Timeout(String, Duration, ServiceState),
-    #[error("Operasi dibatalkan.")]
+    #[error("Operation cancelled.")]
     Cancelled,
     #[error("{0}")]
     Windows(String),

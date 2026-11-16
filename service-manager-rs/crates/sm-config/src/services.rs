@@ -49,16 +49,16 @@ fn parse_services(raw: &str) -> Result<Vec<ServiceConfig>, String> {
         serde_json::Value::Array(items) => items,
         serde_json::Value::Object(map) => match map.get("services") {
             Some(serde_json::Value::Array(items)) => items.clone(),
-            Some(_) => return Err("Field 'services' harus berupa array.".to_string()),
+            Some(_) => return Err("Field 'services' must be an array.".to_string()),
             None => Vec::new(),
         },
-        _ => return Err("Config harus berupa object atau array.".to_string()),
+        _ => return Err("Config must be an object or an array.".to_string()),
     };
 
     let mut services = Vec::with_capacity(items.len());
     for (index, item) in items.into_iter().enumerate() {
         let mut service: ServiceConfig = serde_json::from_value(item)
-            .map_err(|error| format!("Service #{} tidak valid: {}", index + 1, error))?;
+            .map_err(|error| format!("Service #{} is invalid: {}", index + 1, error))?;
         service.normalize();
         services.push(service);
     }
@@ -92,7 +92,7 @@ pub fn load_services_lenient(path: &Path, backup_dir: &Path) -> ServicesLoadResu
         Err(error) => {
             return ServicesLoadResult {
                 services: Vec::new(),
-                warning: Some(format!("Gagal membaca config: {error}")),
+                warning: Some(format!("Failed to read config: {error}")),
                 broken_backup: None,
             }
         }
@@ -115,10 +115,10 @@ pub fn load_services_lenient(path: &Path, backup_dir: &Path) -> ServicesLoadResu
             let backup = copy_broken(path, backup_dir);
             let warning = match &backup {
                 Some(path) => format!(
-                    "Config tidak valid: {message}. File lama dicadangkan ke {}.",
+                    "Invalid config: {message}. The old file was backed up to {}.",
                     path.display()
                 ),
-                None => format!("Config tidak valid: {message}."),
+                None => format!("Invalid config: {message}."),
             };
             ServicesLoadResult {
                 services: Vec::new(),

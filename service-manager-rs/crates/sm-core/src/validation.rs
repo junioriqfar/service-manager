@@ -6,31 +6,31 @@ use crate::model::{ServiceConfig, ServiceType};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ValidationError {
-    #[error("Nama service wajib diisi.")]
+    #[error("Service name is required.")]
     EmptyName,
-    #[error("Nama service '{0}' tidak valid. Gunakan huruf, angka, titik, garis bawah, atau tanda hubung (maksimal 256 karakter).")]
+    #[error("Service name '{0}' is invalid. Use letters, digits, dots, underscores, or hyphens (max 256 characters).")]
     InvalidName(String),
-    #[error("Executable wajib diisi.")]
+    #[error("Executable is required.")]
     EmptyExecutable,
-    #[error("Installer Apache harus httpd.exe: {0}")]
+    #[error("Apache installer must be httpd.exe: {0}")]
     InvalidApacheExecutable(String),
-    #[error("Installer PostgreSQL harus pg_ctl.exe: {0}")]
+    #[error("PostgreSQL installer must be pg_ctl.exe: {0}")]
     InvalidPostgreSqlExecutable(String),
-    #[error("Apache root wajib diisi.")]
+    #[error("Apache root is required.")]
     EmptyApacheRoot,
-    #[error("PGDATA wajib diisi.")]
+    #[error("PGDATA is required.")]
     EmptyPgData,
-    #[error("Service account PostgreSQL wajib diisi.")]
+    #[error("PostgreSQL service account is required.")]
     EmptyPgAccount,
-    #[error("restartDelaySec minimal 1 detik.")]
+    #[error("restartDelaySec must be at least 1 second.")]
     InvalidRestartDelay,
-    #[error("Executable tidak ditemukan: {0}")]
+    #[error("Executable not found: {0}")]
     ExecutableNotFound(String),
-    #[error("Apache root tidak ditemukan: {0}")]
+    #[error("Apache root not found: {0}")]
     ApacheRootNotFound(String),
-    #[error("Config Apache tidak ditemukan: {0}")]
+    #[error("Apache config not found: {0}")]
     ApacheConfigNotFound(String),
-    #[error("PGDATA tidak ditemukan: {0}")]
+    #[error("PGDATA not found: {0}")]
     PgDataNotFound(String),
 }
 

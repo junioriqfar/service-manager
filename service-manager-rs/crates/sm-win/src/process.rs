@@ -32,13 +32,13 @@ impl CommandOutput {
 
 #[derive(Debug, Error)]
 pub enum ProcessError {
-    #[error("Gagal menjalankan '{program}': {source}")]
+    #[error("Failed to run '{program}': {source}")]
     Spawn {
         program: String,
         #[source]
         source: std::io::Error,
     },
-    #[error("'{program}' gagal (exit {exit_code}): {output}")]
+    #[error("'{program}' failed (exit {exit_code}): {output}")]
     Failed {
         program: String,
         exit_code: i32,

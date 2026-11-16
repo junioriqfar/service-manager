@@ -33,7 +33,7 @@ function startupLabel(startup) {
 }
 
 function restartLabel(service) {
-  return service.restartOnCrash ? `Ya (${service.restartDelaySec}s)` : "Tidak";
+  return service.restartOnCrash ? `Yes (${service.restartDelaySec}s)` : "No";
 }
 
 function selectedService() {
@@ -83,7 +83,7 @@ function render() {
   $("empty-state").classList.toggle("hidden", services.length > 0);
   const installed = services.filter((service) => service.installed).length;
   const running = services.filter((service) => service.state === "running").length;
-  $("counts").textContent = `${services.length} terdaftar | ${installed} terpasang | ${running} berjalan`;
+  $("counts").textContent = `${services.length} registered | ${installed} installed | ${running} running`;
   $("status-counts").textContent = $("counts").textContent;
   updateButtons();
   updateLogHeader();
@@ -107,16 +107,17 @@ function updateButtons() {
   $("btn-restart-all").disabled = !hasInstalled || busy;
   $("btn-log-open").disabled = !service;
   $("btn-log-reload").disabled = !service;
+  updateContextMenuState();
 }
 
 function updateLogHeader() {
   const service = selectedService();
   if (!service) {
-    $("log-title").textContent = "Log service: (belum ada yang dipilih)";
+    $("log-title").textContent = "Service log: (none selected)";
     $("log-path").textContent = "";
     return;
   }
-  $("log-title").textContent = `Log service: ${service.name}`;
+  $("log-title").textContent = `Service log: ${service.name}`;
 }
 
 async function refresh() {
@@ -205,14 +206,14 @@ function emptyService() {
 
 function openServiceModal(edit) {
   if (edit && !selectedService()) {
-    toast("Pilih service yang akan diedit.", "error");
+    toast("Select a service to edit.", "error");
     return;
   }
   const service = edit ? selectedService() : emptyService();
-  $("service-modal-title").textContent = edit ? "Edit Service" : "Tambah Service";
+  $("service-modal-title").textContent = edit ? "Edit Service" : "Add Service";
   $("service-hint").textContent = edit
-    ? "Nama service tidak dapat diubah saat edit."
-    : "Service dapat dipasang setelah config disimpan.";
+    ? "The service name cannot be changed while editing."
+    : "The service can be installed after the config is saved.";
   $("service-error").classList.add("hidden");
   $("f-name").disabled = edit;
   fillServiceForm(service);
@@ -260,15 +261,42 @@ function collectService() {
   };
 }
 
+async function browseExecutable() {
+  try {
+    const path = await invoke("pick_executable", { current: $("f-exe").value });
+    if (!path) return;
+    $("f-exe").value = path;
+    if (!$("f-work").value) {
+      const separator = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+      if (separator > 0) $("f-work").value = path.slice(0, separator);
+    }
+    if (!$("f-display").value) {
+      const fileName = path.split(/[\\/]/).pop() || "";
+      $("f-display").value = fileName.replace(/\.exe$/i, "");
+    }
+  } catch (error) {
+    showServiceError(error);
+  }
+}
+
+async function browseWorkingDirectory() {
+  try {
+    const path = await invoke("pick_directory", { current: $("f-work").value });
+    if (path) $("f-work").value = path;
+  } catch (error) {
+    showServiceError(error);
+  }
+}
+
 async function saveService() {
   const edit = $("service-modal").dataset.edit === "1";
   const service = collectService();
   if (!service.name) {
-    showServiceError("Nama service wajib diisi.");
+    showServiceError("Service name is required.");
     return;
   }
   if (!service.executable) {
-    showServiceError("Application wajib diisi.");
+    showServiceError("Application is required.");
     return;
   }
 
@@ -279,7 +307,7 @@ async function saveService() {
     closeModal("service-modal");
     selected = service.name;
     render();
-    toast(edit ? "Config service diperbarui." : "Service ditambahkan.", "success");
+    toast(edit ? "Service config updated." : "Service added.", "success");
     loadLog(true);
   } catch (error) {
     showServiceError(error);
@@ -297,12 +325,12 @@ function showServiceError(error) {
 async function deleteSelected() {
   const service = selectedService();
   if (!service) return;
-  if (!confirm(`Hapus service '${service.name}' dari Windows dan config?`)) return;
+  if (!confirm(`Delete service '${service.name}' from Windows and the config?`)) return;
   try {
     services = await invoke("delete_service", { name: service.name });
     selected = null;
     render();
-    toast(`Service '${service.name}' dihapus.`, "success");
+    toast(`Service '${service.name}' deleted.`, "success");
   } catch (error) {
     toast(error, "error", 8000);
   }
@@ -312,7 +340,7 @@ async function installSelected() {
   const service = selectedService();
   if (!service) return;
   const startAfter = confirm(
-    `Install service '${service.name}' sekarang?\n\nKlik OK untuk install dan langsung jalankan, Cancel untuk install tanpa start.`
+    `Install service '${service.name}' now?\n\nClick OK to install and start it, or Cancel to install without starting.`
   );
   try {
     services = await invoke("install_service", {
@@ -320,7 +348,7 @@ async function installSelected() {
       startAfter,
     });
     render();
-    toast(`Service '${service.name}' berhasil dipasang.`, "success");
+    toast(`Service '${service.name}' installed.`, "success");
   } catch (error) {
     toast(error, "error", 8000);
   }
@@ -329,15 +357,16 @@ async function installSelected() {
 async function singleAction(command) {
   const service = selectedService();
   if (!service) return;
+  const action = command.replace("_service", "");
   try {
-    setStatus(`Menjalankan ${command} untuk ${service.name}...`);
+    setStatus(`Running ${action} for ${service.name}...`);
     services = await invoke(command, { name: service.name });
     render();
-    setStatus("Siap");
-    toast(`${command} ${service.name} selesai.`, "success");
+    setStatus("Ready");
+    toast(`${action} ${service.name} completed.`, "success");
     loadLog(true);
   } catch (error) {
-    setStatus("Gagal");
+    setStatus("Failed");
     toast(error, "error", 8000);
   }
 }
@@ -346,8 +375,8 @@ async function runBatch(action) {
   if (batchRunning) return;
   batchRunning = true;
   updateButtons();
-  $("batch-title").textContent = `Menjalankan ${action} semua service...`;
-  $("batch-text").textContent = "Menyiapkan...";
+  $("batch-title").textContent = `Running ${action} for all services...`;
+  $("batch-text").textContent = "Preparing...";
   $("batch-log").textContent = "";
   $("batch-progress").value = 0;
   $("batch-progress").max = 1;
@@ -356,8 +385,8 @@ async function runBatch(action) {
   try {
     const summary = await invoke("run_batch_action", { action });
     $("batch-text").textContent =
-      `Selesai: ${summary.succeeded} sukses, ${summary.failed} gagal, ${summary.cancelled} dibatalkan.`;
-    toast("Operasi batch selesai.", summary.failed ? "error" : "success");
+      `Completed: ${summary.succeeded} succeeded, ${summary.failed} failed, ${summary.cancelled} cancelled.`;
+    toast("Batch operation completed.", summary.failed ? "error" : "success");
   } catch (error) {
     $("batch-text").textContent = String(error);
     toast(error, "error", 8000);
@@ -386,20 +415,20 @@ async function openImport() {
   try {
     const candidates = await invoke("import_candidates");
     if (!candidates || candidates.length === 0) {
-      toast("Tidak ada service baru untuk diimpor.");
+      toast("No new services to import.");
       return;
     }
     const list = $("import-list");
     list.innerHTML = candidates
       .map(
-        (service, index) => `<label>
+        (service) => `<label>
           <input type="checkbox" data-name="${escapeHtml(service.name)}" checked />
           <span><strong>${escapeHtml(service.displayName || service.name)}</strong>
           <span class="muted"> [${escapeHtml(service.name)}] ${escapeHtml(typeLabel(service.serviceType))}</span></span>
         </label>`
       )
       .join("");
-    $("import-count").textContent = `${candidates.length} kandidat`;
+    $("import-count").textContent = `${candidates.length} candidate(s)`;
     showModal("import-modal");
   } catch (error) {
     toast(error, "error", 8000);
@@ -411,14 +440,14 @@ async function confirmImport() {
     .filter((input) => input.checked)
     .map((input) => input.dataset.name);
   if (names.length === 0) {
-    toast("Centang minimal satu service.", "error");
+    toast("Select at least one service.", "error");
     return;
   }
   try {
     services = await invoke("import_services", { names });
     closeModal("import-modal");
     render();
-    toast(`${names.length} service diimpor.`, "success");
+    toast(`${names.length} service(s) imported.`, "success");
   } catch (error) {
     toast(error, "error", 8000);
   }
@@ -427,7 +456,7 @@ async function confirmImport() {
 async function backupConfig() {
   try {
     const path = await invoke("export_config");
-    toast(`Backup dibuat:\n${path}`, "success", 8000);
+    toast(`Backup created:\n${path}`, "success", 8000);
   } catch (error) {
     toast(error, "error");
   }
@@ -440,7 +469,7 @@ async function restoreConfigFile(file) {
     services = await invoke("restore_config", { content });
     selected = null;
     render();
-    toast("Config berhasil dipulihkan.", "success");
+    toast("Config restored successfully.", "success");
     loadLog(true);
   } catch (error) {
     toast(error, "error", 8000);
@@ -458,6 +487,82 @@ async function showAbout() {
     showModal("about-modal");
   } catch (error) {
     toast(error, "error");
+  }
+}
+
+async function openSelectedLog() {
+  const service = selectedService();
+  if (!service) return;
+  try {
+    await invoke("open_log", { name: service.name });
+  } catch (error) {
+    toast(error, "error");
+  }
+}
+
+function showContextMenu(event, name) {
+  event.preventDefault();
+  selected = name;
+  render();
+  const menu = $("service-context-menu");
+  menu.classList.remove("hidden");
+  updateContextMenuState();
+
+  const bounds = menu.getBoundingClientRect();
+  const left = Math.min(event.clientX, window.innerWidth - bounds.width - 8);
+  const top = Math.min(event.clientY, window.innerHeight - bounds.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+}
+
+function hideContextMenu() {
+  $("service-context-menu").classList.add("hidden");
+}
+
+function updateContextMenuState() {
+  const menu = $("service-context-menu");
+  if (!menu) return;
+  const service = selectedService();
+  const installed = Boolean(service && service.installed);
+  const running = Boolean(service && service.state === "running");
+  const busy = batchRunning;
+  const setDisabled = (action, disabled) => {
+    const button = menu.querySelector(`button[data-action="${action}"]`);
+    if (button) button.disabled = disabled;
+  };
+  setDisabled("edit", !service || busy);
+  setDisabled("install", !service || installed || busy);
+  setDisabled("start", !installed || running || busy);
+  setDisabled("stop", !installed || !running || busy);
+  setDisabled("restart", !installed || busy);
+  setDisabled("log", !service);
+  setDisabled("delete", !service || busy);
+}
+
+async function handleContextAction(action) {
+  hideContextMenu();
+  switch (action) {
+    case "edit":
+      openServiceModal(true);
+      break;
+    case "install":
+      await installSelected();
+      break;
+    case "start":
+      await singleAction("start_service");
+      break;
+    case "stop":
+      await singleAction("stop_service");
+      break;
+    case "restart":
+      await singleAction("restart_service");
+      break;
+    case "log":
+      await openSelectedLog();
+      break;
+    case "delete":
+      await deleteSelected();
+      break;
   }
 }
 
@@ -491,17 +596,15 @@ function bindEvents() {
   );
   $("btn-service-save").addEventListener("click", saveService);
   $("btn-service-cancel").addEventListener("click", () => closeModal("service-modal"));
+  $("btn-browse-exe").addEventListener("click", browseExecutable);
+  $("btn-browse-work").addEventListener("click", browseWorkingDirectory);
   $("btn-import-confirm").addEventListener("click", confirmImport);
   $("btn-batch-cancel").addEventListener("click", () => {
     invoke("cancel_batch");
-    $("batch-text").textContent = "Membatalkan... service yang sedang berjalan akan diselesaikan.";
+    $("batch-text").textContent = "Cancelling... running operations will finish.";
   });
   $("btn-log-reload").addEventListener("click", () => loadLog(true));
-  $("btn-log-open").addEventListener("click", () => {
-    const service = selectedService();
-    if (!service) return;
-    invoke("open_log", { name: service.name }).catch((error) => toast(error, "error"));
-  });
+  $("btn-log-open").addEventListener("click", openSelectedLog);
   $("f-type").addEventListener("change", updateNativeFields);
 
   document.querySelectorAll("[data-close]").forEach((button) => {
@@ -519,9 +622,27 @@ function bindEvents() {
       openServiceModal(true);
     }
   });
+  $("service-body").addEventListener("contextmenu", (event) => {
+    const row = event.target.closest("tr[data-name]");
+    if (row) showContextMenu(event, row.dataset.name);
+    else hideContextMenu();
+  });
+
+  $("service-context-menu").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button || button.disabled) return;
+    handleContextAction(button.dataset.action);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#service-context-menu")) hideContextMenu();
+  });
+  window.addEventListener("resize", hideContextMenu);
+  window.addEventListener("scroll", hideContextMenu, true);
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      hideContextMenu();
       document.querySelectorAll(".modal:not(.hidden)").forEach((modal) => {
         if (modal.id !== "batch-modal") modal.classList.add("hidden");
       });

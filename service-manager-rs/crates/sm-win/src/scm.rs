@@ -163,7 +163,7 @@ pub(crate) fn open_scm() -> Result<ScmHandle> {
         )
     }
     .map_err(|error| {
-        ScmError::Windows(format!("Gagal membuka Service Control Manager: {error}"))
+        ScmError::Windows(format!("Failed to open Service Control Manager: {error}"))
     })?;
     Ok(ScmHandle(handle))
 }
@@ -284,7 +284,7 @@ pub fn stop_service(name: &str, options: &WaitOptions) -> Result<ServiceStatusIn
         }
         Err(error) if win32_code(&error) == ERROR_SERVICE_CANNOT_ACCEPT_CTRL.0 => {
             return Err(ScmError::Windows(format!(
-                "Service '{name}' tidak menerima kontrol stop: {error}"
+                "Service '{name}' does not accept stop control: {error}"
             )));
         }
         Err(error) => return Err(map_service_error(name, error)),

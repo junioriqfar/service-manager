@@ -12,11 +12,11 @@ use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 #[derive(Debug, Error)]
 pub enum ElevationError {
-    #[error("Gagal memeriksa hak Administrator: {0}")]
+    #[error("Failed to check Administrator privileges: {0}")]
     Token(String),
-    #[error("Tidak dapat menentukan path executable: {0}")]
+    #[error("Could not determine executable path: {0}")]
     CurrentExe(String),
-    #[error("Gagal menjalankan ulang sebagai Administrator: {0}")]
+    #[error("Failed to relaunch as Administrator: {0}")]
     Shell(String),
 }
 

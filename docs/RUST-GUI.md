@@ -40,6 +40,10 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 
 ## Fitur
 
+- UI sepenuhnya dalam Bahasa Inggris.
+- Tombol **Browse…** pada Application (file picker) dan Working Directory (folder picker).
+- Klik kanan baris service menampilkan context menu: Edit, Install, Start, Stop, Restart, Open Log, Delete.
+
 - Tabel service: status, nama, display name, jenis, application, startup, restart.
 - Toolbar: Tambah, Edit, Hapus, Install, Import, Refresh, Start/Stop/Restart, Start/Stop/Restart Semua, Backup, Restore, Folder, Log App, Tentang.
 - Form tambah/edit dengan field khusus Apache (`apacheRoot`, `apacheConfig`) dan PostgreSQL (`pgData`, `pgAccount`).

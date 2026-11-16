@@ -104,14 +104,14 @@ pub async fn run_batch(
                         action: action.label().to_string(),
                         name: name.clone(),
                         state: "cancelled".to_string(),
-                        message: Some("Dibatalkan sebelum dijalankan.".to_string()),
+                        message: Some("Cancelled before execution.".to_string()),
                         done: done_now,
                         total,
                     });
                     return BatchOutcome {
                         name,
                         state: BatchState::Cancelled,
-                        message: Some("Dibatalkan sebelum dijalankan.".to_string()),
+                        message: Some("Cancelled before execution.".to_string()),
                     };
                 }
 

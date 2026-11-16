@@ -11,17 +11,17 @@ pub const APP_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
 pub fn read_log_tail(path: &Path, max_bytes: u64) -> String {
     if !path.is_file() {
-        return "(file log belum ada)".to_string();
+        return "(log file does not exist yet)".to_string();
     }
 
     let mut file = match fs::File::open(path) {
         Ok(file) => file,
-        Err(error) => return format!("(gagal membuka log: {error})"),
+        Err(error) => return format!("(failed to open log: {error})"),
     };
 
     let length = match file.metadata() {
         Ok(metadata) => metadata.len(),
-        Err(error) => return format!("(gagal membaca metadata log: {error})"),
+        Err(error) => return format!("(failed to read log metadata: {error})"),
     };
     if length == 0 {
         return "(file log kosong)".to_string();
@@ -29,12 +29,12 @@ pub fn read_log_tail(path: &Path, max_bytes: u64) -> String {
 
     let start = length.saturating_sub(max_bytes);
     if let Err(error) = file.seek(SeekFrom::Start(start)) {
-        return format!("(gagal seek log: {error})");
+        return format!("(failed to seek log: {error})");
     }
 
     let mut buffer = Vec::new();
     if let Err(error) = file.read_to_end(&mut buffer) {
-        return format!("(gagal membaca log: {error})");
+        return format!("(failed to read log: {error})");
     }
 
     let mut text = String::from_utf8_lossy(&buffer).to_string();
@@ -71,7 +71,7 @@ pub fn build_log_view(config: &ServiceConfig) -> String {
 
     if paths.is_empty() {
         return format!(
-            "(Service '{}' belum punya path log. Klik Edit untuk mengatur AppStdout/AppStderr.)",
+            "(Service '{}' has no log path. Click Edit to configure AppStdout/AppStderr.)",
             config.name
         );
     }
@@ -101,12 +101,12 @@ pub fn export_services(paths: &ConfigPaths, services: &[ServiceConfig]) -> Resul
 
 pub fn open_path(path: &Path) -> Result<(), String> {
     if !path.exists() {
-        return Err(format!("Path tidak ditemukan: {}", path.display()));
+        return Err(format!("Path not found: {}", path.display()));
     }
     std::process::Command::new("explorer.exe")
         .arg(path)
         .spawn()
-        .map_err(|error| format!("Gagal membuka path: {error}"))?;
+        .map_err(|error| format!("Failed to open path: {error}"))?;
     Ok(())
 }
 
@@ -146,7 +146,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         assert_eq!(
             read_log_tail(&temp.path().join("missing.log"), LOG_MAX_BYTES),
-            "(file log belum ada)"
+            "(log file does not exist yet)"
         );
     }
 
@@ -207,7 +207,7 @@ mod tests {
             name: "demo".into(),
             ..ServiceConfig::default()
         };
-        assert!(build_log_view(&config).contains("belum punya path log"));
+        assert!(build_log_view(&config).contains("has no log path"));
     }
 
     #[test]

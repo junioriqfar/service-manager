@@ -32,17 +32,17 @@ pub struct InstallPlan {
 
 #[derive(Debug, Error)]
 pub enum NativeError {
-    #[error("Jenis service '{0}' tidak memiliki installer native.")]
+    #[error("Service type '{0}' has no native installer.")]
     UnsupportedType(String),
-    #[error("Field wajib untuk service native tidak diisi: {0}")]
+    #[error("Required native service field is empty: {0}")]
     MissingField(&'static str),
-    #[error("Perintah '{program}' gagal (exit {exit_code}): {output}")]
+    #[error("Command '{program}' failed (exit {exit_code}): {output}")]
     CommandFailed {
         program: String,
         exit_code: i32,
         output: String,
     },
-    #[error("Service '{0}' tidak muncul setelah proses install.")]
+    #[error("Service '{0}' did not appear after installation.")]
     ServiceNotCreated(String),
     #[error(transparent)]
     Process(#[from] ProcessError),

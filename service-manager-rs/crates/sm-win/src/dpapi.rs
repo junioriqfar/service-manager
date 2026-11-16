@@ -9,7 +9,7 @@ use windows::Win32::Security::Cryptography::{
 
 #[derive(Debug, Error)]
 pub enum DpapiError {
-    #[error("Operasi DPAPI gagal: {0}")]
+    #[error("DPAPI operation failed: {0}")]
     Windows(String),
 }
 

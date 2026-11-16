@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,8 +8,8 @@
 </head>
 <body>
   <div id="admin-banner" class="banner hidden">
-    <span>Aplikasi berjalan tanpa hak Administrator. Install/Start/Stop/Restart akan gagal.</span>
-    <button id="btn-elevate" class="btn btn-warn">Jalankan sebagai Administrator</button>
+    <span>The application is not running as Administrator. Install/Start/Stop/Restart will fail.</span>
+    <button id="btn-elevate" class="btn btn-warn">Run as Administrator</button>
   </div>
 
   <header class="app-header">
@@ -19,9 +19,9 @@
     </div>
     <div class="toolbar">
       <div class="group">
-        <button id="btn-add" class="btn">Tambah</button>
+        <button id="btn-add" class="btn">Add</button>
         <button id="btn-edit" class="btn">Edit</button>
-        <button id="btn-delete" class="btn">Hapus</button>
+        <button id="btn-delete" class="btn">Delete</button>
         <button id="btn-install" class="btn">Install</button>
       </div>
       <div class="group">
@@ -34,16 +34,16 @@
         <button id="btn-restart" class="btn">Restart</button>
       </div>
       <div class="group">
-        <button id="btn-start-all" class="btn">Start Semua</button>
-        <button id="btn-stop-all" class="btn">Stop Semua</button>
-        <button id="btn-restart-all" class="btn">Restart Semua</button>
+        <button id="btn-start-all" class="btn">Start All</button>
+        <button id="btn-stop-all" class="btn">Stop All</button>
+        <button id="btn-restart-all" class="btn">Restart All</button>
       </div>
       <div class="group">
         <button id="btn-backup" class="btn">Backup</button>
         <button id="btn-restore" class="btn">Restore</button>
         <button id="btn-open-folder" class="btn">Folder</button>
-        <button id="btn-app-log" class="btn">Log App</button>
-        <button id="btn-about" class="btn">Tentang</button>
+        <button id="btn-app-log" class="btn">App Log</button>
+        <button id="btn-about" class="btn">About</button>
       </div>
     </div>
   </header>
@@ -51,17 +51,17 @@
   <main class="workspace">
     <section class="panel table-panel">
       <div class="panel-head">
-        <strong>Daftar Service</strong>
-        <span id="counts" class="muted">0 terdaftar</span>
+        <strong>Service List</strong>
+        <span id="counts" class="muted">0 registered</span>
       </div>
       <div class="table-wrap">
         <table id="service-table">
           <thead>
             <tr>
               <th style="width: 110px">Status</th>
-              <th style="width: 150px">Nama Service</th>
+              <th style="width: 150px">Service Name</th>
               <th style="width: 170px">Display Name</th>
-              <th style="width: 100px">Jenis</th>
+              <th style="width: 100px">Type</th>
               <th>Application</th>
               <th style="width: 130px">Startup</th>
               <th style="width: 90px">Restart</th>
@@ -70,59 +70,65 @@
           <tbody id="service-body"></tbody>
         </table>
         <div id="empty-state" class="empty hidden">
-          Daftar masih kosong. Klik <strong>Import</strong> untuk memindai service yang sudah terpasang,
-          atau <strong>Tambah</strong> untuk membuat config baru.
+          The list is empty. Click <strong>Import</strong> to scan installed services,
+          or <strong>Add</strong> to create a new config.
         </div>
       </div>
     </section>
 
     <section class="panel log-panel">
       <div class="panel-head log-head">
-        <strong id="log-title">Log service: (belum ada yang dipilih)</strong>
+        <strong id="log-title">Service log: (none selected)</strong>
         <span id="log-path" class="muted"></span>
         <label class="inline"><input id="log-auto" type="checkbox" checked /> Auto refresh</label>
-        <button id="btn-log-reload" class="btn btn-small">Muat ulang</button>
-        <button id="btn-log-open" class="btn btn-small">Buka file</button>
+        <button id="btn-log-reload" class="btn btn-small">Reload</button>
+        <button id="btn-log-open" class="btn btn-small">Open file</button>
       </div>
       <pre id="log-output" class="log-output"></pre>
     </section>
   </main>
 
   <footer class="statusbar">
-    <span id="status-text">Siap</span>
-    <span id="status-counts" class="muted">0 terdaftar | 0 terpasang | 0 berjalan</span>
+    <span id="status-text">Ready</span>
+    <span id="status-counts" class="muted">0 registered | 0 installed | 0 running</span>
   </footer>
 
   <div id="service-modal" class="modal hidden">
     <div class="modal-card wide">
       <div class="modal-head">
-        <h2 id="service-modal-title">Tambah Service</h2>
+        <h2 id="service-modal-title">Add Service</h2>
         <button class="icon-btn" data-close="service-modal">×</button>
       </div>
       <div class="modal-body">
         <div id="service-error" class="form-error hidden"></div>
         <div class="grid-2">
-          <label>Jenis
+          <label>Type
             <select id="f-type">
               <option value="nssm">NSSM</option>
               <option value="apache">Apache (native)</option>
               <option value="postgresql">PostgreSQL (native)</option>
             </select>
           </label>
-          <label>Nama service
+          <label>Service name
             <input id="f-name" type="text" placeholder="my-app" />
           </label>
           <label>Display name
             <input id="f-display" type="text" placeholder="My App" />
           </label>
           <label>Application (.exe)
-            <input id="f-exe" type="text" placeholder="C:\apps\app.exe" />
+            <div class="input-row">
+              <input id="f-exe" type="text" placeholder="C:\apps\app.exe" />
+              <button id="btn-browse-exe" class="btn btn-small" type="button" title="Browse for executable">Browse…</button>
+            </div>
           </label>
           <label class="span-2">Arguments
             <input id="f-args" type="text" placeholder="index.js --port 3000" />
           </label>
           <label class="span-2">Working directory
-            <input id="f-work" type="text" placeholder="C:\apps" />
+            <div class="input-row">
+              <input id="f-work" type="text" placeholder="C:\apps" />
+              <button id="btn-browse-work" class="btn btn-small" type="button" title="Browse for folder">Browse…</button>
+            </div>
           </label>
           <label>Startup
             <select id="f-startup">
@@ -131,13 +137,13 @@
               <option value="manual">Manual</option>
             </select>
           </label>
-          <label>Restart delay (detik)
+          <label>Restart delay (seconds)
             <input id="f-delay" type="number" min="1" value="5" />
           </label>
-          <label class="span-2">Dependencies (pisahkan spasi/koma)
+          <label class="span-2">Dependencies (space or comma separated)
             <input id="f-deps" type="text" placeholder="Tcpip, postgresql-16" />
           </label>
-          <label class="span-2 inline-label"><input id="f-restart" type="checkbox" checked /> Restart otomatis saat crash</label>
+          <label class="span-2 inline-label"><input id="f-restart" type="checkbox" checked /> Restart automatically on crash</label>
           <label>Stdout log
             <input id="f-stdout" type="text" placeholder="C:\apps\logs\out.log" />
           </label>
@@ -169,8 +175,8 @@
       <div class="modal-foot">
         <span id="service-hint" class="muted"></span>
         <div class="spacer"></div>
-        <button class="btn" id="btn-service-cancel">Batal</button>
-        <button class="btn btn-primary" id="btn-service-save">Simpan</button>
+        <button class="btn" id="btn-service-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-service-save">Save</button>
       </div>
     </div>
   </div>
@@ -178,17 +184,17 @@
   <div id="import-modal" class="modal hidden">
     <div class="modal-card">
       <div class="modal-head">
-        <h2>Import Service</h2>
+        <h2>Import Services</h2>
         <button class="icon-btn" data-close="import-modal">×</button>
       </div>
       <div class="modal-body">
-        <p class="muted">Service NSSM/Apache/PostgreSQL yang terdeteksi dan belum ada di config.</p>
+        <p class="muted">Detected NSSM/Apache/PostgreSQL services that are not in the config.</p>
         <div id="import-list" class="checklist"></div>
       </div>
       <div class="modal-foot">
         <span id="import-count" class="muted"></span>
         <div class="spacer"></div>
-        <button class="btn" data-close="import-modal">Batal</button>
+        <button class="btn" data-close="import-modal">Cancel</button>
         <button class="btn btn-primary" id="btn-import-confirm">Import</button>
       </div>
     </div>
@@ -197,16 +203,16 @@
   <div id="batch-modal" class="modal hidden">
     <div class="modal-card">
       <div class="modal-head">
-        <h2 id="batch-title">Menjalankan operasi...</h2>
+        <h2 id="batch-title">Running operation...</h2>
       </div>
       <div class="modal-body">
         <progress id="batch-progress" value="0" max="1"></progress>
-        <p id="batch-text" class="muted">Menyiapkan...</p>
+        <p id="batch-text" class="muted">Preparing...</p>
         <div id="batch-log" class="batch-log"></div>
       </div>
       <div class="modal-foot">
         <div class="spacer"></div>
-        <button class="btn btn-warn" id="btn-batch-cancel">Batalkan</button>
+        <button class="btn btn-warn" id="btn-batch-cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -214,19 +220,31 @@
   <div id="about-modal" class="modal hidden">
     <div class="modal-card">
       <div class="modal-head">
-        <h2>Tentang Service Manager</h2>
+        <h2>About Service Manager</h2>
         <button class="icon-btn" data-close="about-modal">×</button>
       </div>
       <div class="modal-body">
-        <p>Service Manager versi Rust 0.1.0</p>
+        <p>Service Manager Rust version 0.1.0</p>
         <pre id="about-paths" class="about-paths"></pre>
-        <p class="muted">Aplikasi harus dijalankan sebagai Administrator untuk mengubah service.</p>
+        <p class="muted">The application must run as Administrator to change services.</p>
       </div>
       <div class="modal-foot">
         <div class="spacer"></div>
-        <button class="btn" data-close="about-modal">Tutup</button>
+        <button class="btn" data-close="about-modal">Close</button>
       </div>
     </div>
+  </div>
+
+  <div id="service-context-menu" class="context-menu hidden">
+    <button type="button" data-action="edit">Edit</button>
+    <button type="button" data-action="install">Install</button>
+    <div class="menu-sep"></div>
+    <button type="button" data-action="start">Start</button>
+    <button type="button" data-action="stop">Stop</button>
+    <button type="button" data-action="restart">Restart</button>
+    <div class="menu-sep"></div>
+    <button type="button" data-action="log">Open Log</button>
+    <button type="button" data-action="delete" class="danger">Delete</button>
   </div>
 
   <input id="restore-file" type="file" accept=".json,application/json" class="hidden" />

@@ -13,11 +13,11 @@ use crate::scm;
 
 #[derive(Debug, Error)]
 pub enum ManagerError {
-    #[error("Config service tidak valid.")]
+    #[error("Service config is invalid.")]
     Validation(Vec<ValidationError>),
-    #[error("Service '{0}' sudah terpasang.")]
+    #[error("Service '{0}' is already installed.")]
     AlreadyInstalled(String),
-    #[error("Service '{0}' belum terpasang.")]
+    #[error("Service '{0}' is not installed.")]
     NotInstalled(String),
     #[error(transparent)]
     Nssm(#[from] NssmError),
@@ -58,9 +58,7 @@ pub fn install_service(
         ServiceType::Apache | ServiceType::PostgreSql => {
             native::install(config, runner)?;
         }
-        ServiceType::Unknown => {
-            return Err(ManagerError::Other("Jenis service tidak dikenal.".into()))
-        }
+        ServiceType::Unknown => return Err(ManagerError::Other("Unknown service type.".into())),
     }
 
     Ok(())
@@ -84,9 +82,7 @@ pub fn apply_service(
         ServiceType::Apache | ServiceType::PostgreSql => {
             native::apply(config, runner, &crate::process::sc_exe_path())?;
         }
-        ServiceType::Unknown => {
-            return Err(ManagerError::Other("Jenis service tidak dikenal.".into()))
-        }
+        ServiceType::Unknown => return Err(ManagerError::Other("Unknown service type.".into())),
     }
 
     Ok(())

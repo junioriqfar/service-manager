@@ -383,7 +383,7 @@ fn enumerate_raw() -> Result<Vec<RawService>, DiscoveryError> {
             PCWSTR::null(),
         )
     }
-    .map_err(|error| DiscoveryError::Other(format!("Gagal enumerasi service: {error}")))?;
+    .map_err(|error| DiscoveryError::Other(format!("Failed to enumerate services: {error}")))?;
 
     let mut result = Vec::with_capacity(returned as usize);
     let base = buffer.as_ptr().cast::<ENUM_SERVICE_STATUS_PROCESSW>();
@@ -410,7 +410,7 @@ fn query_raw_config(
     let _ = unsafe { QueryServiceConfigW(service.0, None, 0, &mut needed) };
     if needed == 0 {
         return Err(ScmError::Other(format!(
-            "Tidak dapat membaca config service '{name}'."
+            "Could not read service config '{name}'."
         )));
     }
 

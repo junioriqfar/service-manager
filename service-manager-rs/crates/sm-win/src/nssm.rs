@@ -25,9 +25,9 @@ impl NssmCommand {
 
 #[derive(Debug, Error)]
 pub enum NssmError {
-    #[error("NSSM tidak ditemukan di {0}")]
+    #[error("NSSM not found at {0}")]
     NotFound(PathBuf),
-    #[error("Perintah nssm gagal (exit {exit_code}): {output}")]
+    #[error("nssm command failed (exit {exit_code}): {output}")]
     CommandFailed { exit_code: i32, output: String },
     #[error(transparent)]
     Process(#[from] ProcessError),

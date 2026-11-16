@@ -112,14 +112,17 @@ impl AppState {
                 let index = services
                     .iter()
                     .position(|existing| existing.name.eq_ignore_ascii_case(&service.name))
-                    .ok_or_else(|| format!("Service '{}' tidak ada di config.", service.name))?;
+                    .ok_or_else(|| format!("Service '{}' is not in the config.", service.name))?;
                 services[index] = service;
             } else {
                 if services
                     .iter()
                     .any(|existing| existing.name.eq_ignore_ascii_case(&service.name))
                 {
-                    return Err(format!("Service '{}' sudah ada di config.", service.name));
+                    return Err(format!(
+                        "Service '{}' is already in the config.",
+                        service.name
+                    ));
                 }
                 services.push(service);
             }

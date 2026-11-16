@@ -160,6 +160,8 @@ cargo run -p sm-updater -- check --project kasirin
 
 Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md), [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md), [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md).
 
+GUI Rust menggunakan UI Bahasa Inggris, tombol **Browse…** untuk Application/Working Directory, dan context menu klik kanan pada daftar service (Edit/Install/Start/Stop/Restart/Open Log/Delete).
+
 Build portable:
 
 ```powershell

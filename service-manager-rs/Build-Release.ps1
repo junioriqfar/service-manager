@@ -27,7 +27,11 @@ try {
 
     $stage = Join-Path $dist $name
     if (Test-Path -LiteralPath $stage) {
-        Remove-Item -LiteralPath $stage -Recurse -Force
+        try {
+            Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop
+        } catch {
+            throw "Cannot replace '$stage'. Close sm-gui.exe (or any app using the dist folder) and retry."
+        }
     }
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
