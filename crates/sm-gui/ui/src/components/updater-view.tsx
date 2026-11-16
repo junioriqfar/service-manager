@@ -112,8 +112,8 @@ export function UpdaterView() {
     setLogLoading(true);
     try {
       setLogView(await invoke<UpdaterLogView>("read_updater_log", { app: id }));
-    } catch {
-      setLogView(null);
+    } catch (error) {
+      setLogView({ path: "", text: errorMessage(error) });
     } finally {
       setLogLoading(false);
     }

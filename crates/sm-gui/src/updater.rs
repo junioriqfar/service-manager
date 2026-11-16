@@ -513,9 +513,27 @@ pub fn read_updater_log(app: Option<String>) -> Result<UpdaterLogView, String> {
                 .next()
         })
     });
-    let path = project_log
-        .or_else(|| recent_logs(&log_dir, 1).into_iter().next())
-        .ok_or_else(|| format!("Belum ada log updater di {}", log_dir.display()))?;
+    let matching_global = app.as_deref().and_then(|id| {
+        let marker = format!("===== {id}:");
+        recent_logs(&log_dir, 50).into_iter().find(|path| {
+            std::fs::read_to_string(path)
+                .map(|text| text.contains(&marker))
+                .unwrap_or(false)
+        })
+    });
+    let path = if let Some(id) = app.as_deref() {
+        project_log.or(matching_global).ok_or_else(|| {
+            format!(
+                "Belum ada log untuk app '{id}' di {} atau storage/logs.",
+                log_dir.display()
+            )
+        })?
+    } else {
+        recent_logs(&log_dir, 1)
+            .into_iter()
+            .next()
+            .ok_or_else(|| format!("Belum ada log updater di {}", log_dir.display()))?
+    };
     let text = tail_text(&path, 400)?;
     Ok(UpdaterLogView {
         path: path.to_string_lossy().to_string(),
