@@ -6,6 +6,7 @@ import {
   Info,
   PackageOpen,
   Play,
+  RadioTower,
   RotateCcw,
   ServerCog,
   Square,
@@ -18,6 +19,7 @@ import { AdminBanner } from "@/components/admin-banner";
 import { BatchDialog } from "@/components/batch-dialog";
 import { ImportDialog } from "@/components/import-dialog";
 import { LogPanel } from "@/components/log-panel";
+import { RemoteTriggerView } from "@/components/remote-trigger-view";
 import { DeleteServiceDialog, InstallServiceDialog } from "@/components/service-action-dialogs";
 import { ServiceFormDialog } from "@/components/service-form-dialog";
 import { ServiceTable } from "@/components/service-table";
@@ -54,7 +56,7 @@ function App() {
 }
 
 function ServiceManager() {
-  const [view, setView] = useState<"services" | "updater">("services");
+  const [view, setView] = useState<"services" | "updater" | "remote">("services");
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [admin, setAdmin] = useState<boolean | null>(null);
@@ -596,6 +598,17 @@ function ServiceManager() {
               <PackageOpen />
               Updater
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={view === "remote" ? "secondary" : "ghost"}
+              onClick={() => setView("remote")}
+              role="tab"
+              aria-selected={view === "remote"}
+            >
+              <RadioTower />
+              Remote
+            </Button>
           </div>
 
           <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-2">
@@ -674,6 +687,8 @@ function ServiceManager() {
         <main className="flex min-h-0 flex-1 flex-col gap-3 p-3">
           {view === "updater" ? (
             <UpdaterView />
+          ) : view === "remote" ? (
+            <RemoteTriggerView />
           ) : (
             <>
               <ServiceTable
@@ -709,11 +724,19 @@ function ServiceManager() {
         </main>
 
         <footer className="flex items-center justify-between gap-4 border-t bg-card px-4 py-1.5 text-xs">
-          <span>{view === "updater" ? "Updater ready" : statusText}</span>
+          <span>
+            {view === "updater"
+              ? "Updater ready"
+              : view === "remote"
+                ? "Remote trigger ready"
+                : statusText}
+          </span>
           <span className="truncate text-muted-foreground">
             {view === "updater"
               ? "Manual trigger only — GUI or sm-trigger over SSH"
-              : counts}
+              : view === "remote"
+                ? "SSH client — keys/agent only, no background polling"
+                : counts}
           </span>
         </footer>
       </div>

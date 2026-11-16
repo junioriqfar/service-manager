@@ -2,6 +2,7 @@
 
 mod batch;
 mod commands;
+mod remote;
 mod state;
 mod updater;
 mod util;
@@ -47,6 +48,11 @@ fn main() {
             updater::test_updater_app,
             updater::run_updater,
             updater::read_updater_log,
+            remote::load_remote_trigger,
+            remote::save_remote_trigger,
+            remote::preview_remote_trigger,
+            remote::test_remote_ssh,
+            remote::run_remote_trigger,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Service Manager");
@@ -68,10 +74,11 @@ mod ui_tests {
     const THEME_PROVIDER: &str = include_str!("../ui/src/components/theme-provider.tsx");
     const UPDATER_VIEW: &str = include_str!("../ui/src/components/updater-view.tsx");
     const UPDATER_FORM: &str = include_str!("../ui/src/components/updater-form-dialog.tsx");
+    const REMOTE_VIEW: &str = include_str!("../ui/src/components/remote-trigger-view.tsx");
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}"
         )
     }
 
@@ -106,6 +113,11 @@ mod ui_tests {
             "Updater Apps",
             "Add Updater App",
             "Manual SSH/GUI trigger only. No background polling.",
+            "Remote Trigger",
+            "Remote output",
+            "Test SSH",
+            "Check App",
+            "Run App",
         ] {
             assert!(sources.contains(label), "missing English label: {label}");
         }
@@ -234,5 +246,45 @@ mod ui_tests {
         assert!(UPDATER_FORM.contains("Browse…"));
         assert!(UPDATER_VIEW.contains("lucide-react"));
         assert!(UPDATER_FORM.contains("lucide-react"));
+    }
+
+    #[test]
+    fn remote_ui_has_trigger_actions() {
+        for label in [
+            "Remote Trigger",
+            "Remote output",
+            "Preview",
+            "Test SSH",
+            "Check All",
+            "Update All",
+            "Check App",
+            "Run App",
+            "Save",
+        ] {
+            assert!(REMOTE_VIEW.contains(label), "missing remote label: {label}");
+        }
+        for command in [
+            "load_remote_trigger",
+            "save_remote_trigger",
+            "preview_remote_trigger",
+            "test_remote_ssh",
+            "run_remote_trigger",
+            "remote-trigger-output",
+        ] {
+            assert!(
+                REMOTE_VIEW.contains(command),
+                "missing remote command/event: {command}"
+            );
+        }
+        for field in [
+            "remoteBin",
+            "remoteConfig",
+            "identity",
+            "wrapper",
+            "BatchMode",
+        ] {
+            assert!(REMOTE_VIEW.contains(field), "missing remote field: {field}");
+        }
+        assert!(REMOTE_VIEW.contains("lucide-react"));
     }
 }

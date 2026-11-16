@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 sm-core = { path = "../sm-core" }
 sm-config = { path = "../sm-config" }
+sm-trigger = { path = "../sm-trigger" }
 sm-updater = { path = "../sm-updater" }
 sm-win = { path = "../sm-win" }
 serde.workspace = true

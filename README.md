@@ -16,6 +16,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - UI Bahasa Inggris, tema **light/dark/system**, icon Lucide, file/folder picker, dan context menu klik kanan.
 - Updater `sm-updater`: registry app, trigger SSH dengan allowlist IP/CIDR, cek/update Git, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, service lifecycle, credential helper.
 - Client `sm-trigger` cross-platform (Windows/macOS/Linux) untuk memicu update via SSH tanpa polling.
+- GUI tab **Remote** di `sm-gui` untuk trigger via SSH dengan output live (Windows client).
 - GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, dan log.
 - Wrapper elevated `scripts/Invoke-UpdaterTask.ps1` + Scheduled Task `ServiceManager-Updater`.
 - Diagnosa headless `sm-diag`.
@@ -53,7 +54,7 @@ ServiceManager/
 │  ├─ sm-core/                  # model, validasi, ordering, update plan
 │  ├─ sm-config/                # services.json, projects.json, backup
 │  ├─ sm-win/                   # SCM, NSSM/native, discovery, DPAPI
-│  ├─ sm-gui/                   # Tauri + React/shadCN UI (tab Services/Updater)
+│  ├─ sm-gui/                   # Tauri + React/shadCN UI (Services/Updater/Remote)
 │  ├─ sm-trigger/               # client SSH cross-platform
 │  └─ sm-updater/               # registry updater + trigger + credential helper
 ├─ scripts/                     # wrapper Scheduled Task elevated
@@ -175,7 +176,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **243 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **250 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 

@@ -63,7 +63,7 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 
 ## Tab Updater
 
-Header memiliki dua tab: **Services** dan **Updater**.
+Header memiliki tiga tab: **Services**, **Updater**, dan **Remote**.
 
 - Tabel app registry: nama/ID, branch, toolchain, service lifecycle, status, last update.
 - Tombol **Refresh**, **Add App**, **Check All**, **Update All**.
@@ -78,6 +78,23 @@ Header memiliki dua tab: **Services** dan **Updater**.
 - Tidak ada polling/auto-update. Aksi hanya dipicu tombol atau `sm-trigger` via SSH.
 - Service lifecycle membutuhkan GUI/task elevated; tanpa Administrator, update dengan
   service akan gagal sebelum file diubah.
+
+## Tab Remote
+
+Tab **Remote** adalah GUI client untuk memicu `sm-trigger` lewat SSH dari mesin ini.
+
+- Field: host, user, port, identity file, wrapper script, remote `sm-updater.exe`,
+  remote `projects.json` opsional, dan app ID opsional.
+- **Preview** menampilkan perintah `ssh` yang akan dijalankan.
+- **Test SSH** menjalankan `echo sm-trigger-ok` dengan `BatchMode=yes` dan
+  `ConnectTimeout=10` (key/agent saja, tanpa prompt password).
+- **Check All / Update All** memicu wrapper/task di server.
+- **Check App / Run App** untuk satu app.
+- Output stdout/stderr di-stream lewat event Tauri `remote-trigger-output`.
+- Konfigurasi disimpan di `data/trigger-client.json` (tidak di-commit).
+
+Tab ini bisa dipakai di PC client Windows tanpa perlu terminal. Untuk macOS/Linux,
+gunakan CLI `sm-trigger`.
 
 ## Batch Async (Anti-Freeze)
 
@@ -98,6 +115,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/main.rs` | Entry point Tauri, registrasi command |
 | `crates/sm-gui/src/commands.rs` | Command IPC (CRUD, install, start/stop, import, backup/restore, batch) |
 | `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log) |
+| `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
 | `crates/sm-gui/src/state.rs` | State aplikasi, service rows, status SCM, batch lock |
 | `crates/sm-gui/src/batch.rs` | Scheduler batch async + test concurrency |
 | `crates/sm-gui/src/util.rs` | Log tail, export, open path, app log |
@@ -117,7 +135,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 243 test):
+Test GUI mencakup (total workspace 250 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

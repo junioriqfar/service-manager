@@ -3041,6 +3041,7 @@ dependencies = [
  "serde_json",
  "sm-config",
  "sm-core",
+ "sm-trigger",
  "sm-updater",
  "sm-win",
  "tauri",

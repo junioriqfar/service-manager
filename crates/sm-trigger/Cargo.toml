@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 description = "Cross-platform SSH trigger client for Service Manager updater"
 
+[lib]
+name = "sm_trigger"
+path = "src/lib.rs"
+
 [[bin]]
 name = "sm-trigger"
 path = "src/main.rs"

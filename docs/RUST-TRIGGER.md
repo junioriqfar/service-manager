@@ -124,6 +124,18 @@ Get-ScheduledTask -TaskName ServiceManager-Updater
 Get-ScheduledTaskInfo -TaskName ServiceManager-Updater
 ```
 
+## GUI Remote Trigger (Windows)
+
+`sm-gui` memiliki tab **Remote** untuk memakai `sm-trigger` tanpa terminal:
+
+1. Isi Host, User, Port, Identity file (opsional), Wrapper script, dan remote binary.
+2. **Preview** untuk melihat perintah SSH.
+3. **Test SSH** untuk memastikan key/agent bisa login (BatchMode).
+4. **Check All / Update All** atau **Check App / Run App**.
+
+Konfigurasi tersimpan di `data/trigger-client.json` pada mesin client. GUI hanya
+mendukung key/agent authentication (tidak ada prompt password interaktif).
+
 ## Uji
 
 Dari client:

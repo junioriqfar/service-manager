@@ -176,3 +176,25 @@ export interface UpdaterLogView {
   text: string;
 }
 
+export interface RemoteTriggerConfig {
+  host: string;
+  user: string;
+  port: number;
+  identity: string;
+  wrapper: string;
+  remoteBin: string;
+  remoteConfig: string;
+  app: string;
+}
+
+export interface RemoteTriggerOutput {
+  stream: string;
+  line: string;
+}
+
+export interface RemoteTriggerResult {
+  command: string;
+  exitCode: number;
+  output: string;
+}
+

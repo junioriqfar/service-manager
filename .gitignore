@@ -13,6 +13,8 @@ data/updater-state.json
 data/updater.lock
 data/updater-request.json
 data/updater-result.json
+data/trigger-client.json
+trigger-client.json
 
 # Runtime artifacts
 logs/
