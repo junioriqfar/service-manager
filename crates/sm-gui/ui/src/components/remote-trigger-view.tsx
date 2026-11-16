@@ -112,11 +112,11 @@ export function RemoteTriggerView() {
     setConfig((previous) => ({ ...previous, [key]: value }));
   }
 
-  async function save(): Promise<RemoteTriggerConfig | null> {
+  async function save(showToast = true): Promise<RemoteTriggerConfig | null> {
     try {
       const saved = await invoke<RemoteTriggerConfig>("save_remote_trigger", { config });
       setConfig(saved);
-      toast.success("Remote trigger settings saved.");
+      if (showToast) toast.success("Remote trigger settings saved.");
       return saved;
     } catch (error) {
       toast.error(errorMessage(error));
@@ -163,7 +163,7 @@ export function RemoteTriggerView() {
 
   async function run(appId: string | null, check: boolean) {
     if (running) return;
-    const saved = await save();
+    const saved = await save(false);
     if (!saved) return;
     setRunning(true);
     setOutput([]);
