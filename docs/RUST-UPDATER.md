@@ -252,8 +252,9 @@ Aturan:
 - `check`/dry-run tidak pernah stop/restart service.
 - Service yang sudah stopped sebelum update tidak dinyalakan kecuali diminta
   `restartAfter`/`startAfter`.
-- Stop/start memerlukan Administrator. Preflight hak akses dilakukan sebelum file diubah;
-  jika tidak elevated, update dibatalkan.
+- Stop/start memerlukan Administrator. Preflight dilakukan untuk semua app terpilih
+  sebelum Git disentuh; jika tidak elevated, seluruh run dibatalkan.
+- `run --app` untuk app tanpa service tetap bisa dijalankan non-admin.
 - Jika build/post-update gagal setelah service dihentikan, updater melakukan best-effort
   start dan menandai update `failed`.
 - Jika service gagal dipulihkan setelah update sukses, status `degraded`.

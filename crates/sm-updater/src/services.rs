@@ -16,6 +16,11 @@ pub trait ServiceControl: Send + Sync {
     fn preflight(&self, _name: &str) -> Result<(), String> {
         Ok(())
     }
+
+    /// Default true agar fake controller di test tidak terblokir.
+    fn is_elevated(&self) -> Result<bool, String> {
+        Ok(true)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -56,6 +61,10 @@ impl ServiceControl for WindowsServiceControl {
                 "Tidak punya hak start/stop service '{name}' (jalankan sebagai Administrator/elevated): {error}"
             )
         })
+    }
+
+    fn is_elevated(&self) -> Result<bool, String> {
+        sm_win::is_elevated().map_err(|error| error.to_string())
     }
 }
 

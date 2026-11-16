@@ -84,6 +84,17 @@ pub fn run_registry_with(
         }
     }
 
+    if !options.check_only
+        && selected_apps_need_services(config, &options, client_ip)
+        && !services.is_elevated()?
+    {
+        return Err(
+            "Update dengan service lifecycle membutuhkan Administrator/elevated. \
+             Jalankan melalui Scheduled Task wrapper atau elevated terminal."
+                .to_string(),
+        );
+    }
+
     for app in &config.apps {
         if !app.enabled {
             continue;
@@ -183,6 +194,31 @@ fn head_commit(git_path: &str, project: &Path, runner: &dyn Runner) -> Option<St
     }
 }
 
+fn selected_apps_need_services(
+    config: &UpdaterConfig,
+    options: &RunOptions,
+    client_ip: Option<IpAddr>,
+) -> bool {
+    config
+        .apps
+        .iter()
+        .filter(|app| app.enabled)
+        .filter(|app| {
+            options
+                .app
+                .as_ref()
+                .map(|id| app.id.eq_ignore_ascii_case(id))
+                .unwrap_or(true)
+        })
+        .filter(|app| app_allowed_for_ip(config, app, client_ip))
+        .any(|app| {
+            !app.services.stop_before_pull.is_empty()
+                || !app.services.stop_before_build.is_empty()
+                || !app.services.restart_after.is_empty()
+                || !app.services.start_after.is_empty()
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,6 +312,71 @@ mod tests {
         fn restart(&self, _name: &str, _timeout: Duration) -> Result<(), String> {
             Ok(())
         }
+    }
+
+    struct NotElevated;
+
+    impl ServiceControl for NotElevated {
+        fn exists(&self, _name: &str) -> Result<bool, String> {
+            Ok(true)
+        }
+        fn is_running(&self, _name: &str) -> Result<bool, String> {
+            Ok(false)
+        }
+        fn stop(&self, _name: &str, _timeout: Duration) -> Result<(), String> {
+            Ok(())
+        }
+        fn start(&self, _name: &str, _timeout: Duration) -> Result<(), String> {
+            Ok(())
+        }
+        fn restart(&self, _name: &str, _timeout: Duration) -> Result<(), String> {
+            Ok(())
+        }
+        fn is_elevated(&self) -> Result<bool, String> {
+            Ok(false)
+        }
+    }
+
+    #[test]
+    fn non_elevated_run_with_service_apps_aborts_before_git() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let mut config = UpdaterConfig::default();
+        config.apps.push(AppConfig {
+            id: "demo".into(),
+            repo_url: "https://example.com/demo.git".into(),
+            local_path: project.to_string_lossy().to_string(),
+            branch: "main".into(),
+            preset: Preset::Static,
+            composer: sm_core::ToggleMode::Never,
+            package_manager: crate::registry::PackageManager::None,
+            package_install: sm_core::ToggleMode::Never,
+            build: sm_core::ToggleMode::Never,
+            services: crate::registry::ServicePlan {
+                restart_after: vec!["api".into()],
+                ..crate::registry::ServicePlan::default()
+            },
+            ..AppConfig::default()
+        });
+
+        let error = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NotElevated,
+            RunOptions::default(),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("elevated"));
+        assert!(!config_path
+            .parent()
+            .unwrap()
+            .join("updater-state.json")
+            .exists());
     }
 
     #[test]

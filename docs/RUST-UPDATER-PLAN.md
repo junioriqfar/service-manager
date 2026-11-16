@@ -6,7 +6,7 @@ Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur y
 
 - Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain)
 - Lokasi: `crates/sm-updater`
-- Test: **82 unit test** untuk crate ini; total workspace **240 test**. Config default ada di `data/projects.json`.
+- Test: **83 unit test** untuk crate ini; total workspace **241 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
@@ -148,7 +148,7 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 
 ### 3.9 Pengujian
 
-- **82 unit test** crate `sm-updater`:
+- **83 unit test** crate `sm-updater`:
   - parsing CLI, registry, dan credential,
   - scan project/override,
   - runner nyata (exit code/timeout/timeout+env),
@@ -179,7 +179,7 @@ Prioritas: **P0** = penting untuk operasi aman, **P1** = peningkatan, **P2** = n
 | **Config validation command** | Cek `projects.json` tanpa menjalankan update | `sm-updater validate [--config PATH]` |
 | **Structured output** | Memudahkan integrasi Task Scheduler/monitoring | `--json` untuk `list`, `check`, `update` |
 | **Log retention** | Mencegah log menumpuk | Simpan N run terakhir / maksimal ukuran |
-| **Service restart hook** | Restart queue/cron service setelah deploy | `restartServices`/`postUpdateCommand` yang lebih terstruktur |
+| **Service restart hook** | Restart queue/cron service setelah deploy | Service lifecycle + `commands` (Selesai) |
 | **Confirmation flag** | Cegah update tidak sengaja dari terminal | `--yes` eksplisit untuk mode update non-interaktif |
 
 ### P1 — Peningkatan Deploy
@@ -232,7 +232,7 @@ Fitur berikut sengaja **tidak** dilakukan otomatis:
 3. `--json` output.
 4. Log retention.
 5. Flag `--yes` untuk update non-interaktif.
-6. Service restart hook terstruktur.
+6. Service restart hook terstruktur (selesai).
 
 ### Iterasi 2 — Deploy Control (P1)
 
