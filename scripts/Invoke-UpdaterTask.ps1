@@ -70,7 +70,9 @@ $request = [ordered]@{
 }
 $json = $request | ConvertTo-Json -Compress
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-[System.IO.File]::WriteAllText($requestPath, $json, $utf8)
+$tempRequest = "$requestPath.tmp"
+[System.IO.File]::WriteAllText($tempRequest, $json, $utf8)
+Move-Item -LiteralPath $tempRequest -Destination $requestPath -Force
 
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($null -eq $task) {
