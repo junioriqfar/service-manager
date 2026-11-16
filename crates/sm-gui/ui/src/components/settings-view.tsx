@@ -3,13 +3,16 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   CheckCircle2,
+  Clock,
   FlaskConical,
   FolderOpen,
   Loader2,
   Network,
+  Play,
   RefreshCw,
   Save,
   Search,
+  Server,
   ShieldAlert,
   ShieldCheck,
   Terminal,
@@ -35,9 +38,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { errorMessage, invoke } from "@/lib/tauri";
 import type {
+  ApacheApplyResult,
+  ApacheChangeView,
   ApacheToolPath,
   Settings,
   SettingsDiagnostics,
+  SettingsSaveResult,
   SettingsTools,
   SettingsTrigger,
   SettingsView,
@@ -465,6 +471,292 @@ function Diagnostics({
   );
 }
 
+function ApachePathChange({
+  label,
+  oldValue,
+  newValue,
+}: {
+  label: string;
+  oldValue: string;
+  newValue: string;
+}) {
+  return (
+    <div>
+      <div className="text-muted-foreground">{label}</div>
+      <div className="break-all font-mono text-xs">
+        {oldValue || "(empty)"}
+        <span className="px-1 text-muted-foreground">→</span>
+        {newValue || "(empty)"}
+      </div>
+    </div>
+  );
+}
+
+function ApacheChangePanel({
+  pending,
+  open,
+  admin,
+  applying,
+  applyError,
+  onReview,
+  onApply,
+  onLater,
+}: {
+  pending: ApacheChangeView;
+  open: boolean;
+  admin: boolean | null;
+  applying: boolean;
+  applyError: string | null;
+  onReview: () => void;
+  onApply: () => void;
+  onLater: () => void;
+}) {
+  const canApply = admin === true && !applying;
+  const applyHint =
+    admin === true
+      ? "Update services.json and apply the new Apache path to affected Windows services"
+      : "Administrator privileges are required. The pending change stays saved until you apply it from an elevated Service Manager.";
+
+  return (
+    <Card className="border-amber-300/70 bg-amber-50/50 dark:border-amber-500/30 dark:bg-amber-950/20">
+      <CardHeader className="p-4 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Server className="h-4 w-4" />
+              Apache change pending
+            </CardTitle>
+            <CardDescription className="break-all">
+              Saved {formatWhen(pending.createdAt)} · {pending.oldPath || "(not configured)"} →{" "}
+              {pending.newPath}
+            </CardDescription>
+          </div>
+          <Badge variant="warning" title="services.json has not been updated yet">
+            Not applied · {pending.services.length} service
+            {pending.services.length === 1 ? "" : "s"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        {!open ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Preview affected Apache services and apps before applying. Settings are already saved.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={onReview}>
+                Review
+              </Button>
+              <Hint label={applyHint}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onApply}
+                  disabled={!canApply}
+                >
+                  {applying ? <Loader2 className="animate-spin" /> : <Play />}
+                  Apply Now
+                </Button>
+              </Hint>
+              <Button type="button" variant="ghost" size="sm" onClick={onLater}>
+                Later
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-2 rounded-md border bg-background/60 p-3 text-xs sm:grid-cols-2">
+              <ApachePathChange
+                label="Apache executable"
+                oldValue={pending.oldPath}
+                newValue={pending.newPath}
+              />
+              <ApachePathChange
+                label="Apache version"
+                oldValue={pending.oldVersion}
+                newValue={pending.newVersion}
+              />
+              <ApachePathChange
+                label="Apache root"
+                oldValue={pending.oldRoot}
+                newValue={pending.newRoot}
+              />
+              <ApachePathChange
+                label="Apache config"
+                oldValue={pending.oldConfig}
+                newValue={pending.newConfig}
+              />
+            </div>
+
+            <div
+              className={cn(
+                "flex items-start gap-2 rounded-md border px-3 py-2 text-xs",
+                admin === true
+                  ? "border-border bg-muted/40 text-muted-foreground"
+                  : "border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200",
+              )}
+            >
+              {admin === true ? (
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              ) : (
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              )}
+              <div>
+                <div className="font-medium">
+                  {admin === true
+                    ? "Administrator detected"
+                    : admin === false
+                      ? "Administrator required"
+                      : "Checking Administrator"}
+                </div>
+                <p>
+                  Applying stops each affected Apache service, updates services.json, re-applies the
+                  Windows service, then starts services that were running. services.json is backed up
+                  automatically and restored if an apply step fails.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-xs font-medium">Affected services</div>
+              <div className="overflow-auto rounded-md border">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-2 py-1.5 font-medium">Service</th>
+                      <th className="px-2 py-1.5 font-medium">Executable</th>
+                      <th className="px-2 py-1.5 font-medium">Root</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pending.services.map((service) => (
+                      <tr key={service.name} className="border-t">
+                        <td className="px-2 py-1.5 font-medium">{service.name}</td>
+                        <td className="break-all px-2 py-1.5 font-mono">
+                          {service.oldExecutable}
+                          <span className="px-1 text-muted-foreground">→</span>
+                          {service.newExecutable}
+                        </td>
+                        <td className="break-all px-2 py-1.5 font-mono">
+                          {service.oldRoot || "(empty)"}
+                          <span className="px-1 text-muted-foreground">→</span>
+                          {service.newRoot || "(empty)"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-xs font-medium">Affected apps</div>
+              {pending.apps.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No app has webServerService pointing at an affected service.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {pending.apps.map((app) => (
+                    <Badge
+                      key={app.id}
+                      variant="outline"
+                      title={`webServerService links ${app.name} to an affected Apache service`}
+                    >
+                      {app.name || app.id}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {applyError && (
+              <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>{applyError}</div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Hint label={applyHint}>
+                <Button type="button" size="sm" onClick={onApply} disabled={!canApply}>
+                  {applying ? <Loader2 className="animate-spin" /> : <Play />}
+                  Apply Now
+                </Button>
+              </Hint>
+              <Button type="button" variant="outline" size="sm" onClick={onLater}>
+                Later
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ApacheApplyResultCard({
+  result,
+  onClose,
+}: {
+  result: ApacheApplyResult;
+  onClose: () => void;
+}) {
+  const warning = result.success && result.errors.length > 0;
+  return (
+    <Card
+      className={cn(
+        "border-emerald-300/70 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-950/20",
+        (!result.success || warning) &&
+          "border-amber-300/70 bg-amber-50/50 dark:border-amber-500/30 dark:bg-amber-950/20",
+      )}
+    >
+      <CardHeader className="p-4 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              {result.success ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <XCircle className="h-4 w-4 text-destructive" />
+              )}
+              {result.success ? "Apache apply complete" : "Apache apply failed"}
+            </CardTitle>
+            <CardDescription>
+              Updated services: {result.services.join(", ") || "(none)"}
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            title="Hide this Apache apply result"
+          >
+            Close
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2 p-4 pt-0 text-xs">
+        {result.errors.length > 0 && (
+          <div className="space-y-1 whitespace-pre-wrap break-words text-amber-900 dark:text-amber-200">
+            {result.errors.map((error, index) => (
+              <p key={`${index}-${error}`}>{error}</p>
+            ))}
+          </div>
+        )}
+        <div className="flex items-start gap-2">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <div className="text-muted-foreground">Audit log</div>
+            <div className="break-all font-mono">{result.auditPath || "—"}</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SettingsView({ admin }: { admin: boolean | null }) {
   const [view, setView] = useState<SettingsView | null>(null);
   const [draft, setDraft] = useState<Settings | null>(null);
@@ -476,6 +768,11 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const [taskStatusError, setTaskStatusError] = useState<string | null>(null);
   const [taskOperation, setTaskOperation] = useState<TaskOperation | null>(null);
   const [taskBusy, setTaskBusy] = useState<TaskAction | null>(null);
+  const [apachePending, setApachePending] = useState<ApacheChangeView | null>(null);
+  const [apachePreviewOpen, setApachePreviewOpen] = useState(false);
+  const [apacheApplyResult, setApacheApplyResult] = useState<ApacheApplyResult | null>(null);
+  const [apacheApplyError, setApacheApplyError] = useState<string | null>(null);
+  const [applyingApache, setApplyingApache] = useState(false);
   const [busyTools, setBusyTools] = useState<Partial<Record<ToolKey, ToolBusy>>>({});
   const [toolMessages, setToolMessages] = useState<
     Partial<Record<ToolKey, ToolMessage>>
@@ -504,10 +801,17 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
     async (showToast: boolean) => {
       setLoading(true);
       try {
-        const next = await invoke<SettingsView>("load_settings_view");
+        const [next, pending] = await Promise.all([
+          invoke<SettingsView>("load_settings_view"),
+          invoke<ApacheChangeView | null>("apache_change_status"),
+        ]);
         setView(next);
         setDraft(next.settings);
         setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
+        setApachePending(pending);
+        setApacheApplyError(null);
+        setApacheApplyResult(null);
+        setApachePreviewOpen((previous) => (pending ? previous : false));
         await refreshTaskStatus(next.settings.privilegedExecution.taskName);
         if (showToast) toast.success("Settings reloaded.");
       } catch (error) {
@@ -715,17 +1019,79 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
     if (!draft || saving || toolsBusy) return;
     setSaving(true);
     try {
-      await invoke<Settings>("save_settings_view", { settings: draft });
+      const result = await invoke<SettingsSaveResult>("save_settings_view", {
+        settings: draft,
+      });
       const next = await invoke<SettingsView>("load_settings_view");
       setView(next);
       setDraft(next.settings);
       setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
       await refreshTaskStatus(next.settings.privilegedExecution.taskName);
-      toast.success("Settings saved.");
+      setApachePending(result.apachePending);
+      setApachePreviewOpen(result.apachePending !== null);
+      setApacheApplyResult(null);
+      setApacheApplyError(null);
+      if (result.apachePending) {
+        toast.success("Settings saved. Review the pending Apache change before applying it.");
+      } else {
+        toast.success("Settings saved.");
+      }
     } catch (error) {
       toast.error(errorMessage(error), { duration: 10000 });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function applyApacheChange() {
+    if (applyingApache) return;
+    if (admin !== true) {
+      toast.error(
+        "Administrator privileges are required to apply the pending Apache change. Settings remain saved and the change stays pending.",
+        { duration: 10000 },
+      );
+      return;
+    }
+    setApplyingApache(true);
+    setApacheApplyError(null);
+    setApacheApplyResult(null);
+    try {
+      const result = await invoke<ApacheApplyResult>("apply_apache_change");
+      setApacheApplyResult(result);
+      try {
+        const pending = await invoke<ApacheChangeView | null>("apache_change_status");
+        setApachePending(pending);
+        setApachePreviewOpen(false);
+        const next = await invoke<SettingsView>("load_settings_view");
+        setView(next);
+        setDraft(next.settings);
+        setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
+        await refreshTaskStatus(next.settings.privilegedExecution.taskName);
+      } catch (reloadError) {
+        toast.error(`Apache apply finished, but reload failed: ${errorMessage(reloadError)}`, {
+          duration: 10000,
+        });
+      }
+      if (!result.success) {
+        toast.error("Apache apply failed.", { duration: 10000 });
+      } else if (result.errors.length > 0) {
+        toast.warning("Apache services applied with warnings.", { duration: 10000 });
+      } else {
+        toast.success("Apache services applied.");
+      }
+    } catch (error) {
+      const message = errorMessage(error);
+      setApacheApplyError(message);
+      try {
+        const pending = await invoke<ApacheChangeView | null>("apache_change_status");
+        setApachePending(pending);
+        setApachePreviewOpen(pending !== null);
+      } catch {
+        // Keep the previous pending preview; the apply error is already shown.
+      }
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setApplyingApache(false);
     }
   }
 
@@ -877,6 +1243,26 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-auto pr-1">
+        {apachePending && (
+          <ApacheChangePanel
+            pending={apachePending}
+            open={apachePreviewOpen}
+            admin={admin}
+            applying={applyingApache}
+            applyError={apacheApplyError}
+            onReview={() => setApachePreviewOpen(true)}
+            onApply={() => void applyApacheChange()}
+            onLater={() => setApachePreviewOpen(false)}
+          />
+        )}
+
+        {apacheApplyResult && (
+          <ApacheApplyResultCard
+            result={apacheApplyResult}
+            onClose={() => setApacheApplyResult(null)}
+          />
+        )}
+
         <Card>
           <CardHeader className="p-4 pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">

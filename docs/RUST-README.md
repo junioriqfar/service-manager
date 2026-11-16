@@ -115,7 +115,7 @@ Modul `sm-win::elevation` menyediakan cek token Administrator dan relaunch via `
 ## NSSM, Native, dan Import (Phase 2)
 
 - `sm-win::nssm` — install/remove/apply config NSSM, termasuk `Application`, `AppParameters`, `AppDirectory`, log rotation, `AppExit`, restart delay, dependensi, dan recovery action `sc failure`.
-- `sm-win::native` — install/uninstall Apache (`httpd -k install`) dan PostgreSQL (`pg_ctl register`), apply `sc config` untuk display/start/dependency, delayed start, dan failure actions.
+- `sm-win::native` — install/uninstall Apache (`httpd -k install`) dan PostgreSQL (`pg_ctl register`), apply `sc config` untuk Apache `binPath`/display/start/dependency, delayed start, dan failure actions.
 - `sm-win::discovery` — enumerasi service Windows via `EnumServicesStatusExW` + `QueryServiceConfigW`, klasifikasi `nssm.exe`/`httpd.exe`/`pg_ctl.exe`, parsing command line (`-d`, `-f`, `-D`), pembacaan `PGDATA`, log Apache/PostgreSQL, dan nilai NSSM.
 - `sm-win::process` — abstraksi `CommandRunner` (nyata dan mock) serta decoding output UTF-8/UTF-16LE.
 

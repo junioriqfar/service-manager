@@ -289,6 +289,46 @@ export interface SettingsView {
   diagnostics: SettingsDiagnostics;
 }
 
+export interface ApacheServiceChange {
+  name: string;
+  oldExecutable: string;
+  newExecutable: string;
+  oldRoot: string;
+  newRoot: string;
+}
+
+export interface ApacheAppChange {
+  id: string;
+  name: string;
+}
+
+export interface ApacheChangeView {
+  changed: boolean;
+  oldPath: string;
+  newPath: string;
+  oldRoot: string;
+  newRoot: string;
+  oldConfig: string;
+  newConfig: string;
+  oldVersion: string;
+  newVersion: string;
+  services: ApacheServiceChange[];
+  apps: ApacheAppChange[];
+  createdAt: string;
+}
+
+export interface ApacheApplyResult {
+  success: boolean;
+  services: string[];
+  errors: string[];
+  auditPath: string;
+}
+
+export interface SettingsSaveResult {
+  settings: Settings;
+  apachePending: ApacheChangeView | null;
+}
+
 export interface ToolDetection {
   tool: string;
   found: boolean;

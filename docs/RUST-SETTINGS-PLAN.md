@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime). Sprint 2.2–2.4 belum.
+Status: **Phase 1 selesai; Sprint 2.1–2.2 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation). Sprint 2.3–2.4 belum.
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -22,7 +22,8 @@ Dokumen ini menjawab revisi pengguna:
 | GUI tab Settings | Selesai |
 | Updater defaults | Selesai |
 | Privileged Execution: status/install/repair/remove/test Scheduled Task | Selesai |
-| Propagasi PHP/Apache + affected apps/services | Sebagian (Sprint 2.1: effective version + `webServerService`; apply/affected di 2.2) |
+| Propagasi Apache + affected apps/services | Selesai (Sprint 2.2: preview, pending, apply, backup, rollback, audit) |
+| Propagasi PHP hardcoded/`${PHP}` | Belum (Sprint 2.4) |
 | Migrasi trigger global ke settings.json | Selesai (Sprint 2.1, eksplisit) |
 | `webServerService` per app | Selesai (Sprint 2.1) |
 | Doctor lengkap, audit, log retention, dry-run | Belum (Phase 3) |
@@ -55,6 +56,39 @@ Catatan implementasi Sprint 2.1:
   terdeteksi Laravel) dan service/versi Apache dari settings efektif.
 - Belum termasuk Sprint 2.1: apply Apache (2.2), parser DocumentRoot (2.3), scan path
   PHP hardcoded/`${PHP}` (2.4).
+
+Catatan implementasi Sprint 2.2:
+
+- **Save Settings tidak langsung mengubah `services.json`.** Nilai Apache efektif lama
+  dibaca lebih dulu; setelah settings disimpan, preview ditulis ke
+  `data/apache-pending.json` (di-ignore git) bila path/root/config/version berubah.
+- `settings.json` lama dibackup ke `backup/settings-<timestamp>.json` sebelum ditimpa.
+  Backup pertama tidak dibuat saat file belum ada.
+- Service Apache dicocokkan dengan executable lama, executable di bawah root lama,
+  atau `apacheRoot` yang sama. Jika path lama kosong (konfigurasi pertama), semua
+  service `serviceType=apache` masuk preview. App diambil hanya dari
+  `apps[].webServerService` yang menunjuk service terdampak; tidak ada parser
+  DocumentRoot.
+- Tombol **Apply Now** membutuhkan Administrator. Tanpa elevation, settings dan
+  pending tetap tersimpan dan command mengembalikan error.
+- Apply menyimpan `services.json` (backup otomatis `backup/services-*.json`) sebelum
+  menyentuh SCM, stop service yang sedang berjalan, memanggil `apply_service`,
+  lalu start kembali service yang tadi berjalan. Timeout wait 60 detik.
+- `sm-win` native apply untuk Apache ikut memperbarui `binPath` service menjadi
+  `"httpd.exe" -d "<root>" -f "<config>" -k runservice`, sehingga path/root/config
+  baru benar-benar dipakai SCM pada start berikutnya.
+- Jika salah satu langkah gagal, `services.json` lama dipulihkan lewat `save_services`,
+  config SCM lama dicoba dipasang ulang untuk service yang sudah ter-apply, service
+  yang tadi berjalan dicoba di-start, dan pending tetap ada.
+- Apply sukses menghapus pending dan menulis audit ke `logs/apache-apply.log`
+  (timestamp, user, aksi, service, app, path/root/config/version lama-baru, hasil).
+- Pending hanya dibuat jika path Apache baru menunjuk `httpd.exe` dan `root` baru
+  tidak kosong. Jika service berubah setelah preview, Apply ditolak dan meminta
+  Save Settings ulang.
+- Perubahan hanya `detectedAt` tidak memicu pending. Mengosongkan path Apache juga
+  tidak menulis executable kosong ke service; propagation membutuhkan path baru.
+- DocumentRoot dan `webServerService` otomatis (Sprint 2.3) serta path PHP
+  hardcoded/`${PHP}` (Sprint 2.4) tetap di luar Sprint 2.2.
 
 ## 1. Keputusan Arsitektur
 
@@ -383,8 +417,9 @@ Tab **Settings**:
 
 - [ ] Migrasi settings lama + backup.
 - [x] Global trigger pindah ke settings.json (Sprint 2.1; migrasi eksplisit).
-- [ ] Perubahan Apache menampilkan affected services/apps.
-- [ ] Apply Apache service baru setelah konfirmasi, dengan backup.
+- [x] Perubahan Apache menampilkan affected services/apps (Sprint 2.2).
+- [x] Apply Apache service baru setelah konfirmasi, dengan backup/rollback/audit
+  (Sprint 2.2).
 - [x] `webServerService` opsional pada app.
 - [x] Effective PHP/Apache version tampil di daftar app.
 
@@ -441,11 +476,19 @@ Status: **Selesai**.
 
 ### Sprint 2.2 — Apache explicit propagation
 
-- Preview old/new Apache path/root/config.
-- Affected services dicocokkan dari old executable/root.
+Status: **Selesai**.
+
+- Preview old/new Apache path/root/config disimpan di `data/apache-pending.json`.
+- Affected services dicocokkan dari old executable/root; first config memilih semua
+  service Apache.
 - Affected apps dari `webServerService`.
-- Apply: backup, update `services.json`, apply SCM, stop/restart bila perlu, audit log.
-- Non-admin: settings disimpan, apply pending.
+- Apply: backup `settings.json`/`services.json`, update config, apply SCM termasuk
+  Apache `binPath`, stop/start bila perlu, rollback saat gagal, audit log
+  `logs/apache-apply.log`.
+- Non-admin: settings disimpan, apply pending dan ditolak dengan pesan jelas.
+- Tests: matching exe/root/first-config, filter app, pending roundtrip/validation,
+  update hanya service terdampak, backup services, audit, non-elevation, UI labels.
+- Batasan: belum ada DocumentRoot parser (2.3) atau `${PHP}` (2.4).
 
 ### Sprint 2.3 — DocumentRoot auto-detect
 

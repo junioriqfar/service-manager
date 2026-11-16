@@ -20,6 +20,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Run, Check, Test, Log, Edit, Delete.
 - GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, log, serta tampilan versi PHP/Apache efektif dan `webServerService`.
 - GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, trigger allowlist + Migrate Trigger, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
+- Perubahan path/root/config Apache menampilkan preview service/app terdampak, disimpan sebagai pending, lalu di-apply eksplisit (Administrator) ke `services.json` + Windows SCM dengan backup, rollback, dan audit.
 - Wrapper elevated `scripts/Invoke-UpdaterTask.ps1` + Scheduled Task `ServiceManager-Updater`.
 - Diagnosa headless `sm-diag`.
 
@@ -63,7 +64,8 @@ ServiceManager/
 ├─ data/
 │  ├─ services.json             # config runtime (tidak di-commit)
 │  ├─ projects.json             # config runtime (tidak di-commit)
-│  └─ settings.json             # settings runtime (tidak di-commit)
+│  ├─ settings.json             # settings runtime (tidak di-commit)
+│  └─ apache-pending.json       # pending apply Apache (tidak di-commit)
 ├─ backup/                      # backup config (tidak di-commit)
 ├─ logs/                        # log aplikasi (tidak di-commit)
 ├─ dist/                        # hasil build portable (tidak di-commit)
@@ -116,7 +118,7 @@ Atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`, `npm run build`, car
 
 - Skema `services.json`: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 - Pola scheduler global dan queue per project: [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md)
-- Config runtime (`data/services.json`, `data/projects.json`, `data/settings.json`, `logs/`, `backup/`) **tidak di-commit** karena berisi path/internal server.
+- Config runtime (`data/services.json`, `data/projects.json`, `data/settings.json`, `data/apache-pending.json`, `logs/`, `backup/`) **tidak di-commit** karena berisi path/internal server.
 - Backup otomatis dan export manual semuanya disimpan di `backup/`.
 
 ## Service Global dan Queue
@@ -182,7 +184,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **301 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **320 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 

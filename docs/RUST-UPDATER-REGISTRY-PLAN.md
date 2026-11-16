@@ -3,7 +3,7 @@
 Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + update yang dipicu dari PC 143**. Fokusnya bukan polling setiap menit, tetapi satu trigger aman dari komputer Anda ke server 160.
 
 - Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle, clone-on-first-run, health check, webhook), **Phase B selesai** (`sm-trigger`, GUI Updater, GUI Remote, wrapper Scheduled Task). Sisa backlog: update paralel (`maxConcurrentUpdates`), scheduler opsional, dan GUI client macOS/Linux.
-- Basis: `sm-updater` + `sm-trigger` + GUI Updater (301 test workspace)
+- Basis: `sm-updater` + `sm-trigger` + GUI Updater (320 test workspace)
 - Prinsip: trigger eksplisit, aman, idempoten, tanpa polling default
 - Config target: `data/projects.json` versi 2 (kompatibel versi 1)
 - **Server tetap Windows**; trigger client direncanakan cross-platform (Windows, macOS, Linux).

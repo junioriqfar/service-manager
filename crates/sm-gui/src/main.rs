@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod apache;
 mod batch;
 mod commands;
 mod remote;
@@ -57,6 +58,8 @@ fn main() {
             settings::load_settings_view,
             settings::save_settings_view,
             settings::migrate_trigger_to_settings,
+            apache::apache_change_status,
+            apache::apply_apache_change,
             settings::detect_tool,
             settings::test_tool,
             settings::task_status,
@@ -361,6 +364,14 @@ mod ui_tests {
             "Allow local trigger",
             "Current client IP",
             "Migrate Trigger",
+            "Apache change pending",
+            "Affected services",
+            "Affected apps",
+            "Apply Now",
+            "Later",
+            "Review",
+            "Audit log",
+            "Administrator required",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(label),
@@ -377,6 +388,8 @@ mod ui_tests {
             "install_task",
             "remove_task",
             "test_task",
+            "apache_change_status",
+            "apply_apache_change",
             "pick_executable",
             "pick_directory",
         ] {
@@ -399,6 +412,13 @@ mod ui_tests {
             "allowedClientIPs",
             "allowLocal",
             "currentClientIp",
+            "oldPath",
+            "newPath",
+            "oldRoot",
+            "newRoot",
+            "oldExecutable",
+            "newExecutable",
+            "webServerService",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(field),

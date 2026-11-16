@@ -17,6 +17,7 @@ data/updater.lock
 data/updater-request.json
 data/updater-result.json
 data/trigger-client.json
+data/apache-pending.json
 trigger-client.json
 
 # Runtime artifacts

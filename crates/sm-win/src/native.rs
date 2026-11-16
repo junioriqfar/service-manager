@@ -123,6 +123,41 @@ pub fn install_plan(config: &ServiceConfig) -> Result<InstallPlan, NativeError> 
     }
 }
 
+/// Command line stored as the Apache service `ImagePath`.
+///
+/// `httpd -k install` registers the service with `-d <root> -f <config> -k
+/// runservice`; changing executable/root/config therefore needs the same
+/// arguments, not only a new executable path.
+fn apache_binary_path(config: &ServiceConfig) -> String {
+    let root = config.apache_root.trim();
+    let apache_config = if config.apache_config.trim().is_empty() {
+        "conf/httpd.conf"
+    } else {
+        config.apache_config.trim()
+    };
+    format!(
+        "\"{}\" -d \"{}\" -f \"{}\" -k runservice",
+        config.executable.trim(),
+        root,
+        apache_config
+    )
+}
+
+fn binary_path_command(config: &ServiceConfig, sc_path: &Path) -> Option<NativeCommand> {
+    match config.service_type.normalized() {
+        ServiceType::Apache => Some(NativeCommand::new(
+            sc_path,
+            &[
+                "config",
+                &config.name,
+                "binPath=",
+                &apache_binary_path(config),
+            ],
+        )),
+        ServiceType::PostgreSql | ServiceType::Nssm | ServiceType::Unknown => None,
+    }
+}
+
 pub fn apply_commands(config: &ServiceConfig, sc_path: &Path) -> Vec<NativeCommand> {
     let mut commands = Vec::new();
     let name = config.name.as_str();
@@ -131,6 +166,10 @@ pub fn apply_commands(config: &ServiceConfig, sc_path: &Path) -> Vec<NativeComma
     } else {
         config.display_name.as_str()
     };
+
+    if let Some(command) = binary_path_command(config, sc_path) {
+        commands.push(command);
+    }
 
     commands.push(NativeCommand::new(
         sc_path,
@@ -221,6 +260,10 @@ pub fn apply(
     } else {
         dependencies.join("/")
     };
+
+    if let Some(command) = binary_path_command(config, sc_path) {
+        run_checked(runner, &command.program, &command.args)?;
+    }
 
     let strict_commands = [
         vec![
@@ -421,6 +464,30 @@ mod tests {
             install_plan(&config).unwrap_err(),
             NativeError::UnsupportedType(_)
         ));
+    }
+
+    #[test]
+    fn apache_apply_updates_the_service_binary_path() {
+        let mut config = apache();
+        config.executable = r"C:\Program Files\Apache24\bin\httpd.exe".into();
+        config.apache_root = r"C:\Program Files\Apache24".into();
+
+        let commands = apply_commands(&config, Path::new("sc.exe"));
+        assert!(commands.iter().any(|command| {
+            command.args
+                == vec![
+                    "config",
+                    "Apache2.4",
+                    "binPath=",
+                    r#""C:\Program Files\Apache24\bin\httpd.exe" -d "C:\Program Files\Apache24" -f "conf/httpd.conf" -k runservice"#,
+                ]
+        }));
+        assert!(
+            apply_commands(&postgres(), Path::new("sc.exe"))
+                .iter()
+                .all(|command| command.args.get(2) != Some(&"binPath=".to_string())),
+            "PostgreSQL is not part of Apache propagation"
+        );
     }
 
     #[test]

@@ -233,6 +233,18 @@ impl ApacheToolPath {
         if has_control_characters(&self.root) || has_control_characters(&self.config) {
             return Err(invalid("Root/config Apache memuat karakter kontrol."));
         }
+        if !self.tool.path.trim().is_empty() {
+            let is_httpd = Path::new(self.tool.path.trim())
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.eq_ignore_ascii_case("httpd.exe"))
+                .unwrap_or(false);
+            if !is_httpd {
+                return Err(invalid(
+                    "Path Apache harus menunjuk httpd.exe (contoh C:\\Apache24\\bin\\httpd.exe).",
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -949,6 +961,18 @@ mod tests {
 
         let error = load_settings(&path).unwrap_err().to_string();
         assert!(error.contains("tidak valid"));
+    }
+
+    #[test]
+    fn validation_rejects_non_httpd_apache_path() {
+        let mut settings = base_settings();
+        settings.tools.apache = ApacheToolPath {
+            tool: ToolPath::new(r"C:\Apache24\bin\not-httpd.exe"),
+            root: r"C:\Apache24".into(),
+            config: "conf/httpd.conf".into(),
+        };
+        let error = settings.validate().unwrap_err().to_string();
+        assert!(error.contains("httpd.exe"));
     }
 
     #[test]

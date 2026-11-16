@@ -141,6 +141,31 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
 - Tidak ada polling. Data dimuat saat tab dibuka atau **Reload** diklik; perubahan
   hanya disimpan lewat **Save Settings** dan hasilnya ditampilkan sebagai toast.
 
+### Apache change preview/apply
+
+Saat **Save Settings** mengubah `tools.apache.path`, `root`, `config`, atau `version`:
+
+- Settings tetap disimpan lebih dulu (`settings.json` lama dibackup ke
+  `backup/settings-<timestamp>.json`).
+- Tab menampilkan panel **Apache change pending** dengan path/version/root/config
+  lama → baru, tabel **Affected services**, daftar **Affected apps**, dan peringatan
+  Administrator.
+- Preview disimpan di `data/apache-pending.json` (tidak di-commit), sehingga tetap
+  muncul setelah tab ditutup atau aplikasi dibuka ulang. **Later** hanya menutup
+  detail preview; pending tetap ada.
+- **Apply Now** memanggil `apply_apache_change`: backup `services.json`, update
+  `executable`/`apacheRoot`/`apacheConfig`, update Apache service `binPath`, stop
+  service yang berjalan, apply SCM, lalu start kembali. Jika satu langkah gagal,
+  `services.json` lama dipulihkan, config SCM lama dicoba dipasang ulang, service
+  yang tadi berjalan dicoba start, dan pending dipertahankan.
+- Tanpa Administrator, tombol Apply disabled dan command tetap menolak apply;
+  settings + pending tidak hilang. Panel menampilkan error dari backend.
+- Setelah sukses, pending dihapus dan hasil apply menampilkan service serta path
+  audit `logs/apache-apply.log`. Reload memanggil `apache_change_status` untuk
+  menampilkan banner pending yang belum di-apply.
+- Affected apps hanya berasal dari `apps[].webServerService`; DocumentRoot parser
+  belum ada (Sprint 2.3).
+
 ## Batch Async (Anti-Freeze)
 
 Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
@@ -162,6 +187,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log) |
 | `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
 | `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, trigger migration, Scheduled Task) |
+| `crates/sm-gui/src/apache.rs` | Pending Apache change, matching service/app, apply/rollback/audit, command `apache_change_status`/`apply_apache_change` |
 | `crates/sm-gui/src/state.rs` | State aplikasi, service rows, status SCM, batch lock |
 | `crates/sm-gui/src/batch.rs` | Scheduler batch async + test concurrency |
 | `crates/sm-gui/src/util.rs` | Log tail, export, open path, app log |
@@ -181,7 +207,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 301 test):
+Test GUI mencakup (total workspace 320 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
@@ -192,8 +218,13 @@ Test GUI mencakup (total workspace 301 test):
 - Settings: parser JSON status Scheduled Task, validasi nama task/user/logon type,
   fallback settings lama, save/load helper, migrasi trigger eksplisit, diagnostik,
   deteksi/resolusi path tool, Apache root/config, dan test versi melalui file `.bat`.
+- Apache propagation: matching service berdasarkan executable/root, first config
+  semua service Apache, filter app via `webServerService`, pending
+  save/load/clear/validation, update hanya service terdampak, backup services,
+  audit log, dan penolakan apply tanpa elevation.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
-  tab Settings (termasuk kartu Trigger dan field web server), dan ikon/tema.
+  tab Settings (termasuk kartu Trigger, field web server, dan panel Apache pending),
+  serta ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 
@@ -211,6 +242,7 @@ Start-Process .\target\debug\sm-gui.exe
 - Rename service saat edit belum didukung (nama service dikunci).
 - Tab Settings: logon type `Password` belum didukung dari GUI (gunakan `Interactive`
   atau `S4U`), dan nama Scheduled Task tidak boleh memakai folder path.
-- Sprint 2.1 sudah menyediakan trigger efektif, migrasi trigger eksplisit, dan tampilan
-  versi PHP/Apache per app. Propagasi/apply Apache otomatis (Sprint 2.2), parser
-  DocumentRoot (2.3), dan scan path PHP hardcoded/`${PHP}` (2.4) belum tersedia.
+- Sprint 2.1–2.2 sudah menyediakan trigger efektif, migrasi trigger eksplisit,
+  tampilan versi PHP/Apache per app, serta preview/apply Apache explicit dengan
+  pending, backup, rollback, dan audit. Parser DocumentRoot (2.3) dan scan path PHP
+  hardcoded/`${PHP}` (2.4) belum tersedia.

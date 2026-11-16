@@ -9,9 +9,10 @@ use sm_updater::ip::client_ip_from_env;
 use sm_updater::registry::{load_config, TriggerSettings};
 use sm_updater::runner::{wrap_command, Output, Runner, SystemRunner};
 use sm_updater::settings::{
-    effective_settings, load_settings, save_settings, settings_path, settings_path_for, Settings,
-    SettingsTrigger,
+    effective_settings, load_settings, save_settings, settings_path_for, Settings, SettingsTrigger,
 };
+
+use crate::apache::{self, ApacheChangeView};
 
 const TASK_SCRIPT_INSTALL: &str = "Install-UpdaterTask.ps1";
 const TASK_SCRIPT_TEST: &str = "Invoke-UpdaterTask.ps1";
@@ -170,6 +171,15 @@ pub struct SettingsView {
     /// IP client dari `SSH_CONNECTION`/`SSH_CLIENT`, jika ada.
     pub current_client_ip: Option<String>,
     pub diagnostics: SettingsDiagnostics,
+}
+
+/// Hasil Save Settings. `apachePending` berisi preview service/app yang perlu
+/// di-apply terpisah; settings sendiri sudah tersimpan saat nilai ini dikembalikan.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsSaveResult {
+    pub settings: Settings,
+    pub apache_pending: Option<ApacheChangeView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -802,6 +812,52 @@ fn backup_settings_file(settings_file: &Path) -> Result<Option<PathBuf>, String>
     Ok(Some(destination))
 }
 
+fn save_settings_view_at(
+    paths: &ConfigPaths,
+    settings: Settings,
+) -> Result<SettingsSaveResult, String> {
+    let settings_file = settings_path_for(&paths.projects_path());
+    // Nilai efektif lama harus dibaca sebelum settings.json ditulis ulang.
+    let (old_settings, _) = load_settings_at(&settings_file, &paths.projects_path())?;
+    let config = load_config(&paths.projects_path())?;
+
+    if settings_file.is_file() {
+        backup_settings_file(&settings_file)?;
+    }
+    let settings = save_settings_at(&settings_file, settings)?;
+
+    let pending_path = apache::pending_path_for(&paths.data_dir());
+    let pending =
+        if apache::apache_settings_changed(&old_settings.tools.apache, &settings.tools.apache) {
+            let loaded =
+                sm_config::load_services_lenient(&paths.services_path(), &paths.backup_dir());
+            apache::build_pending(
+                &old_settings.tools.apache,
+                &settings.tools.apache,
+                &loaded.services,
+                &config,
+            )
+        } else {
+            None
+        };
+
+    let apache_pending = match pending {
+        Some(pending) => {
+            apache::save_pending_at(&pending_path, &pending)?;
+            Some(pending.view())
+        }
+        None => {
+            apache::clear_pending_at(&pending_path)?;
+            None
+        }
+    };
+
+    Ok(SettingsSaveResult {
+        settings,
+        apache_pending,
+    })
+}
+
 /// Migrasi eksplisit `projects.json.trigger` -> `settings.json.trigger`.
 ///
 /// `projects.json` tidak diubah. Trigger dari `projects.json` selalu menang
@@ -1021,8 +1077,9 @@ pub async fn load_settings_view() -> Result<SettingsView, String> {
 }
 
 #[tauri::command]
-pub fn save_settings_view(settings: Settings) -> Result<Settings, String> {
-    save_settings_at(&settings_path(), settings)
+pub fn save_settings_view(settings: Settings) -> Result<SettingsSaveResult, String> {
+    let paths = ConfigPaths::detect();
+    save_settings_view_at(&paths, settings)
 }
 
 #[tauri::command]
@@ -1139,7 +1196,7 @@ pub async fn test_task(task_name: Option<String>) -> Result<TaskOperationView, S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sm_updater::settings::ToolPath;
+    use sm_updater::settings::{ApacheToolPath, ToolPath};
 
     fn write_projects(path: &Path) {
         std::fs::write(
@@ -1516,5 +1573,131 @@ mod tests {
             "PHP 8.3.16 (cli)"
         );
         assert_eq!(first_line("\n\n"), "");
+    }
+
+    fn apache_tool(path: &str, root: &str) -> ApacheToolPath {
+        ApacheToolPath {
+            tool: ToolPath::new(path),
+            root: root.to_string(),
+            config: "conf/httpd.conf".to_string(),
+        }
+    }
+
+    fn write_apache_services(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            path,
+            r#"{"version":1,"services":[
+                {"name":"Apache2.4","serviceType":"apache","executable":"C:\\Apache24\\bin\\httpd.exe","apacheRoot":"C:\\Apache24","apacheConfig":"conf/httpd.conf"},
+                {"name":"ApacheLegacy","serviceType":"apache","executable":"C:\\Apache22\\bin\\httpd.exe","apacheRoot":"C:\\Apache22","apacheConfig":"conf/httpd.conf"},
+                {"name":"api","serviceType":"nssm","executable":"C:\\api\\api.exe"}
+            ]}"#,
+        )
+        .unwrap();
+    }
+
+    fn write_apache_apps(path: &Path) {
+        std::fs::write(
+            path,
+            r#"{"version":2,"apps":[
+                {"id":"kasirin","name":"Kasirin","repoUrl":"https://example.com/kasirin.git","localPath":"C:\\project","webServerService":"Apache2.4"}
+            ]}"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn first_settings_save_creates_pending_for_all_apache_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path().join("home"));
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        write_apache_services(&paths.services_path());
+        write_apache_apps(&paths.projects_path());
+
+        let mut settings = Settings::default();
+        settings.tools.apache = apache_tool(r"C:\Apache26\bin\httpd.exe", r"C:\Apache26");
+
+        let result = save_settings_view_at(&paths, settings).unwrap();
+        let pending = result.apache_pending.expect("pending Apache change");
+
+        assert!(pending.changed);
+        assert!(pending.old_path.is_empty());
+        assert_eq!(pending.new_path, r"C:\Apache26\bin\httpd.exe");
+        assert_eq!(pending.services.len(), 2);
+        assert!(pending
+            .services
+            .iter()
+            .any(|service| service.name == "Apache2.4"));
+        assert!(pending
+            .services
+            .iter()
+            .any(|service| service.name == "ApacheLegacy"));
+        assert_eq!(pending.apps.len(), 1);
+        assert_eq!(pending.apps[0].id, "kasirin");
+        assert!(apache::pending_path_for(&paths.data_dir()).is_file());
+
+        // The first save creates settings.json, so there is no old file to back up.
+        if paths.backup_dir().is_dir() {
+            let settings_backups = std::fs::read_dir(paths.backup_dir())
+                .unwrap()
+                .flatten()
+                .filter(|entry| entry.file_name().to_string_lossy().starts_with("settings-"))
+                .count();
+            assert_eq!(settings_backups, 0);
+        }
+    }
+
+    #[test]
+    fn apache_change_save_creates_pending_and_settings_backup() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path().join("home"));
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        write_apache_services(&paths.services_path());
+        write_apache_apps(&paths.projects_path());
+        let settings_file = settings_path_for(&paths.projects_path());
+
+        let mut old = Settings::default();
+        old.tools.apache = apache_tool(r"C:\Apache24\bin\httpd.exe", r"C:\Apache24");
+        save_settings_at(&settings_file, old.clone()).unwrap();
+
+        let mut next = old.clone();
+        next.tools.apache = apache_tool(r"C:\Apache26\bin\httpd.exe", r"C:\Apache26");
+        next.tools.apache.tool.version = "2.4.65".into();
+
+        let result = save_settings_view_at(&paths, next).unwrap();
+        let pending = result.apache_pending.expect("pending Apache change");
+
+        assert_eq!(pending.old_path, r"C:\Apache24\bin\httpd.exe");
+        assert_eq!(pending.new_path, r"C:\Apache26\bin\httpd.exe");
+        assert_eq!(pending.old_root, r"C:\Apache24");
+        assert_eq!(pending.new_root, r"C:\Apache26");
+        assert_eq!(pending.old_version, "");
+        assert_eq!(pending.new_version, "2.4.65");
+        assert_eq!(pending.services.len(), 1);
+        assert_eq!(pending.services[0].name, "Apache2.4");
+        assert_eq!(
+            pending.services[0].old_executable,
+            old.tools.apache.tool.path
+        );
+        assert_eq!(pending.apps.len(), 1);
+        assert_eq!(pending.apps[0].id, "kasirin");
+        assert!(apache::pending_path_for(&paths.data_dir()).is_file());
+
+        let settings_backups = std::fs::read_dir(paths.backup_dir())
+            .unwrap()
+            .flatten()
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with("settings-"))
+            .count();
+        assert_eq!(settings_backups, 1);
+
+        // Saving settings must not update services.json directly.
+        let stored =
+            sm_config::load_services_strict(&paths.services_path(), &paths.backup_dir()).unwrap();
+        assert_eq!(stored[0].executable, r"C:\Apache24\bin\httpd.exe");
+        assert_eq!(stored[0].apache_root, r"C:\Apache24");
+
+        let second = save_settings_view_at(&paths, result.settings).unwrap();
+        assert!(second.apache_pending.is_none());
+        assert!(!apache::pending_path_for(&paths.data_dir()).exists());
     }
 }

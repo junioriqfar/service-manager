@@ -139,6 +139,9 @@ Template: [settings.example.json](../settings.example.json); file runtime
   Scheduled Task.
 - **Migrate Trigger** menyalin `projects.json.trigger` ke `settings.json.trigger`
   secara eksplisit; `projects.json` tidak diubah.
+- Perubahan Apache di **Save Settings** membuat `data/apache-pending.json`; apply ke
+  service Apache adalah aksi terpisah yang membutuhkan Administrator. Lihat
+  [CONFIGURATION.md](CONFIGURATION.md#perubahan-apache-dan-servicesjson).
 
 Jika `settings.json` belum ada, `sm-updater` memakai `settings`/`trigger` lama di
 `projects.json` sebagai fallback **tanpa menulis** file baru. Begitu `settings.json`
@@ -216,8 +219,26 @@ Field v1 yang tersedia: `scanRoots`, `allowedClientIPs`, `gitPath`, `phpPath`,
 
 Tabel **Updater** menampilkan versi PHP efektif dari `settings.tools.php.version`
 untuk preset `laravel`, serta service Apache (`webServerService`) dan versi
-`settings.tools.apache.version` bila diisi. Nilai ini hanya tampilan; apply ulang
-service Apache adalah Sprint 2.2.
+`settings.tools.apache.version` bila diisi.
+
+### Propagasi `webServerService`
+
+`webServerService` menghubungkan app ke service Apache di `data/services.json`.
+Saat path/root/config/version Apache diubah di tab **Settings**:
+
+- service Apache terdampak dicocokkan dari executable/root lama (atau semua service
+  Apache untuk konfigurasi pertama);
+- hanya app dengan `webServerService` yang menunjuk salah satu service terdampak
+  yang ditampilkan di preview;
+- settings disimpan lebih dulu, lalu service/app terdampak menunggu tombol
+  **Apply Now** (butuh Administrator);
+- apply memperbarui `services.json` + Apache `binPath` di Windows SCM, dengan
+  backup, rollback, dan audit log. Detail ada di
+  [CONFIGURATION.md](CONFIGURATION.md#perubahan-apache-dan-servicesjson).
+
+Field ini tidak mengubah lifecycle updater app (stop/restart/start service tetap
+memakai `services.*`). DocumentRoot parser dan saran otomatis `webServerService`
+belum tersedia (Sprint 2.3).
 
 ## Deteksi Toolchain
 

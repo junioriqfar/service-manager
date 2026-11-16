@@ -12,12 +12,14 @@ Trigger.
 | Config project | `<folder config>\data\projects.json` |
 | Config settings global | `<folder config>\data\settings.json` |
 | Config Remote Trigger | `<folder config>\data\trigger-client.json` |
+| Pending perubahan Apache | `<folder config>\data\apache-pending.json` (tidak di-commit) |
 | State updater | `<folder config>\data\updater-state.json` |
 | Lock updater | `<folder config>\data\updater.lock` |
 | Override folder | Environment variable `SERVICE_MANAGER_HOME` |
 | Backup otomatis | `<folder config>\backup\services-*.json` |
 | Export backup | `<folder config>\backup\services-export-*.json` |
 | Log aplikasi | `<folder config>\logs\app.log` |
+| Audit apply Apache | `<folder config>\logs\apache-apply.log` |
 | NSSM | `..\nssm\nssm.exe` atau `C:\tools\nssm\nssm.exe` |
 
 Jika `data/services.json` tidak ada, aplikasi dimulai dengan daftar kosong. Jika JSON tidak valid, file lama dicadangkan ke `backup/services-broken-<timestamp>.json` dan aplikasi tetap berjalan dengan daftar kosong.
@@ -230,6 +232,46 @@ Catatan:
   **Migrate Trigger**.
 - **Migrate Trigger** adalah aksi eksplisit: menyalin `projects.json.trigger` ke
   `settings.json.trigger`; `projects.json` tidak diubah.
+
+### Perubahan Apache dan `services.json`
+
+**Save Settings tidak langsung menulis `services.json`.** Jika
+`tools.apache.path`, `root`, `config`, atau `version` berubah, GUI:
+
+1. Membackup `settings.json` lama ke `backup/settings-<timestamp>.json` (jika ada).
+2. Menyimpan `settings.json` baru.
+3. Menulis preview `data/apache-pending.json` berisi path/root/config/version lama dan
+   baru, daftar service terdampak, app terkait, serta timestamp.
+4. Menampilkan panel **Apache change pending** di tab Settings.
+
+Service Apache dianggap terdampak jika `serviceType=apache` dan salah satu benar:
+
+- `executable` sama dengan path Apache lama;
+- `executable` berada di bawah `root` lama;
+- `apacheRoot` sama dengan `root` lama;
+- path Apache lama kosong (konfigurasi pertama), yang memilih **semua** service Apache.
+
+App hanya dianggap terdampak jika `apps[].webServerService` menunjuk nama service
+tersebut. Tidak ada pembacaan DocumentRoot.
+
+**Apply Now** membutuhkan Administrator dan:
+
+- menyimpan `services.json` baru; backup otomatis dibuat di
+  `backup/services-<timestamp>.json` sebelum file ditimpa;
+- memperbarui `executable`, `apacheRoot`, dan `apacheConfig` (jika nilai baru tidak
+  kosong) hanya untuk service terdampak;
+- memperbarui Apache service `binPath` menjadi
+  `"httpd.exe" -d "<root>" -f "<config>" -k runservice`;
+- stop service yang berjalan, apply SCM, lalu start kembali service yang tadi
+  berjalan (timeout 60 detik);
+- jika gagal, memulihkan `services.json` lama, mencoba memasang ulang config SCM
+  lama, dan mencoba start service yang tadi berjalan. Pending tetap disimpan;
+- jika sukses, menghapus `apache-pending.json` dan menulis audit ke
+  `logs/apache-apply.log`.
+
+Tanpa Administrator, settings dan pending tetap tersimpan, tetapi apply ditolak.
+Mengosongkan path Apache tidak mengubah executable service; propagation memerlukan
+path baru. File pending dan log audit tidak di-commit.
 
 ## Project Registry (`projects.json` v2)
 
