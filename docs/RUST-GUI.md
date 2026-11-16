@@ -1,6 +1,6 @@
 # Service Manager GUI (Rust + Tauri)
 
-Dokumen ini menjelaskan GUI Rust yang menggantikan WinForms PowerShell, termasuk cara menjalankan, fitur, dan perilaku batch async.
+Dokumen ini menjelaskan GUI utama Service Manager (Rust + Tauri + React/shadCN), termasuk cara menjalankan, fitur, dan perilaku batch async.
 
 ## Menjalankan
 
@@ -15,7 +15,7 @@ Pop-Location
 cargo run -p sm-gui
 ```
 
-Secara default aplikasi membaca config dari folder executable (sama seperti `$PSScriptRoot` versi PowerShell). Untuk pengembangan dari `target/debug`, arahkan ke folder aplikasi:
+Secara default aplikasi membaca config dari folder executable. Untuk pengembangan dari `target/debug`, arahkan ke folder aplikasi:
 
 ```powershell
 $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
@@ -61,6 +61,7 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 - Log aplikasi (`logs/app.log`) di-redaksi dan dirotasi otomatis pada 5 MB (`app.log.1`).
 - Banner peringatan bila tidak berjalan sebagai Administrator + tombol elevasi UAC.
 - Status bar: jumlah terdaftar/terpasang/berjalan.
+- Pola service global Cronical dan queue per project dijelaskan di [RUST-SERVICES.md](RUST-SERVICES.md).
 
 ## Batch Async (Anti-Freeze)
 
@@ -99,7 +100,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup:
+Test GUI mencakup (total workspace 178 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
@@ -116,7 +117,7 @@ Start-Process .\target\debug\sm-gui.exe
 
 ## Keterbatasan Saat Ini
 
-- Pemilihan file executable/log masih berupa input path (file picker ditambahkan pada fase berikutnya).
+- Application dan Working Directory sudah memakai file/folder picker; path stdout/stderr log masih berupa input teks.
 - Installer MSI/NSIS dan code signing belum dibuat (fase rilis).
 - Batch write operation membutuhkan Administrator; GUI menampilkan banner dan tombol elevasi.
 - Rename service saat edit belum didukung (nama service dikunci).

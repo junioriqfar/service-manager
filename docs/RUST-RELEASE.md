@@ -147,13 +147,12 @@ git push origin v0.1.0
 
 Config dibaca dari folder executable. Gunakan `SERVICE_MANAGER_HOME` untuk memakai folder config lain (misalnya saat development).
 
-## Migrasi dari PowerShell
+## Migrasi Config
 
-- Format `services.json` dan `projects.json` sama (versi 1).
-- Backup config lama sebelum cutover.
-- Jalankan GUI Rust dan PowerShell berdampingan; keduanya membaca config yang sama.
-- Jangan jalankan operasi tulis bersamaan pada config yang sama.
-- Rollback: gunakan kembali `ServiceManager.ps1` + config/backup yang sama.
+- Format `services.json` dan `projects.json` tetap versi 1.
+- Backup config sebelum mengganti versi aplikasi.
+- Jangan menjalankan dua instance yang menulis config yang sama secara bersamaan.
+- Rollback: pulihkan config dari backup dan gunakan binary release Rust sebelumnya.
 
 ## Verifikasi Rilis
 

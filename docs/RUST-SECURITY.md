@@ -1,6 +1,6 @@
 # Keamanan Implementasi Rust
 
-Dokumen ini melengkapi [SECURITY.md](SECURITY.md) untuk komponen Rust (`sm-win`, `sm-gui`, `sm-updater`).
+Dokumen ini menjelaskan kontrol keamanan komponen Rust (`sm-win`, `sm-gui`, `sm-updater`).
 
 ## Ringkasan Kontrol
 
@@ -17,7 +17,7 @@ Dokumen ini melengkapi [SECURITY.md](SECURITY.md) untuk komponen Rust (`sm-win`,
 
 ## Kredensial Git
 
-`sm-updater credential store` adalah padanan `Store-GitCredential.ps1`:
+`sm-updater credential store` adalah helper kredensial Git:
 
 ```powershell
 sm-updater credential store `

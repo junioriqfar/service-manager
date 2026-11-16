@@ -1,14 +1,15 @@
 # Konfigurasi Service Manager
 
-Dokumen ini menjelaskan format `services.json` yang dipakai `ServiceManager.ps1`.
+Dokumen ini menjelaskan format `services.json` yang dipakai aplikasi Rust (`sm-gui`).
 
 ## Lokasi File
 
 | Item | Path |
 | --- | --- |
-| Config utama | `<folder aplikasi>\services.json` |
-| Backup otomatis | `<folder aplikasi>\backup\services-*.json` |
-| Log aplikasi | `<folder aplikasi>\logs\app.log` |
+| Config utama | `<folder exe>\services.json` |
+| Override folder | Environment variable `SERVICE_MANAGER_HOME` |
+| Backup otomatis | `<folder config>\backup\services-*.json` |
+| Log aplikasi | `<folder config>\logs\app.log` |
 | NSSM | `..\nssm\nssm.exe` atau `C:\tools\nssm\nssm.exe` |
 
 Jika `services.json` tidak ada, aplikasi dimulai dengan daftar kosong. Jika JSON tidak valid, file lama dicadangkan ke `backup/services-broken-<timestamp>.json` dan aplikasi tetap berjalan dengan daftar kosong.
@@ -47,19 +48,19 @@ Jika `services.json` tidak ada, aplikasi dimulai dengan daftar kosong. Jika JSON
 
 | Field | Tipe | Wajib | Keterangan |
 | --- | --- | --- | --- |
-| `name` | string | Ya | Nama service Windows (unik). |
+| `name` | string | Ya | Nama service Windows (unik, 1-256 karakter: huruf, angka, titik, `_`, `-`). |
 | `displayName` | string | Tidak | Nama tampilan; default sama dengan `name`. |
 | `serviceType` | string | Tidak | `nssm` (default), `apache`, atau `postgresql`. |
-| `executable` | string | Ya | Path executable. Untuk Apache harus `httpd.exe`; PostgreSQL harus `pg_ctl.exe`. |
+| `executable` | string | Ya | Path executable. Apache harus `httpd.exe`; PostgreSQL harus `pg_ctl.exe`. |
 | `arguments` | string | Tidak | Argumen baris perintah untuk NSSM. |
 | `workingDirectory` | string | Tidak | Direktori kerja proses. |
 | `apacheRoot` | string | Apache | Root instalasi Apache (`ServerRoot`). |
 | `apacheConfig` | string | Apache | Path config; relatif terhadap `apacheRoot` atau absolut. Default `conf/httpd.conf`. |
 | `pgData` | string | PostgreSQL | Path `PGDATA`. |
 | `pgAccount` | string | PostgreSQL | Service account, default `NT AUTHORITY\NetworkService`. |
-| `stdoutLog` | string | Tidak | File log stdout (NSSM). |
+| `stdoutLog` | string | Tidak | File log stdout (NSSM) / log aplikasi. |
 | `stderrLog` | string | Tidak | File log stderr (NSSM). |
-| `startup` | string | Tidak | `auto` (default), `delayed`, atau `manual`. |
+| `startup` | string | Tidak | `auto`, `delayed`, atau `manual`. |
 | `restartOnCrash` | boolean | Tidak | Restart otomatis saat crash (NSSM), default `true`. |
 | `restartDelaySec` | integer | Tidak | Jeda restart dalam detik (minimal 1), default `5`. |
 | `dependencies` | array/string | Tidak | Nama service dependensi. String dipisahkan spasi/koma. |
@@ -70,7 +71,7 @@ Jika `services.json` tidak ada, aplikasi dimulai dengan daftar kosong. Jika JSON
 
 ### 1. NSSM (`nssm`)
 
-Aplikasi biasa dibungkus NSSM. Aplikasi memakai perintah `nssm` untuk mengatur `Application`, `AppParameters`, `AppDirectory`, stdout/stderr, startup, dan restart.
+Aplikasi biasa dibungkus NSSM. Service Manager memakai `nssm` untuk mengatur `Application`, `AppParameters`, `AppDirectory`, stdout/stderr, startup, restart, dan dependensi.
 
 ```json
 {
@@ -139,14 +140,14 @@ pg_ctl.exe unregister -N <name>
 
 ## Urutan Dependensi
 
-Saat **Start Semua**, service diurutkan secara topologi berdasarkan `dependencies`. Saat **Stop Semua**, urutan dibalik. Dependensi yang tidak ada di daftar aplikasi diabaikan untuk pengurutan.
+Saat **Start All**, service diurutkan secara topologi berdasarkan `dependencies`. Saat **Stop All**, urutan dibalik. Dependensi yang tidak ada di daftar aplikasi diabaikan untuk pengurutan. Batch berjalan di background sehingga UI tetap responsif.
 
 ## Backup dan Restore
 
 - Setiap penyimpanan config membuat backup otomatis di `backup/` (maksimal 20 file terbaru).
-- Menu **Aplikasi > Backup Config (Export)...** menyimpan salinan JSON.
-- Menu **Aplikasi > Restore Config (Import)...** memulihkan dari file JSON.
-- Menu **Service > Import Service...** memindai service Windows yang sudah terpasang (NSSM/Apache/PostgreSQL) dan menambahkannya ke config.
+- Tombol **Backup** menyimpan salinan JSON ke `services-export-<timestamp>.json`.
+- Tombol **Restore** memulihkan dari file JSON.
+- Tombol **Import** memindai service Windows yang sudah terpasang (NSSM/Apache/PostgreSQL) dan menambahkannya ke config.
 
 ## Startup Mode
 
@@ -157,3 +158,7 @@ Saat **Start Semua**, service diurutkan secara topologi berdasarkan `dependencie
 | `manual` | Manual |
 
 Mode `delayed` diterapkan melalui Windows API `ChangeServiceConfig2` (`SERVICE_CONFIG_DELAYED_AUTO_START_INFO`).
+
+## Service Global dan Per Project
+
+Lihat [RUST-SERVICES.md](RUST-SERVICES.md) untuk pola Laravel scheduler global (Cronical) dan queue worker per project.

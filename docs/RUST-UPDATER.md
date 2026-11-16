@@ -1,6 +1,6 @@
 # Project Updater Rust (`sm-updater`)
 
-Implementasi Rust untuk `ProjectUpdate.ps1`. Binary mandiri tanpa PowerShell script, tetapi tetap kompatibel dengan `projects.json` versi 1.
+CLI updater Laravel berbasis Rust. Binary mandiri, kompatibel dengan `projects.json` versi 1.
 
 ## Build
 
@@ -31,7 +31,7 @@ Exit code:
 | `1` | Config tidak valid, project tidak ditemukan, atau ada update gagal |
 | `2` | Argumen CLI tidak valid |
 
-`--all` dapat dipakai eksplisit; tanpa `--project`, semua project dengan `enabled: true` diproses (sama seperti PowerShell).
+`--all` dapat dipakai eksplisit; tanpa `--project`, semua project dengan `enabled: true` diproses.
 
 ## Alur Update
 
@@ -77,7 +77,7 @@ Log berisi perintah yang dijalankan, output (maksimal 60 baris per perintah), co
 
 ## Simpan Kredensial Git
 
-Gunakan subcommand credential (padanan `Store-GitCredential.ps1`):
+Gunakan subcommand credential:
 
 ```powershell
 sm-updater credential store `
@@ -105,7 +105,7 @@ cargo test -p sm-updater
 cargo clippy -p sm-updater --all-targets -- -D warnings
 ```
 
-27 unit test mencakup: parsing CLI, scan project, runner real (exit code/timeout), log, dan seluruh matriks update (up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional).
+37 unit test mencakup: parsing CLI, scan project, runner real (exit code/timeout), log, dan seluruh matriks update (up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional).
 
 Verifikasi end-to-end dengan repository Git lokal:
 
