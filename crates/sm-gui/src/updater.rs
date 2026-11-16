@@ -2,13 +2,14 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sm_config::ConfigPaths;
-use sm_core::ToggleMode;
+use sm_core::{ServiceType, ToggleMode};
 use sm_updater::registry::{
     load_config, save_config, AppConfig, HealthCheck, NotifyConfig, PackageManager, Preset,
     ServicePlan,
 };
 use sm_updater::runner::{Runner, SystemRunner};
 use sm_updater::services::WindowsServiceControl;
+use sm_updater::settings::{effective_settings, settings_path_for, Settings};
 use sm_updater::state::{load_state, AppState};
 use sm_updater::toolchain::{detect_package_manager, detect_preset};
 use sm_updater::trigger::{default_log_dir, run_registry_with, RunOptions};
@@ -58,6 +59,12 @@ pub struct UpdaterAppView {
     pub queue_restart: bool,
     pub clone_on_first_run: bool,
     pub allowed_client_ips: Vec<String>,
+    /// Service Apache di `services.json`; kosong berarti tidak terhubung eksplisit.
+    pub web_server_service: String,
+    /// Versi PHP efektif dari settings.json, diisi untuk preset Laravel.
+    pub php_version: String,
+    /// Versi Apache efektif dari settings.json tools.apache.version.
+    pub apache_version: String,
     pub services: UpdaterServicePlanView,
     pub health_check: UpdaterHealthView,
     pub notify: UpdaterNotifyView,
@@ -121,6 +128,8 @@ pub struct UpdaterAppInput {
     #[serde(default, rename = "allowedClientIPs", alias = "allowedClientIps")]
     pub allowed_client_ips: Vec<String>,
     #[serde(default)]
+    pub web_server_service: String,
+    #[serde(default)]
     pub services: ServicePlan,
     #[serde(default)]
     pub health_check: Option<HealthCheck>,
@@ -170,7 +179,22 @@ fn package_manager_name(value: PackageManager) -> &'static str {
     }
 }
 
-fn view(app: &AppConfig, state: Option<&AppState>) -> UpdaterAppView {
+fn view(app: &AppConfig, state: Option<&AppState>, settings: &Settings) -> UpdaterAppView {
+    let preset = if app.preset == Preset::Auto {
+        detect_preset(Path::new(&app.local_path))
+    } else {
+        app.preset
+    };
+    let php_version = if preset == Preset::Laravel {
+        settings.tools.php.version.trim().to_string()
+    } else {
+        String::new()
+    };
+    let apache_version = if app.web_server_service.trim().is_empty() {
+        String::new()
+    } else {
+        settings.tools.apache.tool.version.trim().to_string()
+    };
     UpdaterAppView {
         id: app.id.clone(),
         name: app.name.clone(),
@@ -178,7 +202,7 @@ fn view(app: &AppConfig, state: Option<&AppState>) -> UpdaterAppView {
         repo_url: app.repo_url.clone(),
         local_path: app.local_path.clone(),
         branch: app.branch.clone(),
-        preset: preset_name(app.preset).to_string(),
+        preset: preset_name(preset).to_string(),
         package_manager: package_manager_name(app.package_manager).to_string(),
         composer: toggle_name(app.composer).to_string(),
         artisan: toggle_name(app.artisan).to_string(),
@@ -189,6 +213,9 @@ fn view(app: &AppConfig, state: Option<&AppState>) -> UpdaterAppView {
         queue_restart: app.queue_restart,
         clone_on_first_run: app.clone_on_first_run,
         allowed_client_ips: app.allowed_client_ips.clone(),
+        web_server_service: app.web_server_service.clone(),
+        php_version,
+        apache_version,
         services: UpdaterServicePlanView {
             stop_before_pull: app.services.stop_before_pull.clone(),
             stop_before_build: app.services.stop_before_build.clone(),
@@ -227,22 +254,27 @@ fn view(app: &AppConfig, state: Option<&AppState>) -> UpdaterAppView {
 fn load_views_at(path: &Path) -> Result<Vec<UpdaterAppView>, String> {
     let config = load_config(path)?;
     let state = load_state(path);
+    let settings = effective_settings(&settings_path_for(path), &config.settings, &config.trigger)
+        .map_err(|error| error.to_string())?;
     Ok(config
         .apps
         .iter()
-        .map(|app| view(app, state.apps.get(&app.id)))
+        .map(|app| view(app, state.apps.get(&app.id), &settings))
         .collect())
+}
+
+fn services_backup_dir(path: &Path) -> PathBuf {
+    path.parent()
+        .and_then(|parent| parent.parent())
+        .unwrap_or_else(|| Path::new("."))
+        .join("backup")
 }
 
 fn validate_service_names(path: &Path, services: &[String]) -> Result<(), String> {
     if services.is_empty() {
         return Ok(());
     }
-    let backup_dir = path
-        .parent()
-        .and_then(|parent| parent.parent())
-        .unwrap_or_else(|| Path::new("."))
-        .join("backup");
+    let backup_dir = services_backup_dir(path);
     let result = sm_config::load_services_lenient(path, &backup_dir);
     let known: Vec<String> = result
         .services
@@ -268,6 +300,37 @@ fn validate_service_names(path: &Path, services: &[String]) -> Result<(), String
             missing.join(", ")
         ))
     }
+}
+
+/// `webServerService` opsional, tetapi jika diisi harus menunjuk service
+/// dengan `serviceType=apache` di `data/services.json`.
+fn validate_web_server_service(path: &Path, service: &str) -> Result<(), String> {
+    let service = service.trim();
+    if service.is_empty() {
+        return Ok(());
+    }
+    let result = sm_config::load_services_lenient(path, &services_backup_dir(path));
+    if let Some(warning) = result.warning.as_deref() {
+        return Err(format!(
+            "Tidak bisa memvalidasi webServerService '{service}': {warning}"
+        ));
+    }
+    let Some(found) = result
+        .services
+        .iter()
+        .find(|candidate| candidate.name.eq_ignore_ascii_case(service))
+    else {
+        return Err(format!(
+            "Web server service '{service}' tidak ada di data/services.json."
+        ));
+    };
+    if found.service_type.normalized() != ServiceType::Apache {
+        return Err(format!(
+            "Web server service '{service}' bukan service Apache (serviceType: {}).",
+            found.service_type.normalized().label()
+        ));
+    }
+    Ok(())
 }
 
 fn save_app_at(
@@ -296,6 +359,7 @@ fn save_app_at(
         app.clone_on_first_run = value;
     }
     app.allowed_client_ips = input.allowed_client_ips;
+    app.web_server_service = input.web_server_service;
     app.services = input.services;
     if let Some(value) = input.health_check {
         app.health_check = value;
@@ -306,6 +370,7 @@ fn save_app_at(
     app.normalize();
     config.validate_app(&app)?;
     if let Some(services_path) = services_path {
+        validate_web_server_service(services_path, &app.web_server_service)?;
         let mut names = app.services.stop_before_pull.clone();
         names.extend(app.services.stop_before_build.clone());
         names.extend(app.services.restart_after.clone());
@@ -570,6 +635,7 @@ mod tests {
             queue_restart: true,
             clone_on_first_run: None,
             allowed_client_ips: Vec::new(),
+            web_server_service: String::new(),
             services: ServicePlan::default(),
             health_check: None,
             notify: None,
@@ -613,6 +679,98 @@ mod tests {
         assert!(error.contains("missing"));
     }
 
+    fn write_services(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            path,
+            r#"{"version":1,"services":[
+                {"name":"Apache2.4","serviceType":"apache","executable":"C:\\apache\\bin\\httpd.exe"},
+                {"name":"api","serviceType":"nssm","executable":"C:\\api\\api.exe"}
+            ]}"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn accepts_apache_service_as_web_server() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = temp.path().join("data/projects.json");
+        let services = temp.path().join("data/services.json");
+        write_services(&services);
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut input = app("demo", &project);
+        input.web_server_service = "Apache2.4".into();
+        let views = save_app_at(&config, Some(&services), input).unwrap();
+
+        assert_eq!(views[0].web_server_service, "Apache2.4");
+    }
+
+    #[test]
+    fn rejects_web_server_service_that_is_not_apache() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = temp.path().join("data/projects.json");
+        let services = temp.path().join("data/services.json");
+        write_services(&services);
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut input = app("demo", &project);
+        input.web_server_service = "api".into();
+        let error = save_app_at(&config, Some(&services), input).unwrap_err();
+        assert!(error.contains("bukan service Apache"), "{error}");
+
+        let mut input = app("demo", &project);
+        input.web_server_service = "missing".into();
+        let error = save_app_at(&config, Some(&services), input).unwrap_err();
+        assert!(error.contains("tidak ada di data/services.json"), "{error}");
+    }
+
+    #[test]
+    fn editing_preserves_web_server_service_and_runtime_versions() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let services = temp.path().join("data/services.json");
+        let settings_path = temp.path().join("data/settings.json");
+        write_services(&services);
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut input = app("demo", &project);
+        input.preset = Preset::Laravel;
+        input.web_server_service = "Apache2.4".into();
+        save_app_at(&config_path, Some(&services), input).unwrap();
+
+        let mut settings = sm_updater::settings::Settings::default();
+        settings.tools.php.version = "8.3.16".into();
+        settings.tools.apache.tool.version = "Apache/2.4.62 (Win64)".into();
+        sm_updater::settings::save_settings(&settings_path, &settings).unwrap();
+
+        let views = load_views_at(&config_path).unwrap();
+        assert_eq!(views[0].web_server_service, "Apache2.4");
+        assert_eq!(views[0].php_version, "8.3.16");
+        assert_eq!(views[0].apache_version, "Apache/2.4.62 (Win64)");
+
+        // Editing an unrelated field with the form value preserved keeps webServerService.
+        let mut edit = app("demo", &project);
+        edit.preset = Preset::Laravel;
+        edit.branch = "develop".into();
+        edit.web_server_service = "Apache2.4".into();
+        save_app_at(&config_path, Some(&services), edit).unwrap();
+        let loaded = load_config(&config_path).unwrap();
+        assert_eq!(loaded.find("demo").unwrap().web_server_service, "Apache2.4");
+
+        // Empty means explicitly not linked to a web server.
+        let mut clear = app("demo", &project);
+        clear.preset = Preset::Laravel;
+        clear.branch = "develop".into();
+        clear.web_server_service = String::new();
+        save_app_at(&config_path, Some(&services), clear).unwrap();
+        let loaded = load_config(&config_path).unwrap();
+        assert_eq!(loaded.find("demo").unwrap().web_server_service, "");
+    }
+
     #[test]
     fn view_includes_state_fields() {
         let temp = tempfile::tempdir().unwrap();
@@ -627,6 +785,35 @@ mod tests {
         let views = load_views_at(&config_path).unwrap();
         assert_eq!(views[0].status, "updated");
         assert!(views[0].last_updated_at.contains('T'));
+    }
+
+    #[test]
+    fn auto_preset_laravel_shows_effective_php_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("laravel");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join("artisan"), "php").unwrap();
+        std::fs::write(project.join("composer.json"), "{}").unwrap();
+        let mut app = AppConfig {
+            id: "laravel".into(),
+            name: "Laravel".into(),
+            local_path: project.to_string_lossy().to_string(),
+            preset: Preset::Auto,
+            ..AppConfig::default()
+        };
+        app.web_server_service = "Apache2.4".into();
+        let mut settings = sm_updater::settings::Settings::default();
+        settings.tools.php.version = "8.3.16".into();
+        settings.tools.apache.tool.version = "2.4.62".into();
+
+        let first_view = view(&app, None, &settings);
+        assert_eq!(first_view.preset, "laravel");
+        assert_eq!(first_view.php_version, "8.3.16");
+        assert_eq!(first_view.apache_version, "2.4.62");
+
+        app.web_server_service.clear();
+        let second_view = view(&app, None, &settings);
+        assert!(second_view.apache_version.is_empty());
     }
 
     #[test]

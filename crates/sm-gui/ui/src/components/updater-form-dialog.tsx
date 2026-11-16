@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { errorMessage, invoke } from "@/lib/tauri";
-import type { UpdaterApp, UpdaterAppInput } from "@/lib/types";
+import type { ServiceRow, UpdaterApp, UpdaterAppInput } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const PRESETS = ["auto", "laravel", "node", "bun", "go", "static", "custom"] as const;
@@ -47,6 +47,7 @@ interface UpdaterFormValues {
   queueRestart: boolean;
   cloneOnFirstRun: boolean;
   allowedClientIPs: string;
+  webServerService: string;
   stopBeforePull: string;
   stopBeforeBuild: string;
   restartAfter: string;
@@ -78,6 +79,7 @@ function emptyValues(): UpdaterFormValues {
     queueRestart: true,
     cloneOnFirstRun: false,
     allowedClientIPs: "",
+    webServerService: "",
     stopBeforePull: "",
     stopBeforeBuild: "",
     restartAfter: "",
@@ -111,6 +113,7 @@ function valuesFromApp(app: UpdaterApp | null): UpdaterFormValues {
     queueRestart: app.queueRestart,
     cloneOnFirstRun: app.cloneOnFirstRun,
     allowedClientIPs: app.allowedClientIPs.join(", "),
+    webServerService: app.webServerService,
     stopBeforePull: app.services.stopBeforePull.join(", "),
     stopBeforeBuild: app.services.stopBeforeBuild.join(", "),
     restartAfter: app.services.restartAfter.join(", "),
@@ -150,6 +153,7 @@ function toInput(values: UpdaterFormValues): UpdaterAppInput {
     queueRestart: values.queueRestart,
     cloneOnFirstRun: values.cloneOnFirstRun,
     allowedClientIPs: splitList(values.allowedClientIPs),
+    webServerService: values.webServerService.trim(),
     services: {
       stopBeforePull: splitList(values.stopBeforePull),
       stopBeforeBuild: splitList(values.stopBeforeBuild),
@@ -239,6 +243,7 @@ export function UpdaterFormDialog({
   const [values, setValues] = useState<UpdaterFormValues>(() => valuesFromApp(app));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apacheServices, setApacheServices] = useState<string[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -246,6 +251,29 @@ export function UpdaterFormDialog({
       setError(null);
     }
   }, [open, app]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await invoke<ServiceRow[]>("list_services");
+        if (cancelled) return;
+        setApacheServices(
+          (Array.isArray(rows) ? rows : [])
+            .filter((row) => row.serviceType === "apache")
+            .map((row) => row.name)
+            .filter((name) => name.trim().length > 0)
+            .sort((left, right) => left.localeCompare(right)),
+        );
+      } catch (caught) {
+        if (!cancelled) toast.error(errorMessage(caught));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   function set<K extends keyof UpdaterFormValues>(key: K, value: UpdaterFormValues[K]) {
     setValues((previous) => ({ ...previous, [key]: value }));
@@ -288,6 +316,13 @@ export function UpdaterFormDialog({
       setSaving(false);
     }
   }
+
+  const apacheOptions = Array.from(
+    new Set([
+      ...apacheServices,
+      ...(values.webServerService.trim() ? [values.webServerService.trim()] : []),
+    ]),
+  ).sort((left, right) => left.localeCompare(right));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -467,6 +502,37 @@ export function UpdaterFormDialog({
               value={values.waitTimeoutSeconds}
               onChange={(event) => set("waitTimeoutSeconds", event.target.value)}
             />
+          </FormField>
+          <FormField
+            label="Web server (Apache)"
+            htmlFor="updater-web-server"
+            className="sm:col-span-2"
+          >
+            <Select
+              value={values.webServerService || "__none__"}
+              onValueChange={(value) =>
+                set("webServerService", value === "__none__" ? "" : value)
+              }
+            >
+              <SelectTrigger
+                id="updater-web-server"
+                title="Optional Apache service from data/services.json that serves this app."
+              >
+                <SelectValue placeholder="Not linked" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Not linked</SelectItem>
+                {apacheOptions.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Only services with serviceType apache are listed. Leave empty when the app is
+              not served by Apache.
+            </p>
           </FormField>
 
           <SectionHeading>Access</SectionHeading>

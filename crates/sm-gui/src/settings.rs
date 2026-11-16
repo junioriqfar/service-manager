@@ -5,10 +5,12 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sm_config::ConfigPaths;
-use sm_updater::registry::load_config;
+use sm_updater::ip::client_ip_from_env;
+use sm_updater::registry::{load_config, TriggerSettings};
 use sm_updater::runner::{wrap_command, Output, Runner, SystemRunner};
 use sm_updater::settings::{
     effective_settings, load_settings, save_settings, settings_path, settings_path_for, Settings,
+    SettingsTrigger,
 };
 
 const TASK_SCRIPT_INSTALL: &str = "Install-UpdaterTask.ps1";
@@ -163,6 +165,10 @@ pub struct SettingsDiagnostics {
 pub struct SettingsView {
     pub settings: Settings,
     pub legacy_fallback: bool,
+    /// `projects.json.trigger`; `None` bila `projects.json` tidak ada.
+    pub legacy_trigger: Option<TriggerSettings>,
+    /// IP client dari `SSH_CONNECTION`/`SSH_CLIENT`, jika ada.
+    pub current_client_ip: Option<String>,
     pub diagnostics: SettingsDiagnostics,
 }
 
@@ -738,26 +744,38 @@ fn build_diagnostics(
 fn build_view(
     settings: Settings,
     legacy_fallback: bool,
+    legacy_trigger: Option<TriggerSettings>,
     task: Option<Result<TaskStatusView, String>>,
 ) -> SettingsView {
     let diagnostics = build_diagnostics(&settings, legacy_fallback, task);
     SettingsView {
         settings,
         legacy_fallback,
+        legacy_trigger,
+        current_client_ip: client_ip_from_env().map(|ip| ip.to_string()),
         diagnostics,
     }
 }
 
-fn load_settings_at(
+fn load_settings_meta_at(
     settings_file: &Path,
     projects_file: &Path,
-) -> Result<(Settings, bool), String> {
+) -> Result<(Settings, bool, Option<TriggerSettings>), String> {
     let config = load_config(projects_file)?;
     let legacy_fallback = load_settings(settings_file)
         .map_err(|error| error.to_string())?
         .is_none();
     let settings = effective_settings(settings_file, &config.settings, &config.trigger)
         .map_err(|error| error.to_string())?;
+    let legacy_trigger = projects_file.is_file().then_some(config.trigger);
+    Ok((settings, legacy_fallback, legacy_trigger))
+}
+
+fn load_settings_at(
+    settings_file: &Path,
+    projects_file: &Path,
+) -> Result<(Settings, bool), String> {
+    let (settings, legacy_fallback, _) = load_settings_meta_at(settings_file, projects_file)?;
     Ok((settings, legacy_fallback))
 }
 
@@ -765,6 +783,40 @@ fn save_settings_at(settings_file: &Path, mut settings: Settings) -> Result<Sett
     settings.normalize();
     save_settings(settings_file, &settings).map_err(|error| error.to_string())?;
     Ok(settings)
+}
+
+/// Backup `settings.json` sebelum migrasi trigger.
+fn backup_settings_file(settings_file: &Path) -> Result<Option<PathBuf>, String> {
+    if !settings_file.is_file() {
+        return Ok(None);
+    }
+    let base = settings_file
+        .parent()
+        .and_then(|parent| parent.parent())
+        .unwrap_or_else(|| Path::new("."));
+    let backup_dir = base.join("backup");
+    std::fs::create_dir_all(&backup_dir).map_err(|error| error.to_string())?;
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S-%3f");
+    let destination = backup_dir.join(format!("settings-{stamp}.json"));
+    std::fs::copy(settings_file, &destination).map_err(|error| error.to_string())?;
+    Ok(Some(destination))
+}
+
+/// Migrasi eksplisit `projects.json.trigger` -> `settings.json.trigger`.
+///
+/// `projects.json` tidak diubah. Trigger dari `projects.json` selalu menang
+/// sebagai sumber migrasi agar nilai yang disalin persis seperti legacy.
+/// Jika `settings.json` sudah ada, file lama dibackup terlebih dahulu.
+fn migrate_trigger_at(settings_file: &Path, projects_file: &Path) -> Result<Settings, String> {
+    let config = load_config(projects_file)?;
+    let mut settings = effective_settings(settings_file, &config.settings, &config.trigger)
+        .map_err(|error| error.to_string())?;
+    settings.trigger = SettingsTrigger {
+        allowed_client_ips: config.trigger.allowed_client_ips.clone(),
+        allow_local: config.trigger.allow_local,
+    };
+    backup_settings_file(settings_file)?;
+    save_settings_at(settings_file, settings)
 }
 
 fn powershell_exe() -> PathBuf {
@@ -954,9 +1006,15 @@ pub async fn load_settings_view() -> Result<SettingsView, String> {
     let paths = ConfigPaths::detect();
     tauri::async_runtime::spawn_blocking(move || {
         let settings_file = settings_path_for(&paths.projects_path());
-        let (settings, legacy_fallback) = load_settings_at(&settings_file, &paths.projects_path())?;
+        let (settings, legacy_fallback, legacy_trigger) =
+            load_settings_meta_at(&settings_file, &paths.projects_path())?;
         let task = task_status_blocking(&settings.privileged_execution.task_name);
-        Ok(build_view(settings, legacy_fallback, Some(task)))
+        Ok(build_view(
+            settings,
+            legacy_fallback,
+            legacy_trigger,
+            Some(task),
+        ))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -965,6 +1023,17 @@ pub async fn load_settings_view() -> Result<SettingsView, String> {
 #[tauri::command]
 pub fn save_settings_view(settings: Settings) -> Result<Settings, String> {
     save_settings_at(&settings_path(), settings)
+}
+
+#[tauri::command]
+pub async fn migrate_trigger_to_settings() -> Result<Settings, String> {
+    let paths = ConfigPaths::detect();
+    tauri::async_runtime::spawn_blocking(move || {
+        let settings_file = settings_path_for(&paths.projects_path());
+        migrate_trigger_at(&settings_file, &paths.projects_path())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1204,6 +1273,121 @@ mod tests {
         assert!(!legacy_fallback);
         assert_eq!(loaded.tools.apache.root, r"C:\apache");
         assert_eq!(loaded.updater.log_retention_days, 14);
+    }
+
+    #[test]
+    fn load_meta_exposes_legacy_trigger_for_migration() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let projects = data.join("projects.json");
+        let settings_file = data.join("settings.json");
+        write_projects(&projects);
+
+        let (settings, legacy_fallback, legacy_trigger) =
+            load_settings_meta_at(&settings_file, &projects).unwrap();
+        let legacy_trigger = legacy_trigger.expect("projects.json trigger");
+
+        assert!(legacy_fallback);
+        assert_eq!(
+            settings.trigger.allowed_client_ips,
+            legacy_trigger.allowed_client_ips
+        );
+        assert!(!legacy_trigger.allow_local);
+    }
+
+    #[test]
+    fn meta_has_no_legacy_trigger_without_projects_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let projects = data.join("projects.json");
+        let settings_file = data.join("settings.json");
+
+        let (_, legacy_fallback, legacy_trigger) =
+            load_settings_meta_at(&settings_file, &projects).unwrap();
+
+        assert!(legacy_fallback);
+        assert!(legacy_trigger.is_none());
+    }
+
+    #[test]
+    fn migrates_trigger_to_settings_without_touching_projects() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let projects = data.join("projects.json");
+        let settings_file = data.join("settings.json");
+        write_projects(&projects);
+        let projects_before = std::fs::read_to_string(&projects).unwrap();
+
+        let migrated = migrate_trigger_at(&settings_file, &projects).unwrap();
+
+        assert_eq!(
+            migrated.trigger.allowed_client_ips,
+            ["10.0.0.5", "127.0.0.1"]
+        );
+        assert!(!migrated.trigger.allow_local);
+        assert!(settings_file.is_file());
+        assert_eq!(
+            std::fs::read_to_string(&projects).unwrap(),
+            projects_before,
+            "projects.json must not be modified"
+        );
+
+        let (loaded, legacy_fallback) = load_settings_at(&settings_file, &projects).unwrap();
+        assert!(!legacy_fallback);
+        assert_eq!(loaded.trigger.allowed_client_ips, ["10.0.0.5", "127.0.0.1"]);
+        assert!(!loaded.trigger.allow_local);
+    }
+
+    #[test]
+    fn migration_backs_up_existing_settings_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let projects = data.join("projects.json");
+        let settings_file = data.join("settings.json");
+        write_projects(&projects);
+
+        let mut settings = Settings::default();
+        settings.tools.git.path = r"C:\old\git.exe".into();
+        settings.tools.php.path = r"C:\old\php.exe".into();
+        settings.tools.composer.path = r"C:\old\composer.bat".into();
+        settings.tools.npm.path = r"C:\old\npm.cmd".into();
+        save_settings_at(&settings_file, settings).unwrap();
+
+        migrate_trigger_at(&settings_file, &projects).unwrap();
+
+        let backup_dir = temp.path().join("backup");
+        let backups: Vec<_> = std::fs::read_dir(&backup_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        assert_eq!(backups.len(), 1);
+        assert!(backups[0]
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("settings-"));
+    }
+
+    #[test]
+    fn migration_rejects_invalid_legacy_trigger() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let projects = data.join("projects.json");
+        let settings_file = data.join("settings.json");
+        std::fs::write(
+            &projects,
+            r#"{"version":2,"trigger":{"allowedClientIPs":["not-an-ip"]},"apps":[]}"#,
+        )
+        .unwrap();
+
+        let error = migrate_trigger_at(&settings_file, &projects).unwrap_err();
+        assert!(error.contains("tidak valid"));
+        assert!(!settings_file.exists());
     }
 
     #[test]

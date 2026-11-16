@@ -56,6 +56,7 @@ fn main() {
             remote::run_remote_trigger,
             settings::load_settings_view,
             settings::save_settings_view,
+            settings::migrate_trigger_to_settings,
             settings::detect_tool,
             settings::test_tool,
             settings::task_status,
@@ -245,6 +246,7 @@ mod ui_tests {
             "buildCommand",
             "installCommand",
             "allowedClientIPs",
+            "webServerService",
             "cloneOnFirstRun",
             "healthCheck",
             "notify",
@@ -254,6 +256,14 @@ mod ui_tests {
                 "missing updater form field: {field}"
             );
         }
+        for label in ["Web server (Apache)", "Not linked", "PHP"] {
+            assert!(
+                UPDATER_FORM.contains(label) || UPDATER_VIEW.contains(label),
+                "missing updater runtime label: {label}"
+            );
+        }
+        assert!(UPDATER_FORM.contains("list_services"));
+        assert!(UPDATER_FORM.contains("serviceType === \"apache\""));
         assert!(UPDATER_FORM.contains("pick_directory"));
         assert!(UPDATER_FORM.contains("Browse…"));
         assert!(UPDATER_VIEW.contains("lucide-react"));
@@ -346,6 +356,11 @@ mod ui_tests {
             "Missing required tools",
             "Invalid tool path",
             "Scheduled Task not installed",
+            "Trigger",
+            "Allowed IPs / CIDR",
+            "Allow local trigger",
+            "Current client IP",
+            "Migrate Trigger",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(label),
@@ -355,6 +370,7 @@ mod ui_tests {
         for command in [
             "load_settings_view",
             "save_settings_view",
+            "migrate_trigger_to_settings",
             "detect_tool",
             "test_tool",
             "task_status",
@@ -380,6 +396,9 @@ mod ui_tests {
             "taskName",
             "userId",
             "logonType",
+            "allowedClientIPs",
+            "allowLocal",
+            "currentClientIp",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(field),

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRightLeft,
   CheckCircle2,
   FlaskConical,
   FolderOpen,
   Loader2,
+  Network,
   RefreshCw,
   Save,
   Search,
@@ -30,12 +32,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { errorMessage, invoke } from "@/lib/tauri";
 import type {
   ApacheToolPath,
   Settings,
   SettingsDiagnostics,
   SettingsTools,
+  SettingsTrigger,
   SettingsView,
   TaskOperation,
   TaskStatus,
@@ -165,6 +169,21 @@ function toolLabel(key: ToolKey): string {
 function formatWhen(value: string): string {
   if (!value) return "—";
   return value.replace("T", " ").slice(0, 19);
+}
+
+function splitPatterns(value: string): string[] {
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function sameTrigger(left: SettingsTrigger, right: SettingsTrigger): boolean {
+  return (
+    left.allowLocal === right.allowLocal &&
+    left.allowedClientIPs.length === right.allowedClientIPs.length &&
+    left.allowedClientIPs.every((value, index) => value === right.allowedClientIPs[index])
+  );
 }
 
 function inferApache(executable: string): { root: string; config: string } {
@@ -451,6 +470,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const [draft, setDraft] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [migratingTrigger, setMigratingTrigger] = useState(false);
+  const [triggerIpsText, setTriggerIpsText] = useState("");
   const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
   const [taskStatusError, setTaskStatusError] = useState<string | null>(null);
   const [taskOperation, setTaskOperation] = useState<TaskOperation | null>(null);
@@ -486,6 +507,7 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
         const next = await invoke<SettingsView>("load_settings_view");
         setView(next);
         setDraft(next.settings);
+        setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
         await refreshTaskStatus(next.settings.privilegedExecution.taskName);
         if (showToast) toast.success("Settings reloaded.");
       } catch (error) {
@@ -560,6 +582,17 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
           }
         : previous,
     );
+  }
+
+  function updateTrigger(patch: Partial<SettingsTrigger>) {
+    setDraft((previous) =>
+      previous ? { ...previous, trigger: { ...previous.trigger, ...patch } } : previous,
+    );
+  }
+
+  function changeTriggerIps(value: string) {
+    setTriggerIpsText(value);
+    updateTrigger({ allowedClientIPs: splitPatterns(value) });
   }
 
   async function browseTool(key: ToolKey) {
@@ -686,12 +719,31 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       const next = await invoke<SettingsView>("load_settings_view");
       setView(next);
       setDraft(next.settings);
+      setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
       await refreshTaskStatus(next.settings.privilegedExecution.taskName);
       toast.success("Settings saved.");
     } catch (error) {
       toast.error(errorMessage(error), { duration: 10000 });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function migrateTrigger() {
+    if (migratingTrigger) return;
+    setMigratingTrigger(true);
+    try {
+      await invoke<Settings>("migrate_trigger_to_settings");
+      const next = await invoke<SettingsView>("load_settings_view");
+      setView(next);
+      setDraft(next.settings);
+      setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
+      await refreshTaskStatus(next.settings.privilegedExecution.taskName);
+      toast.success("Trigger migrated from projects.json to settings.json.");
+    } catch (error) {
+      toast.error(errorMessage(error), { duration: 10000 });
+    } finally {
+      setMigratingTrigger(false);
     }
   }
 
@@ -773,6 +825,12 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const diagnostics = view?.diagnostics;
   const task = taskBadge(taskStatus, taskStatusError);
   const dirty = view !== null && JSON.stringify(draft) !== JSON.stringify(view.settings);
+  const legacyTrigger = view?.legacyTrigger ?? null;
+  const triggerDiffers =
+    view !== null && legacyTrigger !== null
+      ? !sameTrigger(legacyTrigger, view.settings.trigger)
+      : false;
+  const canMigrateTrigger = view?.legacyFallback === true || triggerDiffers;
   const adminText =
     admin === true
       ? "Administrator"
@@ -1162,6 +1220,95 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Network className="h-4 w-4" />
+                  Trigger
+                </CardTitle>
+                <CardDescription>
+                  Global client IP allowlist and local trigger policy. settings.json wins over
+                  projects.json when the file exists.
+                </CardDescription>
+              </div>
+              <Badge variant="outline" title="Detected from SSH_CONNECTION/SSH_CLIENT">
+                {view?.currentClientIp ? `Client IP: ${view.currentClientIp}` : "Client IP: not detected"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4 pt-0">
+            <div className="space-y-1">
+              <Label className="text-xs" htmlFor="settings-trigger-ips">
+                Allowed IPs / CIDR
+              </Label>
+              <textarea
+                id="settings-trigger-ips"
+                value={triggerIpsText}
+                onChange={(event) => changeTriggerIps(event.target.value)}
+                rows={3}
+                placeholder={"10.255.240.143, 10.255.240.0/24\n127.0.0.1, ::1"}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                title="Comma or newline separated. Accepts IPv4, IPv6, and CIDR. Empty list allows any remote IP."
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma or newline separated. Accepts IPv4, IPv6, and CIDR. An empty list allows
+                any remote IP; use Allow local to control non-SSH triggers.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
+              <div>
+                <Label htmlFor="settings-trigger-local">Allow local trigger</Label>
+                <p className="text-xs text-muted-foreground">
+                  Permit runs without an SSH client IP (local terminal or GUI).
+                </p>
+              </div>
+              <Switch
+                id="settings-trigger-local"
+                checked={draft.trigger.allowLocal}
+                onCheckedChange={(checked) => updateTrigger({ allowLocal: checked })}
+              />
+            </div>
+
+            <div className="rounded-md border bg-background/40 px-3 py-2 text-xs">
+              <div className="text-muted-foreground">Current client IP</div>
+              <div className="font-mono">{view?.currentClientIp || "not detected"}</div>
+              <p className="mt-1 text-muted-foreground">
+                {view?.legacyFallback
+                  ? "settings.json is absent; the effective trigger currently comes from projects.json."
+                  : triggerDiffers
+                    ? "projects.json still has a different trigger. Migrate only when you want settings.json to replace it."
+                    : "settings.json is the active trigger source."}
+              </p>
+            </div>
+
+            {canMigrateTrigger && (
+              <div className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">Legacy trigger in projects.json</div>
+                  <p className="text-xs">
+                    Copy allowedClientIPs and allowLocal into settings.json. projects.json is not
+                    modified. Unsaved edits in this form are discarded by the migration.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void migrateTrigger()}
+                  disabled={migratingTrigger || saving || toolsBusy}
+                  title="Copy projects.json trigger into data/settings.json"
+                >
+                  {migratingTrigger ? <Loader2 className="animate-spin" /> : <ArrowRightLeft />}
+                  Migrate Trigger
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader className="p-4 pb-2">

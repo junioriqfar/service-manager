@@ -4,12 +4,12 @@ use std::time::{Duration, Instant};
 use std::net::IpAddr;
 
 use crate::app_update::update_app;
-use crate::ip::{app_allowed_for_ip, client_ip_from_env};
+use crate::ip::{app_allowed_for_ip_with_trigger, client_ip_from_env};
 use crate::lock::UpdateLock;
-use crate::registry::UpdaterConfig;
+use crate::registry::{TriggerSettings, UpdaterConfig};
 use crate::runner::Runner;
 use crate::services::{ServiceControl, WindowsServiceControl};
-use crate::settings::{effective_settings, settings_path_for};
+use crate::settings::{effective_settings, effective_trigger, settings_path_for};
 use crate::state::{load_state, mark, save_state};
 use crate::update::UpdateOptions;
 
@@ -75,13 +75,12 @@ pub fn run_registry_with(
 
     // settings.json authoritative jika ada; kalau tidak, fallback ke
     // settings/trigger lama di projects.json tanpa menulis file baru.
-    let effective = effective_settings(
-        &settings_path_for(config_path),
-        &config.settings,
-        &config.trigger,
-    )
-    .map_err(|error| error.to_string())?;
+    let settings_file = settings_path_for(config_path);
+    let effective = effective_settings(&settings_file, &config.settings, &config.trigger)
+        .map_err(|error| error.to_string())?;
     let updater_settings = effective.to_updater_settings();
+    let trigger =
+        effective_trigger(&settings_file, &config.trigger).map_err(|error| error.to_string())?;
 
     let log_dir = if updater_settings.log_dir.trim().is_empty() {
         default_log_dir(config_path)
@@ -96,7 +95,7 @@ pub fn run_registry_with(
     }
 
     if !options.check_only
-        && selected_apps_need_services(config, &options, client_ip)
+        && selected_apps_need_services(config, &options, &trigger, client_ip)
         && !services.is_elevated()?
     {
         return Err(
@@ -116,7 +115,7 @@ pub fn run_registry_with(
             }
         }
 
-        if !app_allowed_for_ip(config, app, client_ip) {
+        if !app_allowed_for_ip_with_trigger(app, &trigger, client_ip) {
             let message = match client_ip {
                 Some(ip) => format!("IP {ip} tidak diizinkan untuk app '{}'.", app.id),
                 None => format!("Trigger lokal tidak diizinkan untuk app '{}'.", app.id),
@@ -208,6 +207,7 @@ fn head_commit(git_path: &str, project: &Path, runner: &dyn Runner) -> Option<St
 fn selected_apps_need_services(
     config: &UpdaterConfig,
     options: &RunOptions,
+    trigger: &TriggerSettings,
     client_ip: Option<IpAddr>,
 ) -> bool {
     config
@@ -221,7 +221,7 @@ fn selected_apps_need_services(
                 .map(|id| app.id.eq_ignore_ascii_case(id))
                 .unwrap_or(true)
         })
-        .filter(|app| app_allowed_for_ip(config, app, client_ip))
+        .filter(|app| app_allowed_for_ip_with_trigger(app, trigger, client_ip))
         .any(|app| {
             !app.services.stop_before_pull.is_empty()
                 || !app.services.stop_before_build.is_empty()
@@ -537,5 +537,137 @@ mod tests {
             .to_string_lossy()
             .starts_with("project-update-")));
         assert!(!legacy_logs.exists());
+    }
+
+    fn static_app(id: &str, path: &Path) -> AppConfig {
+        AppConfig {
+            id: id.into(),
+            name: id.into(),
+            repo_url: "https://example.com/demo.git".into(),
+            local_path: path.to_string_lossy().to_string(),
+            branch: "main".into(),
+            preset: Preset::Static,
+            composer: sm_core::ToggleMode::Never,
+            package_manager: crate::registry::PackageManager::None,
+            package_install: sm_core::ToggleMode::Never,
+            build: sm_core::ToggleMode::Never,
+            ..AppConfig::default()
+        }
+    }
+
+    #[test]
+    fn settings_trigger_overrides_projects_trigger_for_authorization() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+
+        let config = UpdaterConfig {
+            // Legacy project trigger allows every IP.
+            trigger: crate::registry::TriggerSettings {
+                allowed_client_ips: Vec::new(),
+                allow_local: true,
+            },
+            apps: vec![static_app("demo", &project)],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let mut settings = crate::settings::Settings::default();
+        settings.trigger.allowed_client_ips = vec!["10.255.240.0/24".into()];
+        crate::settings::save_settings(&temp.path().join("data/settings.json"), &settings).unwrap();
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions {
+                client_ip: Some("10.0.0.9".parse().unwrap()),
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].status, "forbidden");
+        assert!(outcomes[0].message.contains("10.0.0.9"));
+    }
+
+    #[test]
+    fn projects_trigger_is_used_when_settings_json_is_absent() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+
+        let config = UpdaterConfig {
+            trigger: crate::registry::TriggerSettings {
+                allowed_client_ips: vec!["10.255.240.0/24".into()],
+                allow_local: true,
+            },
+            apps: vec![static_app("demo", &project)],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions {
+                client_ip: Some("10.0.0.9".parse().unwrap()),
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].status, "forbidden");
+        assert!(!temp.path().join("data/settings.json").exists());
+    }
+
+    #[test]
+    fn per_app_allowlist_overrides_settings_trigger() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+
+        let mut app = static_app("demo", &project);
+        app.allowed_client_ips = vec!["10.0.0.9".into()];
+        let config = UpdaterConfig {
+            trigger: crate::registry::TriggerSettings {
+                allowed_client_ips: Vec::new(),
+                allow_local: true,
+            },
+            apps: vec![app],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let mut settings = crate::settings::Settings::default();
+        settings.trigger.allowed_client_ips = vec!["10.255.240.0/24".into()];
+        crate::settings::save_settings(&temp.path().join("data/settings.json"), &settings).unwrap();
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions {
+                check_only: true,
+                client_ip: Some("10.0.0.9".parse().unwrap()),
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 1);
+        assert_ne!(outcomes[0].status, "forbidden");
     }
 }

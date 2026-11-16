@@ -219,8 +219,17 @@ Catatan:
 - Jika file belum ada, `sm-updater` memakai `settings`/`trigger` lama di
   `projects.json` sebagai fallback tanpa menulis `settings.json`. File baru dibuat
   hanya oleh aksi simpan/migrasi eksplisit.
+- Jika `settings.json` ada, `trigger.allowedClientIPs` dan `trigger.allowLocal` dari
+  file itu **mengalahkan** `projects.json.trigger`. Per-app
+  `apps[].allowedClientIPs` tetap menjadi override.
+- `allowedClientIPs` menerima alamat IP dan CIDR IPv4/IPv6. Entri invalid atau kosong
+  ditolak saat load/save. Daftar kosong berarti semua IP remote diizinkan; trigger
+  lokal dikontrol `allowLocal`.
 - Di GUI, tab **Settings** membaca nilai efektif (fallback legacy ditandai di
-  Diagnostics) dan menulis `data/settings.json` hanya saat **Save Settings**.
+  Diagnostics) dan menulis `data/settings.json` hanya saat **Save Settings** atau
+  **Migrate Trigger**.
+- **Migrate Trigger** adalah aksi eksplisit: menyalin `projects.json.trigger` ke
+  `settings.json.trigger`; `projects.json` tidak diubah.
 
 ## Project Registry (`projects.json` v2)
 
@@ -258,6 +267,7 @@ di memori. Contoh lengkap: [projects.example.json](../projects.example.json) dan
       "packageInstall": "auto",
       "build": "auto",
       "queueRestart": true,
+      "webServerService": "Apache2.4",
       "services": {
         "stopBeforePull": [],
         "stopBeforeBuild": [],
@@ -276,8 +286,9 @@ Field penting:
 
 | Field | Keterangan |
 | --- | --- |
-| `trigger.allowedClientIPs` | Allowlist global IP/CIDR dari `SSH_CONNECTION`/`SSH_CLIENT` |
+| `trigger.allowedClientIPs` | Allowlist global IP/CIDR; `settings.json` menang bila ada |
 | `apps[].allowedClientIPs` | Override allowlist untuk satu app |
+| `apps[].webServerService` | Nama service Apache opsional di `services.json`; divalidasi `serviceType=apache` |
 | `preset` | `auto`, `laravel`, `node`, `bun`, `go`, `static`, `custom` |
 | `packageManager` | `auto`, `npm`, `pnpm`, `yarn`, `bun`, `none` |
 | `composer` / `artisan` / `packageInstall` / `build` | `auto`, `always`, `never` |

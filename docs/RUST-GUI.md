@@ -66,11 +66,16 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings**.
 
 - Tabel app registry: nama/ID, branch, toolchain, service lifecycle, status, last update.
+  Untuk preset Laravel ditampilkan versi PHP efektif; app dengan `webServerService`
+  menampilkan nama service Apache dan versi Apache dari settings efektif.
 - Tombol **Refresh**, **Add App**, **Check All**, **Update All**.
 - Aksi per app: Run, Check, Test, Log, Edit, Delete.
 - Form registrasi/edit: repo URL, local path (Browse…), branch, preset, package manager,
   composer/artisan/package-install/build, install/build command, queue restart,
-  allowlist IP per app, service lifecycle, clone-on-first-run, health check, dan webhook.
+  web server Apache opsional, allowlist IP per app, service lifecycle, clone-on-first-run,
+  health check, dan webhook.
+- Pilihan **Web server (Apache)** hanya berisi service `serviceType=apache` dari
+  `data/services.json`; kosong berarti app tidak terhubung eksplisit ke Apache.
 - **Test** menjalankan `git rev-parse` + `git ls-remote`, lalu menampilkan preset dan
   package manager hasil deteksi.
 - **Check All/Update All** berjalan di `spawn_blocking`, jadi UI tidak freeze.
@@ -116,6 +121,11 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
   dijalankan melalui `cmd.exe /c` oleh `SystemRunner`.
 - **Updater defaults**: log directory, max concurrent updates, timeout
   preflight/fetch/tool/clone, dan log retention days.
+- **Trigger**: editor allowlist IP/CIDR (dipisah koma atau newline), switch
+  **Allow local trigger**, IP client saat ini dari `SSH_CONNECTION`/`SSH_CLIENT`,
+  dan tombol **Migrate Trigger**. Migrasi hanya muncul saat `settings.json` belum ada
+  atau trigger `projects.json` berbeda; migrasi menyalin trigger ke `settings.json`
+  tanpa mengubah `projects.json`.
 - **Privileged Execution**: status Scheduled Task (`installed`, state, run level,
   user, logon type, last run, last result), field task name/user/logon type, dan
   tombol **Install Task**/**Repair Task**, **Remove Task**, **Test Task**.
@@ -125,8 +135,9 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
 - **Diagnostics**: tool wajib yang kosong, path tool yang tidak ditemukan,
   Scheduled Task yang belum terpasang, error status task, dan notice **Legacy
   fallback** saat `settings.json` belum ada.
-- Jika `settings.json` belum ada, tab menampilkan nilai efektif dari
-  `projects.json` dan **tidak** menulis file sampai **Save Settings** diklik.
+- Saat `settings.json` belum ada, tab menampilkan nilai efektif dari
+  `projects.json` dan **tidak** menulis file sampai **Save Settings** atau
+  **Migrate Trigger** diklik.
 - Tidak ada polling. Data dimuat saat tab dibuka atau **Reload** diklik; perubahan
   hanya disimpan lewat **Save Settings** dan hasilnya ditampilkan sebagai toast.
 
@@ -150,7 +161,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/commands.rs` | Command IPC (CRUD, install, start/stop, import, backup/restore, batch) |
 | `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log) |
 | `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
-| `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, Scheduled Task) |
+| `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, trigger migration, Scheduled Task) |
 | `crates/sm-gui/src/state.rs` | State aplikasi, service rows, status SCM, batch lock |
 | `crates/sm-gui/src/batch.rs` | Scheduler batch async + test concurrency |
 | `crates/sm-gui/src/util.rs` | Log tail, export, open path, app log |
@@ -170,18 +181,19 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 284 test):
+Test GUI mencakup (total workspace 301 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
 - Util: log tail, batas baris, export JSON, app log.
-- Updater: registry CRUD, state view, preservasi field lanjutan, validasi service.
+- Updater: registry CRUD, state view, preservasi field lanjutan, validasi service,
+  validasi `webServerService` (Apache vs non-Apache), dan versi PHP/Apache efektif.
 - Remote: normalisasi config, save/load, preview wrapper/direct, BatchMode/askpass, DPAPI password.
 - Settings: parser JSON status Scheduled Task, validasi nama task/user/logon type,
-  fallback settings lama, save/load helper, diagnostik, deteksi/resolusi path tool,
-  Apache root/config, dan test versi melalui file `.bat`.
+  fallback settings lama, save/load helper, migrasi trigger eksplisit, diagnostik,
+  deteksi/resolusi path tool, Apache root/config, dan test versi melalui file `.bat`.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
-  tab Settings, dan ikon/tema.
+  tab Settings (termasuk kartu Trigger dan field web server), dan ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 
@@ -199,5 +211,6 @@ Start-Process .\target\debug\sm-gui.exe
 - Rename service saat edit belum didukung (nama service dikunci).
 - Tab Settings: logon type `Password` belum didukung dari GUI (gunakan `Interactive`
   atau `S4U`), dan nama Scheduled Task tidak boleh memakai folder path.
-- Tab Settings tidak melakukan propagasi Apache/PHP ke service/app dan tidak
-  menyediakan UI migrasi trigger; keduanya fase berikutnya.
+- Sprint 2.1 sudah menyediakan trigger efektif, migrasi trigger eksplisit, dan tampilan
+  versi PHP/Apache per app. Propagasi/apply Apache otomatis (Sprint 2.2), parser
+  DocumentRoot (2.3), dan scan path PHP hardcoded/`${PHP}` (2.4) belum tersedia.

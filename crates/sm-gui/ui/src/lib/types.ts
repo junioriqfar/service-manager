@@ -131,6 +131,9 @@ export interface UpdaterApp {
   queueRestart: boolean;
   cloneOnFirstRun: boolean;
   allowedClientIPs: string[];
+  webServerService: string;
+  phpVersion: string;
+  apacheVersion: string;
   services: UpdaterServicePlan;
   healthCheck: UpdaterHealthCheck;
   notify: UpdaterNotify;
@@ -159,6 +162,7 @@ export interface UpdaterAppInput {
   queueRestart: boolean;
   cloneOnFirstRun: boolean;
   allowedClientIPs: string[];
+  webServerService: string;
   services: UpdaterServicePlan;
   healthCheck: UpdaterHealthCheck;
   notify: UpdaterNotify;
@@ -280,6 +284,8 @@ export interface SettingsDiagnostics {
 export interface SettingsView {
   settings: Settings;
   legacyFallback: boolean;
+  legacyTrigger: SettingsTrigger | null;
+  currentClientIp: string | null;
   diagnostics: SettingsDiagnostics;
 }
 

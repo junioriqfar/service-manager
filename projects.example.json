@@ -36,6 +36,7 @@
       "packageInstall": "auto",
       "build": "auto",
       "queueRestart": true,
+      "webServerService": "Apache2.4",
       "services": {
         "stopBeforePull": [],
         "stopBeforeBuild": [],

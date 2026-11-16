@@ -203,6 +203,10 @@ pub struct AppConfig {
     pub credential_profile: String,
     #[serde(default, rename = "allowedClientIPs", alias = "allowedClientIps")]
     pub allowed_client_ips: Vec<String>,
+    /// Nama service Apache di `services.json` yang menyajikan app ini.
+    /// Kosong berarti tidak terhubung eksplisit ke web server.
+    #[serde(default)]
+    pub web_server_service: String,
     #[serde(default)]
     pub clone_on_first_run: bool,
     #[serde(default)]
@@ -254,6 +258,7 @@ impl Default for AppConfig {
             branch: default_branch(),
             credential_profile: String::new(),
             allowed_client_ips: Vec::new(),
+            web_server_service: String::new(),
             clone_on_first_run: false,
             preset: Preset::Auto,
             composer: ToggleMode::Auto,
@@ -284,6 +289,7 @@ impl AppConfig {
         self.branch = self.branch.trim().to_string();
         self.credential_profile = self.credential_profile.trim().to_string();
         self.allowed_client_ips = normalize_list(&self.allowed_client_ips);
+        self.web_server_service = self.web_server_service.trim().to_string();
         self.install_command = self.install_command.trim().to_string();
         self.build_command = self.build_command.trim().to_string();
         self.pre_update_command = self.pre_update_command.trim().to_string();
@@ -650,7 +656,8 @@ mod tests {
                 "localPath": "D:\\Projects\\PHPProjects\\kasirin",
                 "branch": "main",
                 "preset": "laravel",
-                "packageManager": "npm"
+                "packageManager": "npm",
+                "webServerService": " Apache2.4 "
             }]
         }"#;
         let config: UpdaterConfig = serde_json::from_str(raw).unwrap();
@@ -658,10 +665,15 @@ mod tests {
         assert_eq!(config.apps.len(), 1);
         assert_eq!(config.apps[0].preset, Preset::Laravel);
         assert_eq!(config.apps[0].package_manager, PackageManager::Npm);
+        assert_eq!(config.apps[0].web_server_service, " Apache2.4 ");
         assert_eq!(
             config.trigger.allowed_client_ips,
             ["10.255.240.143", "10.255.240.0/24"]
         );
+
+        let mut config = config;
+        config.normalize();
+        assert_eq!(config.apps[0].web_server_service, "Apache2.4");
     }
 
     #[test]

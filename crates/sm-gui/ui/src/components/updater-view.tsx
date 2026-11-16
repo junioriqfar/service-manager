@@ -291,6 +291,24 @@ export function UpdaterView() {
                     <div className="text-xs text-muted-foreground">
                       {app.packageManager} · build {app.build}
                     </div>
+                    {app.preset === "laravel" && (
+                      <div className="text-xs text-muted-foreground">
+                        PHP {app.phpVersion || "version not tested"}
+                      </div>
+                    )}
+                    {app.webServerService && (
+                      <div
+                        className="text-xs text-muted-foreground"
+                        title={
+                          app.apacheVersion
+                            ? `Apache service ${app.webServerService} · ${app.apacheVersion}`
+                            : `Apache service ${app.webServerService}`
+                        }
+                      >
+                        Web server {app.webServerService}
+                        {app.apacheVersion ? ` · ${app.apacheVersion}` : ""}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="max-w-56 truncate text-xs" title={serviceSummary(app)}>
                     {serviceSummary(app)}

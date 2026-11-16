@@ -18,8 +18,8 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Client `sm-trigger` cross-platform (Windows/macOS/Linux) untuk memicu update via SSH tanpa polling.
 - GUI tab **Remote** di `sm-gui` untuk trigger via SSH dengan output live (Windows client), mendukung SSH key/agent atau password (DPAPI).
 - Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Run, Check, Test, Log, Edit, Delete.
-- GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, dan log.
-- GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
+- GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, log, serta tampilan versi PHP/Apache efektif dan `webServerService`.
+- GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, trigger allowlist + Migrate Trigger, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
 - Wrapper elevated `scripts/Invoke-UpdaterTask.ps1` + Scheduled Task `ServiceManager-Updater`.
 - Diagnosa headless `sm-diag`.
 
@@ -182,7 +182,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **284 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **301 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 

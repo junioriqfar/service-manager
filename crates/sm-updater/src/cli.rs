@@ -6,7 +6,7 @@ use sm_config::{load_projects, ConfigPaths, ProjectsFile};
 use sm_core::ToggleMode;
 
 use crate::credential::{store_credential, verify_remote, CredentialRequest, GitCredentialSink};
-use crate::ip::{app_allowed_for_ip, client_ip_from_env, ip_allowed};
+use crate::ip::{app_allowed_for_ip_with_trigger, client_ip_from_env, ip_allowed};
 use crate::registry::{load_config, save_config, AppConfig, PackageManager, Preset, UpdaterConfig};
 use crate::runner::{Runner, SystemRunner};
 use crate::scan::{discover_projects, ProjectInfo};
@@ -1228,6 +1228,16 @@ fn run_authorize(values: &[String]) -> i32 {
         }
     };
     let client_ip = client_ip_from_env();
+    let trigger = match crate::settings::effective_trigger(
+        &crate::settings::settings_path_for(&config_path),
+        &config.trigger,
+    ) {
+        Ok(trigger) => trigger,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
 
     let (allowed, label) = if let Some(id) = app {
         let Some(app) = config.find(&id) else {
@@ -1235,16 +1245,15 @@ fn run_authorize(values: &[String]) -> i32 {
             return 1;
         };
         (
-            app_allowed_for_ip(&config, app, client_ip),
+            app_allowed_for_ip_with_trigger(app, &trigger, client_ip),
             format!("app '{id}'"),
         )
     } else {
         let allowed = match client_ip {
             Some(ip) => {
-                config.trigger.allowed_client_ips.is_empty()
-                    || ip_allowed(ip, &config.trigger.allowed_client_ips)
+                trigger.allowed_client_ips.is_empty() || ip_allowed(ip, &trigger.allowed_client_ips)
             }
-            None => config.trigger.allow_local,
+            None => trigger.allow_local,
         };
         (allowed, "trigger global".to_string())
     };

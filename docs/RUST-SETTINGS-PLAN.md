@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai** (settings.json, backend, GUI Settings, tool detection, Scheduled Task management). Phase 2 (propagasi PHP/Apache, migrasi trigger) belum.
+Status: **Phase 1 selesai; Sprint 2.1 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime). Sprint 2.2–2.4 belum.
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -22,9 +22,9 @@ Dokumen ini menjawab revisi pengguna:
 | GUI tab Settings | Selesai |
 | Updater defaults | Selesai |
 | Privileged Execution: status/install/repair/remove/test Scheduled Task | Selesai |
-| Propagasi PHP/Apache + affected apps/services | Belum (Phase 2) |
-| Migrasi trigger global ke settings.json | Belum (Phase 2) |
-| `webServerService` per app | Belum (Phase 2) |
+| Propagasi PHP/Apache + affected apps/services | Sebagian (Sprint 2.1: effective version + `webServerService`; apply/affected di 2.2) |
+| Migrasi trigger global ke settings.json | Selesai (Sprint 2.1, eksplisit) |
+| `webServerService` per app | Selesai (Sprint 2.1) |
 | Doctor lengkap, audit, log retention, dry-run | Belum (Phase 3) |
 | Windows Service mode | Tidak diperlukan (no-login tidak dibutuhkan) |
 
@@ -36,7 +36,25 @@ Catatan implementasi Phase 1:
   password task yang disimpan plaintext.
 - `settings.json` belum otomatis dibuat saat startup; GUI menampilkan legacy fallback
   dan membuat file saat **Save Settings**.
-- Trigger allowlist masih memakai `projects.json` sampai Phase 2.
+- Trigger allowlist sudah memakai `settings.json` bila ada; lihat catatan Sprint 2.1.
+
+Catatan implementasi Sprint 2.1:
+
+- `AppConfig.webServerService` opsional. Jika diisi, GUI memvalidasi bahwa nama service
+  ada di `data/services.json` dan `serviceType=apache`.
+- Trigger efektif: `settings.json.trigger` authoritative; `projects.json.trigger` hanya
+  fallback saat `settings.json` belum ada. `sm-updater run/authorize` dan GUI memakai
+  trigger efektif ini.
+- `allowedClientIPs` divalidasi sebagai IP/CIDR IPv4 atau IPv6; entri kosong/invalid
+  ditolak dengan pesan jelas.
+- Migrasi trigger bersifat eksplisit lewat tombol **Migrate Trigger**. Command
+  `migrate_trigger_to_settings` menyalin `projects.json.trigger` ke `settings.json`
+  tanpa mengubah `projects.json`. Jika `settings.json` sudah ada, file lama dibackup
+  ke `backup/settings-<timestamp>.json`.
+- Daftar app Updater menampilkan versi PHP efektif (termasuk preset `auto` yang
+  terdeteksi Laravel) dan service/versi Apache dari settings efektif.
+- Belum termasuk Sprint 2.1: apply Apache (2.2), parser DocumentRoot (2.3), scan path
+  PHP hardcoded/`${PHP}` (2.4).
 
 ## 1. Keputusan Arsitektur
 
@@ -364,11 +382,11 @@ Tab **Settings**:
 ## 8. Acceptance Criteria Fase 2
 
 - [ ] Migrasi settings lama + backup.
-- [ ] Global trigger pindah ke settings.json.
+- [x] Global trigger pindah ke settings.json (Sprint 2.1; migrasi eksplisit).
 - [ ] Perubahan Apache menampilkan affected services/apps.
 - [ ] Apply Apache service baru setelah konfirmasi, dengan backup.
-- [ ] `webServerService` opsional pada app.
-- [ ] Effective PHP/Apache version tampil di daftar app.
+- [x] `webServerService` opsional pada app.
+- [x] Effective PHP/Apache version tampil di daftar app.
 
 ---
 
@@ -395,3 +413,49 @@ Tab **Settings**:
 | Agent D — Verifikasi | jalankan fmt/test/clippy, review diff, cek keamanan password | laporan verifikasi |
 
 Urutan: **A → B → C → D**. Fase 1 hanya A+B+D; C pada fase 2.
+
+---
+
+## 11. Phase 2 Sprint Plan (disetujui)
+
+Keputusan:
+
+1. **Affected app Apache**: `webServerService` eksplisit + auto-detect DocumentRoot
+   sebagai suggestion. Explicit menang.
+2. **Apache apply**: preview dulu, lalu tombol **Apply** terpisah.
+3. **Apply gagal**: settings baru tetap disimpan; `services.json` di-rollback;
+   status `pending/error` ditampilkan.
+4. **PHP**: path global; belum ada override per app.
+5. **Migrasi trigger**: wizard terpisah + backup, bukan otomatis saat Save.
+6. **`${PHP}`**: Sprint 2.4.
+
+### Sprint 2.1 — Fondasi
+
+Status: **Selesai**.
+
+- `webServerService` opsional di app + validasi terhadap service Apache.
+- Effective trigger dari `settings.json` (fallback `projects.json`).
+- Settings UI trigger allowlist + allowLocal + Migrate Trigger.
+- Effective PHP version/Apache service di tabel Updater.
+- Tests + docs.
+
+### Sprint 2.2 — Apache explicit propagation
+
+- Preview old/new Apache path/root/config.
+- Affected services dicocokkan dari old executable/root.
+- Affected apps dari `webServerService`.
+- Apply: backup, update `services.json`, apply SCM, stop/restart bila perlu, audit log.
+- Non-admin: settings disimpan, apply pending.
+
+### Sprint 2.3 — DocumentRoot auto-detect
+
+- Parser `httpd.conf` + `Include`/`IncludeOptional` (batas kedalaman).
+- Suggest mapping DocumentRoot → app.localPath.
+- User confirm sebelum menulis `webServerService`.
+
+### Sprint 2.4 — PHP hardcoded path + `${PHP}`
+
+- Scan custom commands/install/build/pre/post untuk path PHP lama.
+- Tampilkan affected app/field; jangan rewrite otomatis.
+- Dukungan `${PHP}`, `${PHP_HOME}`, `${APACHE_HOME}`, `${GIT}` pada config admin.
+- Tests + docs.

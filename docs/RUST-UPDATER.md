@@ -59,6 +59,10 @@ Dari PC client melalui SSH:
 ssh EGOV22@10.255.240.160 "C:\tools\ServiceManager\target\release\sm-updater.exe run --all"
 ```
 
+`run` dan `authorize` memakai trigger efektif: `settings.json.trigger` bila file ada,
+selain itu `projects.json.trigger`. `--client-ip` hanya tersedia untuk `run`; wrapper
+SSH memakai IP dari environment.
+
 Exit code:
 
 | Kode | Arti |
@@ -124,17 +128,22 @@ Template: [settings.example.json](../settings.example.json); file runtime
 - `tools` menyimpan path Git, PHP, Composer, Node, npm, pnpm, yarn, Bun, Go,
   Apache (`root`/`config`), dan NSSM. `version`/`detectedAt` diisi deteksi tool.
 - `updater` menyimpan `logDir`, `maxConcurrentUpdates`, timeout, dan retensi log.
+- `trigger` menyimpan `allowedClientIPs` dan `allowLocal`; nilainya divalidasi sebagai
+  IP/CIDR IPv4/IPv6. Jika `settings.json` ada, trigger ini authoritative.
 - `privilegedExecution` menyimpan `mode`, `taskName`, `userId`, dan `logonType` untuk
-  Scheduled Task di tab Settings. `trigger` dan `variables` disiapkan untuk fase berikutnya.
+  Scheduled Task di tab Settings.
 - Path wajib: Git, PHP, Composer, npm. Tool lain opsional.
 - Password/token plaintext ditolak saat load/save.
 - Tab **Settings** di GUI dapat mengisi path tool, menjalankan Auto-detect/Test,
-  mengatur default updater, serta Install/Repair/Remove/Test Scheduled Task.
+  mengatur default updater, mengedit trigger, serta Install/Repair/Remove/Test
+  Scheduled Task.
+- **Migrate Trigger** menyalin `projects.json.trigger` ke `settings.json.trigger`
+  secara eksplisit; `projects.json` tidak diubah.
 
 Jika `settings.json` belum ada, `sm-updater` memakai `settings`/`trigger` lama di
 `projects.json` sebagai fallback **tanpa menulis** file baru. Begitu `settings.json`
-ada, file itu authoritative untuk path toolchain dan `logDir`; migrasi eksplisit
-dilakukan pada fase berikutnya.
+ada, file itu authoritative untuk path toolchain, `logDir`, dan trigger allowlist;
+migrasi eksplisit tersedia dari tab Settings.
 
 ## Registry v2 (`data/projects.json`)
 
@@ -170,6 +179,7 @@ dilakukan pada fase berikutnya.
       "packageManager": "npm",
       "packageInstall": "auto",
       "build": "never",
+      "webServerService": "Apache2.4",
       "services": {
         "stopBeforePull": [],
         "stopBeforeBuild": [],
@@ -199,9 +209,15 @@ Field v1 yang tersedia: `scanRoots`, `allowedClientIPs`, `gitPath`, `phpPath`,
 | `installCommand` / `buildCommand` | string | Override perintah install/build (PowerShell) |
 | `commands.preUpdate` / `postUpdate` | array command | Program + args, dijalankan sebelum/sesudah merge |
 | `cloneOnFirstRun` | bool | Clone repo jika `localPath` belum ada |
+| `webServerService` | string | Nama service Apache di `services.json` yang menyajikan app; kosong = tidak terhubung eksplisit |
 | `healthCheck` | object | HTTP check setelah service restart |
 | `notify` | object | Webhook best-effort untuk status terpilih |
 | `migrationPolicy` | `block` | Migration tidak pernah dijalankan otomatis |
+
+Tabel **Updater** menampilkan versi PHP efektif dari `settings.tools.php.version`
+untuk preset `laravel`, serta service Apache (`webServerService`) dan versi
+`settings.tools.apache.version` bila diisi. Nilai ini hanya tampilan; apply ulang
+service Apache adalah Sprint 2.2.
 
 ## Deteksi Toolchain
 
@@ -338,12 +354,15 @@ Migration tidak pernah dijalankan otomatis.
 
 Dua lapis:
 
-- `trigger.allowedClientIPs` untuk semua app.
+- `trigger.allowedClientIPs` untuk semua app. Sumbernya `settings.json.trigger` bila
+  file ada; jika belum, fallback ke `projects.json.trigger`.
 - `app.allowedClientIPs` (jika diisi) menggantikan allowlist global untuk app tersebut.
 
 Format: IP tunggal (`10.255.240.143`), CIDR (`10.255.240.0/24`), atau IPv6 (`::1`,
-`2001:db8::/32`). IP client dibaca dari `SSH_CONNECTION`/`SSH_CLIENT`. Trigger lokal
-tanpa SSH diizinkan bila `trigger.allowLocal=true`.
+`2001:db8::/32`). Pola invalid/kosong ditolak saat load/save `settings.json`. IP
+client dibaca dari `SSH_CONNECTION`/`SSH_CLIENT`. Trigger lokal tanpa SSH diizinkan
+bila `trigger.allowLocal=true`. `sm-updater authorize` memakai trigger efektif yang
+sama dengan `sm-updater run`.
 
 ## Status
 

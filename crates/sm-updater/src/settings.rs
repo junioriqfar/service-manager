@@ -9,8 +9,10 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
+use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sm_config::ConfigPaths;
@@ -66,14 +68,6 @@ fn default_task_name() -> String {
 
 fn default_logon_type() -> String {
     "Interactive".to_string()
-}
-
-fn normalize_list(values: &[String]) -> Vec<String> {
-    values
-        .iter()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .collect()
 }
 
 fn has_control_characters(value: &str) -> bool {
@@ -457,6 +451,35 @@ impl Default for SettingsTrigger {
     }
 }
 
+impl SettingsTrigger {
+    fn normalize(&mut self) {
+        // Sengaja tidak membuang entri kosong: validasi harus menolaknya dengan
+        // pesan yang jelas, bukan diam-diam mengabaikan salah ketik.
+        self.allowed_client_ips = self
+            .allowed_client_ips
+            .iter()
+            .map(|value| value.trim().to_string())
+            .collect();
+    }
+
+    fn validate(&self) -> Result<(), SettingsError> {
+        for (index, pattern) in self.allowed_client_ips.iter().enumerate() {
+            let pattern = pattern.trim();
+            if pattern.is_empty() {
+                return Err(invalid(format!(
+                    "trigger.allowedClientIPs[{index}] kosong. Hapus entri kosong atau isi alamat IP/CIDR."
+                )));
+            }
+            if pattern.parse::<IpAddr>().is_err() && pattern.parse::<IpNet>().is_err() {
+                return Err(invalid(format!(
+                    "Pola IP/CIDR trigger tidak valid: '{pattern}'. Gunakan alamat IP atau CIDR IPv4/IPv6 (contoh 10.0.0.0/24)."
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrivilegedExecution {
@@ -541,7 +564,7 @@ impl Settings {
     pub fn normalize(&mut self) {
         self.tools.normalize();
         self.updater.log_dir = self.updater.log_dir.trim().to_string();
-        self.trigger.allowed_client_ips = normalize_list(&self.trigger.allowed_client_ips);
+        self.trigger.normalize();
         self.privileged_execution.normalize();
         self.variables = std::mem::take(&mut self.variables)
             .into_iter()
@@ -559,6 +582,7 @@ impl Settings {
         }
         self.tools.validate()?;
         self.updater.validate()?;
+        self.trigger.validate()?;
         self.privileged_execution.validate()?;
         for key in self.variables.keys() {
             if is_sensitive_key(key) {
@@ -681,6 +705,29 @@ pub fn effective_settings(
     match load_settings(settings_path)? {
         Some(settings) => Ok(settings),
         None => Ok(from_legacy(legacy_settings, legacy_trigger)),
+    }
+}
+
+/// Trigger efektif: `settings.json.trigger` jika file ada, selain itu
+/// `projects.json.trigger` lama.
+///
+/// Ini adalah sumber otorisasi trigger; jangan memakai `config.trigger`
+/// langsung ketika `settings.json` sudah ada.
+pub fn effective_trigger(
+    settings_path: &Path,
+    legacy_trigger: &TriggerSettings,
+) -> Result<TriggerSettings, SettingsError> {
+    match load_settings(settings_path)? {
+        Some(settings) => Ok(trigger_from_settings(&settings)),
+        None => Ok(legacy_trigger.clone()),
+    }
+}
+
+/// Konversi `settings.json.trigger` ke tipe registry lama.
+pub fn trigger_from_settings(settings: &Settings) -> TriggerSettings {
+    TriggerSettings {
+        allowed_client_ips: settings.trigger.allowed_client_ips.clone(),
+        allow_local: settings.trigger.allow_local,
     }
 }
 
@@ -819,6 +866,89 @@ mod tests {
         assert_eq!(effective.tools.git.path, r"C:\legacy\git.exe");
         assert_eq!(effective.updater.log_dir, r"C:\legacy\logs");
         assert!(!path.exists(), "fallback must not write settings.json");
+    }
+
+    #[test]
+    fn effective_trigger_prefers_settings_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("data/settings.json");
+        let mut settings = base_settings();
+        settings.trigger.allowed_client_ips =
+            vec!["192.168.10.0/24".into(), "2001:db8::/32".into()];
+        settings.trigger.allow_local = true;
+        save_settings(&path, &settings).unwrap();
+
+        let legacy = TriggerSettings {
+            allowed_client_ips: vec!["10.0.0.1".into()],
+            allow_local: false,
+        };
+        let effective = effective_trigger(&path, &legacy).unwrap();
+
+        assert_eq!(
+            effective.allowed_client_ips,
+            ["192.168.10.0/24", "2001:db8::/32"]
+        );
+        assert!(effective.allow_local);
+    }
+
+    #[test]
+    fn effective_trigger_falls_back_to_legacy() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("data/settings.json");
+        let effective = effective_trigger(&path, &legacy_trigger()).unwrap();
+
+        assert_eq!(effective.allowed_client_ips, ["10.0.0.1", "127.0.0.1"]);
+        assert!(!effective.allow_local);
+        assert!(!path.exists(), "fallback must not write settings.json");
+    }
+
+    #[test]
+    fn validation_accepts_ipv4_ipv6_and_cidr_trigger_patterns() {
+        let mut settings = base_settings();
+        settings.trigger.allowed_client_ips = vec![
+            "10.255.240.143".into(),
+            "10.255.240.0/24".into(),
+            "::1".into(),
+            "2001:db8::/32".into(),
+            " 127.0.0.1 ".into(),
+        ];
+        settings.normalize();
+        settings.validate().unwrap();
+        assert_eq!(
+            settings.trigger.allowed_client_ips[4], "127.0.0.1",
+            "patterns are trimmed"
+        );
+    }
+
+    #[test]
+    fn validation_rejects_invalid_and_empty_trigger_patterns() {
+        let mut settings = base_settings();
+        settings.trigger.allowed_client_ips = vec!["10.0.0.0/33".into()];
+        let error = settings.validate().unwrap_err().to_string();
+        assert!(error.contains("tidak valid"));
+        assert!(error.contains("10.0.0.0/33"));
+
+        settings.trigger.allowed_client_ips = vec!["not-an-ip".into()];
+        assert!(settings
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("tidak valid"));
+
+        settings.trigger.allowed_client_ips = vec!["127.0.0.1".into(), "   ".into()];
+        let error = settings.validate().unwrap_err().to_string();
+        assert!(error.contains("kosong"));
+    }
+
+    #[test]
+    fn loading_rejects_invalid_trigger_patterns() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        let raw = r#"{"version":1,"trigger":{"allowedClientIPs":["10.0.0.0/99"]}}"#;
+        fs::write(&path, raw).unwrap();
+
+        let error = load_settings(&path).unwrap_err().to_string();
+        assert!(error.contains("tidak valid"));
     }
 
     #[test]

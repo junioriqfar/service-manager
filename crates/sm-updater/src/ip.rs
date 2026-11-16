@@ -3,7 +3,7 @@ use std::net::IpAddr;
 
 use ipnet::IpNet;
 
-use crate::registry::{AppConfig, UpdaterConfig};
+use crate::registry::{AppConfig, TriggerSettings, UpdaterConfig};
 
 /// IP client dari environment SSH, sama seperti ProjectUpdate.ps1.
 pub fn client_ip_from_env() -> Option<IpAddr> {
@@ -39,15 +39,25 @@ pub fn app_allowed_for_ip(
     app: &AppConfig,
     client_ip: Option<IpAddr>,
 ) -> bool {
+    app_allowed_for_ip_with_trigger(app, &config.trigger, client_ip)
+}
+
+/// Versi yang menerima trigger efektif (settings.json mengalahkan
+/// `projects.json.trigger`). Perilaku override per app tetap sama.
+pub fn app_allowed_for_ip_with_trigger(
+    app: &AppConfig,
+    trigger: &TriggerSettings,
+    client_ip: Option<IpAddr>,
+) -> bool {
     let patterns: &[String] = if app.allowed_client_ips.is_empty() {
-        &config.trigger.allowed_client_ips
+        &trigger.allowed_client_ips
     } else {
         &app.allowed_client_ips
     };
 
     match client_ip {
         Some(ip) => patterns.is_empty() || ip_allowed(ip, patterns),
-        None => config.trigger.allow_local,
+        None => trigger.allow_local,
     }
 }
 
