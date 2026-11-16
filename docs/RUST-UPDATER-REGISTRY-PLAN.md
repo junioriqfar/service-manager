@@ -115,6 +115,13 @@ Versi 1 tetap dibaca. `scanRoots`/`projects` lama dapat dimigrasikan menjadi `ap
       "installCommand": "",
       "buildCommand": "",
       "queueRestart": true,
+      "services": {
+        "stopBeforePull": [],
+        "stopBeforeBuild": ["opencode-quota"],
+        "restartAfter": ["bsi-qris-api", "opencode-quota"],
+        "startAfter": [],
+        "waitTimeoutSeconds": 60
+      },
       "migrationPolicy": "block",
       "preUpdateCommand": "",
       "postUpdateCommand": "",
@@ -233,10 +240,108 @@ Catatan:
 | Laravel + bun | `preset=laravel`, `composer=auto`, `packageManager=bun`, `build=auto` | composer install, `bun install --frozen-lockfile`, `bun run build`, artisan |
 | Bun-only | `preset=bun`, `composer=never`, `packageManager=bun`, `buildCommand="bun run build:win"` | `bun install --frozen-lockfile`, build command |
 | Node-only | `preset=node`, `composer=never`, `packageManager=npm`, `build=never` | `npm ci`; restart service |
-| Go | `preset=custom`, `composer=never`, `packageManager=none`, `buildCommand="make build-windows"` | build command; restart service |
+| Go | `preset=go`, `composer=never`, `packageManager=none`, `buildCommand="make build-windows"` | build command; restart service |
 | Static | `preset=static`, `composer=never`, `packageManager=none`, `build=never` | `git pull` saja |
 
 Dengan model ini, aplikasi baru cukup diarahkan ke folder/repo; updater mendeteksi toolchain yang ada, lalu operator dapat mengoreksi lewat field eksplisit jika hasil deteksi ambigu.
+
+### 5.4 Preset Custom, Custom Commands, dan Service Lifecycle
+
+#### Preset Custom
+
+`preset: "custom"` **bukan mengedit kode aplikasi**. Artinya operator menuliskan **command plan** secara manual di registry/GUI, karena project tidak cocok dengan preset otomatis.
+
+Command plan memakai program + argumen array (bukan string shell) agar aman:
+
+```json
+{
+  "preset": "custom",
+  "commands": {
+    "install": [
+      {
+        "name": "bun install",
+        "program": "C:\\Users\\EGOV22\\.bun\\bin\\bun.exe",
+        "args": ["install", "--frozen-lockfile"],
+        "timeoutSeconds": 300
+      }
+    ],
+    "build": [
+      {
+        "name": "build server",
+        "program": "C:\\Program Files\\Git\\usr\\bin\\make.exe",
+        "args": ["build-windows"],
+        "timeoutSeconds": 600
+      }
+    ],
+    "preUpdate": [],
+    "postUpdate": []
+  }
+}
+```
+
+Field command:
+
+| Field | Wajib | Keterangan |
+| --- | --- | --- |
+| `name` | Tidak | Label di log |
+| `program` | Ya | Path executable |
+| `args` | Tidak | Array argumen, bukan string shell |
+| `cwd` | Tidak | Default: `localPath` |
+| `timeoutSeconds` | Tidak | Default 300 |
+| `env` | Tidak | Environment tambahan |
+| `continueOnError` | Tidak | Default `false` |
+
+Untuk perintah kompleks yang memang butuh shell, sediakan field `shell` eksplisit dan hanya boleh diisi admin. Jangan mengeksekusi string dari repo.
+
+#### Service Lifecycle
+
+Integrasi Service Manager memakai nama service Windows dari `data/services.json`.
+
+```json
+"services": {
+  "stopBeforePull": [],
+  "stopBeforeBuild": ["opencode-quota"],
+  "restartAfter": ["bsi-qris-api", "opencode-quota"],
+  "startAfter": [],
+  "waitTimeoutSeconds": 60
+}
+```
+
+| Field | Semantik |
+| --- | --- |
+| `stopBeforePull` | Stop service sebelum `git merge`; dipakai jika file yang di-track terkunci proses. |
+| `stopBeforeBuild` | Stop service sebelum build; wajib untuk binary yang tidak bisa diganti saat service hidup. |
+| `restartAfter` | Restart service setelah update/build. Jika service dihentikan oleh updater, service dinyalakan kembali. |
+| `startAfter` | Pastikan service berjalan setelah update, meskipun sebelumnya stopped. |
+| `waitTimeoutSeconds` | Batas tunggu state `Stopped`/`Running`. |
+
+Aturan:
+
+- `check`/dry-run **tidak pernah** stop/restart service.
+- Service hanya disentuh jika ada perubahan yang benar-benar di-deploy.
+- Jika `stopBeforeBuild` dijalankan lalu build gagal, updater **wajib mencoba menyalakan kembali** service yang tadi dihentikan (best-effort) dan mencatat status `failed`.
+- Jika stop gagal (mis. bukan Administrator), update dibatalkan sebelum menyentuh file.
+- Jika restart/start gagal setelah update, status menjadi `failed`/`degraded` dan notifikasi dikirim.
+- Service yang tidak ada di `data/services.json` atau Windows SCM ditolak saat validasi.
+
+Contoh penerapan:
+
+| App | Stop sebelum build | Restart setelah |
+| --- | --- | --- |
+| `bsi-qris-api` | — | `bsi-qris-api` |
+| `opencode-quota` | `opencode-quota` | `opencode-quota` |
+| `presensi-sidoarjo-server` | `PresensiSidoarjoServer` | `PresensiSidoarjoServer` |
+| Laravel queue | — | `queue:restart` (bukan service restart) |
+
+#### Hak Akses
+
+Stop/start/restart service membutuhkan **Administrator**. Trigger updater harus dijalankan:
+
+- sebagai Administrator di server, atau
+- sebagai akun service yang memiliki hak SCM, atau
+- melalui `GlobalUpdater` yang dikonfigurasi elevated.
+
+Jika tidak elevated, updater harus gagal **sebelum** mengubah file, bukan setelah build.
 
 ## 6. Fitur yang Akan Dibuat
 
@@ -250,7 +355,9 @@ Dengan model ini, aplikasi baru cukup diarahkan ke folder/repo; updater mendetek
 | Test connection | `git ls-remote`, validasi path/branch/Laravel |
 | Clone on first run | Clone repo jika `localPath` belum ada |
 | Import dari scan | Ubah project hasil scan menjadi registry entry |
-| Validasi | ID unik, URL bersih, path tidak konflik |
+| Custom command plan | Install/build/pre/post command manual untuk preset custom |
+| Service lifecycle | Atur stopBeforePull/stopBeforeBuild/restartAfter/startAfter |
+| Validasi | ID unik, URL bersih, path tidak konflik, nama service ada |
 
 ### 6.2 Trigger dari Client (PC 143 dan Lainnya)
 
@@ -276,18 +383,20 @@ Pipeline lama dipertahankan:
 1. Validasi repo/path/branch.
 2. **Resolusi toolchain** (explicit → lockfile → preset).
 3. Cek working tree bersih.
-4. Preflight auth remote.
-5. Fetch + fast-forward.
-6. Blokir migration.
-7. Composer jika terdeteksi/diaktifkan.
-8. Package manager install jika terdeteksi/diaktifkan.
-9. Build jika ada script/perintah; skip jika tidak ada.
-10. `php artisan optimize:clear` jika Laravel.
-11. `php artisan queue:restart` jika Laravel + queue.
-12. Pre/post command.
-13. Restart service terpilih (opsional).
+4. Preflight auth remote + fetch.
+5. Blokir migration.
+6. **Stop service `stopBeforePull`** (jika dikonfigurasi dan akan merge).
+7. `git merge --ff-only`.
+8. Composer/package install jika terdeteksi.
+9. **Stop service `stopBeforeBuild`** (hanya jika build akan dijalankan).
+10. Build (`npm/bun/pnpm/yarn`, `buildCommand`, atau `make`).
+11. `php artisan optimize:clear` + `queue:restart` jika Laravel.
+12. **Restart/start service `restartAfter`/`startAfter`**.
+13. Pre/post command.
 14. Health check (opsional).
 15. Simpan state + log + rollback hint.
+
+Jika langkah 9 sudah menghentikan service lalu langkah 10 gagal, updater harus mencoba menyalakan kembali service tersebut di blok `finally` dan mencatat `failed`.
 
 Perintah per toolchain:
 
@@ -359,7 +468,10 @@ ssh EGOV22@10.255.240.160 "C:\tools\ServiceManager\target\release\sm-updater.exe
 - Tab **Services** dan **Updater**.
 - Tabel app terdaftar: name, repo, branch, status, last check, last update.
 - Tombol: Add, Edit, Remove, Test, **Update All**, Check All, Refresh.
-- Form registrasi: repo URL, local path, branch, composer/build, queue restart, service restart, hooks.
+- Form registrasi: repo URL, local path, branch, preset/toolchain, composer/build, queue restart.
+- Bagian Service Lifecycle: stopBeforePull, stopBeforeBuild, restartAfter, startAfter, timeout.
+- Bagian Advanced Commands untuk preset `custom` (program + args + timeout).
+- Validasi nama service terhadap `data/services.json`.
 - Status badge + log.
 - Tidak ada background polling; semua aksi dipicu tombol/user.
 
@@ -440,6 +552,8 @@ Trigger client (Windows / macOS / Linux)
 - `pre/postUpdateCommand` hanya dari config admin.
 - Lock mencegah trigger ganda.
 - Migration tetap manual.
+- Stop/restart service membutuhkan Administrator; updater gagal sebelum mengubah file jika tidak elevated.
+- Custom command memakai program + args, bukan string shell dari repo.
 - Log di-redaksi, termasuk IP yang ditolak.
 - Trigger client memverifikasi host key (`known_hosts`) dan tidak menyimpan password.
 - Tidak ada HTTP trigger listener di server pada fase awal.
@@ -455,13 +569,13 @@ Trigger client (Windows / macOS / Linux)
 
 | Fase | Deliverable | Estimasi |
 | --- | --- | --- |
-| A. Registry & trigger server | Schema v2, migrasi, toolchain detection (npm/bun/composer/go/static), `app add/list/edit/remove/test`, `run --all`, IP/CIDR allowlist, lock, firewall docs, test | 5-7 hari |
+| A. Registry & trigger server | Schema v2, migrasi, toolchain detection (npm/bun/composer/go/static), custom commands, `app add/list/edit/remove/test`, `run --all`, IP/CIDR allowlist, lock, firewall docs, test | 5-7 hari |
 | B. Trigger client cross-platform | `sm-trigger` CLI Windows/macOS/Linux + SSH profile + host key + status | 3-5 hari |
 | C. GUI Updater server | Tab, tabel, form registrasi, test, Update All/Check All, status/log | 5-7 hari |
-| D. Integrasi | Restart service, pre/post hook, health check, webhook opsional | 3-5 hari |
+| D. Integrasi | Service lifecycle (stop sebelum build, restart setelah), pre/post hook, health check, webhook opsional | 4-6 hari |
 | E. Opsional | GUI client macOS/Linux, Task Scheduler/polling, daemon, rollback | 3-5 hari |
 
-**Total fase inti:** 16-24 person-days; fitur opsional 3-5 hari tambahan.
+**Total fase inti:** 17-25 person-days; fitur opsional 3-5 hari tambahan.
 
 ## 11. Kriteria Penerimaan
 
@@ -472,8 +586,12 @@ Trigger client (Windows / macOS / Linux)
 - [ ] Trigger tidak melakukan polling; hanya satu kali cek/update.
 - [ ] App tanpa perubahan tidak diubah.
 - [ ] Deteksi Laravel+npm, Bun-only, Node-only, Go, dan static berjalan sesuai profil.
+- [ ] Preset `custom` menjalankan `commands.install/build/preUpdate/postUpdate` dengan program + args.
 - [ ] Ambiguous lockfile (mis. npm + bun) ditolak dan minta config eksplisit.
 - [ ] `buildCommand`/`installCommand` override dihormati.
+- [ ] `stopBeforeBuild` menghentikan service sebelum build dan `restartAfter` menyalakannya kembali.
+- [ ] Jika build gagal setelah service dihentikan, service dicoba dinyalakan kembali.
+- [ ] Service stop/restart gagal jika updater tidak elevated, sebelum file diubah.
 - [ ] Working tree kotor/branch salah/migration baru tidak diupdate otomatis.
 - [ ] Satu trigger memproses semua app enabled dengan lock.
 - [ ] State/log per app tersedia di CLI dan GUI.
@@ -488,6 +606,7 @@ Trigger client (Windows / macOS / Linux)
 - Menjalankan engine updater penuh di macOS/Linux (hanya trigger client).
 - Membuka HTTP trigger listener tanpa kebutuhan.
 - Menyimpan password SSH di client.
+- Menjalankan kode/string shell arbitrer dari repo; custom command harus dideklarasikan admin.
 - Auto-run migration.
 - Merge conflict resolution otomatis.
 - Menyimpan token di config.
@@ -502,8 +621,9 @@ Trigger client (Windows / macOS / Linux)
 5. Apakah ada lebih dari satu server tujuan (profil server di client)?
 6. Apakah clone repo otomatis diperlukan untuk app baru?
 7. Apakah `opencode-quota` harus build `build:win` (server exe) atau `build:web` (frontend)?
-8. Apakah project Go (`presensi-sidoarjo-server`) masuk scope update otomatis, atau hanya Laravel/Node/Bun?
-9. Apakah service queue perlu direstart selain `php artisan queue:restart`?
+8. Apakah project Go (`presensi-sidoarjo-server`) cukup lewat `buildCommand: make build-windows`?
+9. Apakah updater dijalankan sebagai Administrator, atau lewat service elevated?
+10. Apakah service queue perlu direstart selain `php artisan queue:restart`?
 
 ## 14. Rekomendasi
 
@@ -511,8 +631,9 @@ Trigger client (Windows / macOS / Linux)
 2. Bangun registry + `sm-updater run --all` + IP/CIDR allowlist + firewall + lock sebagai fitur inti.
 3. Buat `sm-trigger` CLI cross-platform lebih dulu; GUI client menyusul.
 4. Server tetap Windows; jangan port engine updater ke macOS/Linux.
-5. Tambahkan GUI tab Updater server setelah CLI stabil.
-6. Polling/daemon/webhook hanya jika nanti benar-benar dibutuhkan.
+5. Implementasi service lifecycle sebelum mengaktifkan auto-update production.
+6. Tambahkan GUI tab Updater server setelah CLI stabil.
+7. Polling/daemon/webhook hanya jika nanti benar-benar dibutuhkan.
 
 ---
 
