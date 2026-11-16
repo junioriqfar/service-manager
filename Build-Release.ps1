@@ -87,7 +87,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination (Join-Path $stage 'README.md')
     $docs = Join-Path $stage 'docs'
     New-Item -ItemType Directory -Path $docs -Force | Out-Null
-    foreach ($doc in @('RUST-README.md', 'RUST-GUI.md', 'RUST-SERVICES.md', 'RUST-UPDATER.md', 'RUST-UPDATER-PLAN.md', 'RUST-UPDATER-REGISTRY-PLAN.md', 'RUST-TRIGGER.md', 'RUST-SECURITY.md', 'RUST-RELEASE.md')) {
+    foreach ($doc in @('RUST-README.md', 'RUST-GUI.md', 'RUST-SERVICES.md', 'RUST-UPDATER.md', 'RUST-UPDATER-PLAN.md', 'RUST-UPDATER-REGISTRY-PLAN.md', 'RUST-TRIGGER.md', 'RUST-SETTINGS-PLAN.md', 'RUST-SECURITY.md', 'RUST-RELEASE.md')) {
         $path = Join-Path $repoRoot (Join-Path 'docs' $doc)
         if (Test-Path -LiteralPath $path) {
             Copy-Item -LiteralPath $path -Destination $docs
