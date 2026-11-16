@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.servicemanager.rs",
   "build": {
-    "frontendDist": "ui"
+    "frontendDist": "ui/dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -29,6 +29,6 @@
     "targets": ["nsis"],
     "icon": ["icons/icon.ico"],
     "shortDescription": "Service Manager - NSSM & native service manager",
-    "longDescription": "GUI untuk mengelola Windows Service NSSM, Apache, dan PostgreSQL."
+    "longDescription": "GUI for managing Windows services via NSSM, Apache, and PostgreSQL."
   }
 }

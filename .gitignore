@@ -3,6 +3,8 @@ services.json
 projects.json
 services-export-*.json
 services-broken-*.json
+services.json.bak-*
+projects.json.bak-*
 
 # Runtime artifacts
 logs/
@@ -27,6 +29,10 @@ service-manager-rs/target/
 
 # Tauri generated schemas
 service-manager-rs/crates/sm-gui/gen/
+
+# Frontend dependencies and build output
+service-manager-rs/crates/sm-gui/ui/node_modules/
+service-manager-rs/crates/sm-gui/ui/dist/
 
 # Release artifacts
 service-manager-rs/dist/

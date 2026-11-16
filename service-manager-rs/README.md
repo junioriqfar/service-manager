@@ -29,6 +29,13 @@ Binary:
 
 ```powershell
 cd service-manager-rs
+
+# Frontend React (wajib sebelum cargo build/test GUI)
+Push-Location crates/sm-gui/ui
+npm ci
+npm run build
+Pop-Location
+
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
@@ -102,7 +109,7 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 
 ## GUI Tauri (Phase 3)
 
-`sm-gui` menyediakan UI setara WinForms: tabel service, form tambah/edit, import, backup/restore, log viewer, dan banner elevasi. Detail ada di [docs/RUST-GUI.md](../docs/RUST-GUI.md).
+`sm-gui` menyediakan UI React + shadCN setara WinForms: tabel service, form tambah/edit, import, backup/restore, log viewer, dark/light theme, dan banner elevasi. Detail ada di [docs/RUST-GUI.md](../docs/RUST-GUI.md).
 
 - UI sepenuhnya Bahasa Inggris.
 - Tombol **Browse…** membuka file picker (Application) dan folder picker (Working Directory).

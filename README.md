@@ -158,9 +158,9 @@ cargo run -p sm-gui --bin sm-diag
 cargo run -p sm-updater -- check --project kasirin
 ```
 
-Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md), [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md), [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md).
+Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md), [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md), [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md). Build frontend membutuhkan Node.js 22+ dan npm.
 
-GUI Rust menggunakan UI Bahasa Inggris, tombol **Browse…** untuk Application/Working Directory, dan context menu klik kanan pada daftar service (Edit/Install/Start/Stop/Restart/Open Log/Delete).
+GUI Rust menggunakan React + shadCN UI Bahasa Inggris dengan dark/light mode, tombol **Browse…** untuk Application/Working Directory, dan context menu klik kanan pada daftar service (Edit/Install/Start/Stop/Restart/Open Log/Delete).
 
 Build portable:
 

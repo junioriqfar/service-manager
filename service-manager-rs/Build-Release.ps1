@@ -21,6 +21,34 @@ try {
     $version = $match.Groups[1].Value
     $name = "ServiceManager-RS-$version"
 
+    $ui = Join-Path $root 'crates\sm-gui\ui'
+    if (-not (Test-Path -LiteralPath $ui)) {
+        throw "Frontend folder tidak ditemukan: $ui"
+    }
+    $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($null -eq $npm) {
+        $npm = Get-Command npm -ErrorAction SilentlyContinue
+    }
+    if ($null -eq $npm) {
+        throw 'npm tidak ditemukan. Install Node.js dari https://nodejs.org/ terlebih dahulu.'
+    }
+
+    Write-Host 'Build frontend React + Vite...'
+    Push-Location $ui
+    try {
+        if (Test-Path -LiteralPath (Join-Path $ui 'package-lock.json')) {
+            & $npm.Source ci
+            if ($LASTEXITCODE -ne 0) { throw 'npm ci gagal.' }
+        } else {
+            & $npm.Source install
+            if ($LASTEXITCODE -ne 0) { throw 'npm install gagal.' }
+        }
+        & $npm.Source run build
+        if ($LASTEXITCODE -ne 0) { throw 'npm run build gagal.' }
+    } finally {
+        Pop-Location
+    }
+
     Write-Host "Build release $name..."
     & cargo build --release -p sm-gui -p sm-updater
     if ($LASTEXITCODE -ne 0) { throw 'cargo build gagal.' }

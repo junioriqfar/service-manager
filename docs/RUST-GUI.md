@@ -4,8 +4,14 @@ Dokumen ini menjelaskan GUI Rust yang menggantikan WinForms PowerShell, termasuk
 
 ## Menjalankan
 
+Frontend React perlu dibangun terlebih dahulu karena Tauri menyematkan `ui/dist`:
+
 ```powershell
 cd service-manager-rs
+Push-Location crates/sm-gui/ui
+npm ci
+npm run build
+Pop-Location
 cargo run -p sm-gui
 ```
 
@@ -16,7 +22,7 @@ $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
 cargo run -p sm-gui
 ```
 
-Build debug menghasilkan `service-manager-rs\target\debug\sm-gui.exe`. Build release:
+Build debug menghasilkan `service-manager-rs\target\debug\sm-gui.exe`. Build release (frontend harus sudah dibangun, atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`/`npm run build` otomatis):
 
 ```powershell
 cargo build --release -p sm-gui
@@ -40,14 +46,14 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 
 ## Fitur
 
-- UI sepenuhnya dalam Bahasa Inggris.
+- UI React + TypeScript (Vite, Tailwind CSS, shadCN UI) sepenuhnya dalam Bahasa Inggris.
+- Tema terang/gelap/sistem dengan ikon Sun/Moon/Monitor; pilihan disimpan di `localStorage`, default mengikuti preferensi sistem.
 - Tombol **Browse…** pada Application (file picker) dan Working Directory (folder picker).
 - Klik kanan baris service menampilkan context menu: Edit, Install, Start, Stop, Restart, Open Log, Delete.
 - Toolbar atas hanya berisi aksi global: Start All, Stop All, Restart All, Backup, Restore, Folder, App Log, About.
 - Add, Import, dan Refresh dipindahkan ke header **Service List**; aksi per-service hanya lewat context menu.
 
 - Tabel service: status, nama, display name, jenis, application, startup, restart.
-- Toolbar: Tambah, Edit, Hapus, Install, Import, Refresh, Start/Stop/Restart, Start/Stop/Restart Semua, Backup, Restore, Folder, Log App, Tentang.
 - Form tambah/edit dengan field khusus Apache (`apacheRoot`, `apacheConfig`) dan PostgreSQL (`pgData`, `pgAccount`).
 - Import service terpasang (NSSM/Apache/PostgreSQL) via enumerasi SCM.
 - Log viewer: stdout + stderr, auto-refresh 2 detik, batas 128 KB dan 600 baris, tombol buka file.
@@ -58,15 +64,15 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 
 ## Batch Async (Anti-Freeze)
 
-Tombol **Start Semua / Stop Semua / Restart Semua** tidak berjalan di UI thread.
+Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 
 - Service diurutkan per lapisan dependensi (`start_layers`).
 - Start memproses lapisan dari dependensi ke dependent; Stop membalik urutan lapisan; Restart memakai urutan start per service (stop lalu start).
 - Maksimal 4 operasi paralel (`Semaphore`), sehingga service independen berjalan bersamaan.
 - Setiap operasi berjalan di `tokio::task::spawn_blocking`; UI tetap merender dan menerima input.
 - Progress dikirim via event Tauri `batch-started`, `batch-progress`, `batch-finished` dan ditampilkan per service.
-- Tombol **Batalkan** menghentikan penjadwalan service berikutnya. Operasi yang sedang berjalan berhenti secara kooperatif (polling 250 ms) atau setelah timeout 60 detik.
-- Satu batch pada satu waktu; klik ganda ditolak dengan pesan "Operasi batch lain sedang berjalan."
+- Tombol **Cancel** menghentikan penjadwalan service berikutnya. Operasi yang sedang berjalan berhenti secara kooperatif (polling 250 ms) atau setelah timeout 60 detik.
+- Satu batch pada satu waktu; klik ganda ditolak dengan pesan "Another batch operation is already running."
 
 ## Struktur
 
@@ -77,12 +83,18 @@ Tombol **Start Semua / Stop Semua / Restart Semua** tidak berjalan di UI thread.
 | `crates/sm-gui/src/state.rs` | State aplikasi, service rows, status SCM, batch lock |
 | `crates/sm-gui/src/batch.rs` | Scheduler batch async + test concurrency |
 | `crates/sm-gui/src/util.rs` | Log tail, export, open path, app log |
-| `crates/sm-gui/ui/` | HTML/CSS/JS (vanilla, tanpa npm) |
+| `crates/sm-gui/ui/` | Frontend React + TypeScript: source `ui/src`, build Vite `ui/dist` |
 | `crates/sm-gui/capabilities/default.json` | Capability Tauri (`core:default`) |
 
 ## Pengujian
 
+Frontend harus dibangun sebelum `cargo test`/`cargo build` karena `tauri.conf.json` memakai `ui/dist`:
+
 ```powershell
+cd crates/sm-gui/ui
+npm ci
+npm run build
+cd ../../..
 cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
@@ -92,6 +104,7 @@ Test GUI mencakup:
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
 - Util: log tail, batas baris, export JSON, app log.
+- UI: label Bahasa Inggris, context menu, tombol browse, toolbar global, dan ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 

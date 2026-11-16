@@ -9,6 +9,7 @@ Panduan build, packaging, CI, dan deployment untuk `service-manager-rs`.
 | Rust | stable + `rustfmt` + `clippy` (rustup) |
 | Visual Studio Build Tools | MSVC C++ workload (Windows) |
 | WebView2 Runtime | Untuk GUI Tauri (umumnya sudah ada di Windows 10/11/Server modern) |
+| Node.js | Node.js 22+ dan npm untuk build frontend React/shadCN |
 | NSSM | `C:\tools\nssm\nssm.exe` atau `..\nssm\nssm.exe` |
 | Tauri CLI (opsional) | Untuk installer NSIS: `cargo install tauri-cli --version "^2"` |
 
@@ -37,6 +38,10 @@ service-manager-rs\dist\ServiceManager-RS-0.1.0.zip
 Langkah manual yang sama:
 
 ```powershell
+cd service-manager-rs\crates\sm-gui\ui
+npm ci
+npm run build
+cd ..\..\..
 cargo build --release -p sm-gui -p sm-updater
 ```
 
@@ -52,7 +57,7 @@ cd service-manager-rs
 .\Build-Release.ps1 -Bundle
 ```
 
-Atau langsung:
+Atau langsung (frontend `ui/dist` harus sudah dibangun dengan `npm run build`):
 
 ```powershell
 cd service-manager-rs\crates\sm-gui

@@ -47,12 +47,29 @@ fn main() {
 
 #[cfg(test)]
 mod ui_tests {
-    const HTML: &str = include_str!("../ui/index.html");
-    const JS: &str = include_str!("../ui/app.js");
+    const INDEX_HTML: &str = include_str!("../ui/index.html");
+    const APP: &str = include_str!("../ui/src/App.tsx");
+    const SERVICE_TABLE: &str = include_str!("../ui/src/components/service-table.tsx");
+    const SERVICE_FORM: &str = include_str!("../ui/src/components/service-form-dialog.tsx");
+    const SERVICE_ACTIONS: &str = include_str!("../ui/src/components/service-action-dialogs.tsx");
+    const LOG_PANEL: &str = include_str!("../ui/src/components/log-panel.tsx");
+    const BATCH_DIALOG: &str = include_str!("../ui/src/components/batch-dialog.tsx");
+    const IMPORT_DIALOG: &str = include_str!("../ui/src/components/import-dialog.tsx");
+    const ABOUT_DIALOG: &str = include_str!("../ui/src/components/about-dialog.tsx");
+    const ADMIN_BANNER: &str = include_str!("../ui/src/components/admin-banner.tsx");
+    const THEME_TOGGLE: &str = include_str!("../ui/src/components/theme-toggle.tsx");
+    const THEME_PROVIDER: &str = include_str!("../ui/src/components/theme-provider.tsx");
+
+    fn all_sources() -> String {
+        format!(
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}"
+        )
+    }
 
     #[test]
     fn ui_is_english() {
-        assert!(HTML.contains("lang=\"en\""));
+        assert!(INDEX_HTML.contains("lang=\"en\""));
+        let sources = all_sources();
         for word in [
             "Tambah",
             "Hapus",
@@ -66,44 +83,61 @@ mod ui_tests {
             "Tentang",
             "Tidak",
         ] {
-            assert!(!HTML.contains(word), "untranslated HTML word: {word}");
+            assert!(!sources.contains(word), "untranslated UI word: {word}");
         }
-        for word in ["Simpan", "Batal", "Daftar", "Jenis", "berjalan", "Tidak"] {
-            assert!(!JS.contains(word), "untranslated JS word: {word}");
+        for label in [
+            "Service Manager",
+            "Service List",
+            "Add Service",
+            "Edit Service",
+            "Right-click a service for actions",
+            "Service log: (none selected)",
+            "Auto refresh",
+            "About Service Manager",
+        ] {
+            assert!(sources.contains(label), "missing English label: {label}");
+        }
+        for emoji in ["▶", "⏹", "🔄", "➕", "🗑", "☀", "🌙"] {
+            assert!(!sources.contains(emoji), "emoji used as UI icon: {emoji}");
         }
     }
 
     #[test]
     fn ui_has_browse_buttons_and_context_menu() {
-        assert!(HTML.contains("id=\"btn-browse-exe\""));
-        assert!(HTML.contains("id=\"btn-browse-work\""));
-        assert!(HTML.contains("id=\"service-context-menu\""));
-        for action in [
-            "edit", "install", "start", "stop", "restart", "log", "delete",
+        assert!(SERVICE_FORM.contains("pick_executable"));
+        assert!(SERVICE_FORM.contains("pick_directory"));
+        assert!(SERVICE_FORM.contains("Browse…"));
+        assert!(SERVICE_TABLE.contains("ContextMenu"));
+        assert!(SERVICE_TABLE.contains("onEdit(service)"));
+        for action in ["install", "start", "stop", "restart", "log", "delete"] {
+            assert!(
+                SERVICE_TABLE.contains(&format!("onAction(\"{action}\"")),
+                "missing context action: {action}"
+            );
+        }
+        for label in [
+            "Edit", "Install", "Start", "Stop", "Restart", "Open Log", "Delete",
         ] {
             assert!(
-                HTML.contains(&format!("data-action=\"{action}\"")),
-                "missing context action: {action}"
+                SERVICE_TABLE.contains(label),
+                "missing context menu label: {label}"
             );
         }
     }
 
     #[test]
     fn top_toolbar_only_has_global_actions() {
-        for id in [
-            "btn-start-all",
-            "btn-stop-all",
-            "btn-restart-all",
-            "btn-backup",
-            "btn-restore",
-            "btn-open-folder",
-            "btn-app-log",
-            "btn-about",
+        for label in [
+            "Start All",
+            "Stop All",
+            "Restart All",
+            "Backup",
+            "Restore",
+            "Folder",
+            "App Log",
+            "About",
         ] {
-            assert!(
-                HTML.contains(&format!("id=\"{id}\"")),
-                "missing global button: {id}"
-            );
+            assert!(APP.contains(label), "missing global button: {label}");
         }
         for id in [
             "btn-edit",
@@ -114,15 +148,24 @@ mod ui_tests {
             "btn-restart",
         ] {
             assert!(
-                !HTML.contains(&format!("id=\"{id}\"")),
+                !APP.contains(id) && !SERVICE_TABLE.contains(id),
                 "per-service button still in toolbar: {id}"
             );
         }
-        for id in ["btn-add", "btn-import", "btn-refresh"] {
+        for label in ["Add", "Import", "Refresh"] {
             assert!(
-                HTML.contains(&format!("id=\"{id}\"")),
-                "missing config button: {id}"
+                SERVICE_TABLE.contains(label),
+                "missing service list button: {label}"
             );
+        }
+        assert!(THEME_TOGGLE.contains("Sun"));
+        assert!(THEME_TOGGLE.contains("Moon"));
+        assert!(THEME_TOGGLE.contains("Monitor"));
+        assert!(THEME_PROVIDER.contains("localStorage"));
+        assert!(THEME_PROVIDER.contains("service-manager-theme"));
+        assert!(THEME_PROVIDER.contains("classList.toggle(\"dark\""));
+        for source in [APP, SERVICE_TABLE, SERVICE_FORM] {
+            assert!(source.contains("lucide-react"));
         }
     }
 }

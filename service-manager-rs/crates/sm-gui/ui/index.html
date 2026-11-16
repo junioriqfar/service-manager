@@ -1,245 +1,26 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Service Manager</title>
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div id="admin-banner" class="banner hidden">
-    <span>The application is not running as Administrator. Install/Start/Stop/Restart will fail.</span>
-    <button id="btn-elevate" class="btn btn-warn">Run as Administrator</button>
-  </div>
-
-  <header class="app-header">
-    <div class="title-block">
-      <h1>Service Manager</h1>
-      <span id="config-home" class="muted"></span>
-    </div>
-    <div class="toolbar">
-      <div class="group">
-        <button id="btn-start-all" class="btn">Start All</button>
-        <button id="btn-stop-all" class="btn">Stop All</button>
-        <button id="btn-restart-all" class="btn">Restart All</button>
-      </div>
-      <div class="group">
-        <button id="btn-backup" class="btn">Backup</button>
-        <button id="btn-restore" class="btn">Restore</button>
-        <button id="btn-open-folder" class="btn">Folder</button>
-        <button id="btn-app-log" class="btn">App Log</button>
-        <button id="btn-about" class="btn">About</button>
-      </div>
-    </div>
-  </header>
-
-  <main class="workspace">
-    <section class="panel table-panel">
-      <div class="panel-head">
-        <strong>Service List</strong>
-        <span id="counts" class="muted">0 registered</span>
-        <span class="spacer"></span>
-        <span class="muted hint">Right-click a service for actions</span>
-        <button id="btn-add" class="btn btn-small">Add</button>
-        <button id="btn-import" class="btn btn-small">Import</button>
-        <button id="btn-refresh" class="btn btn-small">Refresh</button>
-      </div>
-      <div class="table-wrap">
-        <table id="service-table">
-          <thead>
-            <tr>
-              <th style="width: 110px">Status</th>
-              <th style="width: 150px">Service Name</th>
-              <th style="width: 170px">Display Name</th>
-              <th style="width: 100px">Type</th>
-              <th>Application</th>
-              <th style="width: 130px">Startup</th>
-              <th style="width: 90px">Restart</th>
-            </tr>
-          </thead>
-          <tbody id="service-body"></tbody>
-        </table>
-        <div id="empty-state" class="empty hidden">
-          The list is empty. Click <strong>Import</strong> to scan installed services,
-          or <strong>Add</strong> to create a new config.
-        </div>
-      </div>
-    </section>
-
-    <section class="panel log-panel">
-      <div class="panel-head log-head">
-        <strong id="log-title">Service log: (none selected)</strong>
-        <span id="log-path" class="muted"></span>
-        <label class="inline"><input id="log-auto" type="checkbox" checked /> Auto refresh</label>
-        <button id="btn-log-reload" class="btn btn-small">Reload</button>
-        <button id="btn-log-open" class="btn btn-small">Open file</button>
-      </div>
-      <pre id="log-output" class="log-output"></pre>
-    </section>
-  </main>
-
-  <footer class="statusbar">
-    <span id="status-text">Ready</span>
-    <span id="status-counts" class="muted">0 registered | 0 installed | 0 running</span>
-  </footer>
-
-  <div id="service-modal" class="modal hidden">
-    <div class="modal-card wide">
-      <div class="modal-head">
-        <h2 id="service-modal-title">Add Service</h2>
-        <button class="icon-btn" data-close="service-modal">×</button>
-      </div>
-      <div class="modal-body">
-        <div id="service-error" class="form-error hidden"></div>
-        <div class="grid-2">
-          <label>Type
-            <select id="f-type">
-              <option value="nssm">NSSM</option>
-              <option value="apache">Apache (native)</option>
-              <option value="postgresql">PostgreSQL (native)</option>
-            </select>
-          </label>
-          <label>Service name
-            <input id="f-name" type="text" placeholder="my-app" />
-          </label>
-          <label>Display name
-            <input id="f-display" type="text" placeholder="My App" />
-          </label>
-          <label>Application (.exe)
-            <div class="input-row">
-              <input id="f-exe" type="text" placeholder="C:\apps\app.exe" />
-              <button id="btn-browse-exe" class="btn btn-small" type="button" title="Browse for executable">Browse…</button>
-            </div>
-          </label>
-          <label class="span-2">Arguments
-            <input id="f-args" type="text" placeholder="index.js --port 3000" />
-          </label>
-          <label class="span-2">Working directory
-            <div class="input-row">
-              <input id="f-work" type="text" placeholder="C:\apps" />
-              <button id="btn-browse-work" class="btn btn-small" type="button" title="Browse for folder">Browse…</button>
-            </div>
-          </label>
-          <label>Startup
-            <select id="f-startup">
-              <option value="auto">Automatic</option>
-              <option value="delayed">Automatic (Delayed)</option>
-              <option value="manual">Manual</option>
-            </select>
-          </label>
-          <label>Restart delay (seconds)
-            <input id="f-delay" type="number" min="1" value="5" />
-          </label>
-          <label class="span-2">Dependencies (space or comma separated)
-            <input id="f-deps" type="text" placeholder="Tcpip, postgresql-16" />
-          </label>
-          <label class="span-2 inline-label"><input id="f-restart" type="checkbox" checked /> Restart automatically on crash</label>
-          <label>Stdout log
-            <input id="f-stdout" type="text" placeholder="C:\apps\logs\out.log" />
-          </label>
-          <label>Stderr log
-            <input id="f-stderr" type="text" placeholder="C:\apps\logs\err.log" />
-          </label>
-          <div class="span-2 native-field" data-native="apache">
-            <div class="grid-2">
-              <label>Apache root
-                <input id="f-apache-root" type="text" placeholder="C:\Apache24" />
-              </label>
-              <label>Apache config
-                <input id="f-apache-config" type="text" placeholder="conf/httpd.conf" />
-              </label>
-            </div>
-          </div>
-          <div class="span-2 native-field" data-native="postgresql">
-            <div class="grid-2">
-              <label>PGDATA
-                <input id="f-pg-data" type="text" placeholder="C:\PostgreSQL\16\data" />
-              </label>
-              <label>Service account
-                <input id="f-pg-account" type="text" placeholder="NT AUTHORITY\NetworkService" />
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <span id="service-hint" class="muted"></span>
-        <div class="spacer"></div>
-        <button class="btn" id="btn-service-cancel">Cancel</button>
-        <button class="btn btn-primary" id="btn-service-save">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="import-modal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>Import Services</h2>
-        <button class="icon-btn" data-close="import-modal">×</button>
-      </div>
-      <div class="modal-body">
-        <p class="muted">Detected NSSM/Apache/PostgreSQL services that are not in the config.</p>
-        <div id="import-list" class="checklist"></div>
-      </div>
-      <div class="modal-foot">
-        <span id="import-count" class="muted"></span>
-        <div class="spacer"></div>
-        <button class="btn" data-close="import-modal">Cancel</button>
-        <button class="btn btn-primary" id="btn-import-confirm">Import</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="batch-modal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2 id="batch-title">Running operation...</h2>
-      </div>
-      <div class="modal-body">
-        <progress id="batch-progress" value="0" max="1"></progress>
-        <p id="batch-text" class="muted">Preparing...</p>
-        <div id="batch-log" class="batch-log"></div>
-      </div>
-      <div class="modal-foot">
-        <div class="spacer"></div>
-        <button class="btn btn-warn" id="btn-batch-cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="about-modal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>About Service Manager</h2>
-        <button class="icon-btn" data-close="about-modal">×</button>
-      </div>
-      <div class="modal-body">
-        <p>Service Manager Rust version 0.1.0</p>
-        <pre id="about-paths" class="about-paths"></pre>
-        <p class="muted">The application must run as Administrator to change services.</p>
-      </div>
-      <div class="modal-foot">
-        <div class="spacer"></div>
-        <button class="btn" data-close="about-modal">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="service-context-menu" class="context-menu hidden">
-    <button type="button" data-action="edit">Edit</button>
-    <button type="button" data-action="install">Install</button>
-    <div class="menu-sep"></div>
-    <button type="button" data-action="start">Start</button>
-    <button type="button" data-action="stop">Stop</button>
-    <button type="button" data-action="restart">Restart</button>
-    <div class="menu-sep"></div>
-    <button type="button" data-action="log">Open Log</button>
-    <button type="button" data-action="delete" class="danger">Delete</button>
-  </div>
-
-  <input id="restore-file" type="file" accept=".json,application/json" class="hidden" />
-  <div id="toasts" class="toasts"></div>
-
-  <script src="app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>Service Manager</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("service-manager-theme");
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var dark = stored === "dark" || ((!stored || stored === "system") && prefersDark);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {
+          // Ignore storage access errors; React applies the default theme.
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
