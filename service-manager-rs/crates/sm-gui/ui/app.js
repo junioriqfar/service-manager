@@ -96,12 +96,6 @@ function updateButtons() {
   const hasInstalled = services.some((item) => item.installed);
   const busy = batchRunning;
 
-  $("btn-edit").disabled = !service || busy;
-  $("btn-delete").disabled = !service || busy;
-  $("btn-install").disabled = !service || installed || busy;
-  $("btn-start").disabled = !installed || running || busy;
-  $("btn-stop").disabled = !installed || !running || busy;
-  $("btn-restart").disabled = !installed || busy;
   $("btn-start-all").disabled = !hasInstalled || busy;
   $("btn-stop-all").disabled = !hasInstalled || busy;
   $("btn-restart-all").disabled = !hasInstalled || busy;
@@ -568,14 +562,8 @@ async function handleContextAction(action) {
 
 function bindEvents() {
   $("btn-add").addEventListener("click", () => openServiceModal(false));
-  $("btn-edit").addEventListener("click", () => openServiceModal(true));
-  $("btn-delete").addEventListener("click", deleteSelected);
-  $("btn-install").addEventListener("click", installSelected);
   $("btn-refresh").addEventListener("click", refresh);
   $("btn-import").addEventListener("click", openImport);
-  $("btn-start").addEventListener("click", () => singleAction("start_service"));
-  $("btn-stop").addEventListener("click", () => singleAction("stop_service"));
-  $("btn-restart").addEventListener("click", () => singleAction("restart_service"));
   $("btn-start-all").addEventListener("click", () => runBatch("start"));
   $("btn-stop-all").addEventListener("click", () => runBatch("stop"));
   $("btn-restart-all").addEventListener("click", () => runBatch("restart"));

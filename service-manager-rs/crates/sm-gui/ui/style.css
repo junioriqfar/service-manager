@@ -134,6 +134,12 @@ body {
   min-height: 36px;
 }
 
+.panel-head .hint { margin-right: 2px; }
+
+@media (max-width: 1100px) {
+  .panel-head .hint { display: none; }
+}
+
 .log-head { flex-wrap: wrap; }
 .log-head .inline { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 #log-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

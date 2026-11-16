@@ -87,4 +87,42 @@ mod ui_tests {
             );
         }
     }
+
+    #[test]
+    fn top_toolbar_only_has_global_actions() {
+        for id in [
+            "btn-start-all",
+            "btn-stop-all",
+            "btn-restart-all",
+            "btn-backup",
+            "btn-restore",
+            "btn-open-folder",
+            "btn-app-log",
+            "btn-about",
+        ] {
+            assert!(
+                HTML.contains(&format!("id=\"{id}\"")),
+                "missing global button: {id}"
+            );
+        }
+        for id in [
+            "btn-edit",
+            "btn-delete",
+            "btn-install",
+            "btn-start",
+            "btn-stop",
+            "btn-restart",
+        ] {
+            assert!(
+                !HTML.contains(&format!("id=\"{id}\"")),
+                "per-service button still in toolbar: {id}"
+            );
+        }
+        for id in ["btn-add", "btn-import", "btn-refresh"] {
+            assert!(
+                HTML.contains(&format!("id=\"{id}\"")),
+                "missing config button: {id}"
+            );
+        }
+    }
 }

@@ -19,21 +19,6 @@
     </div>
     <div class="toolbar">
       <div class="group">
-        <button id="btn-add" class="btn">Add</button>
-        <button id="btn-edit" class="btn">Edit</button>
-        <button id="btn-delete" class="btn">Delete</button>
-        <button id="btn-install" class="btn">Install</button>
-      </div>
-      <div class="group">
-        <button id="btn-import" class="btn">Import</button>
-        <button id="btn-refresh" class="btn">Refresh</button>
-      </div>
-      <div class="group">
-        <button id="btn-start" class="btn">Start</button>
-        <button id="btn-stop" class="btn">Stop</button>
-        <button id="btn-restart" class="btn">Restart</button>
-      </div>
-      <div class="group">
         <button id="btn-start-all" class="btn">Start All</button>
         <button id="btn-stop-all" class="btn">Stop All</button>
         <button id="btn-restart-all" class="btn">Restart All</button>
@@ -53,6 +38,11 @@
       <div class="panel-head">
         <strong>Service List</strong>
         <span id="counts" class="muted">0 registered</span>
+        <span class="spacer"></span>
+        <span class="muted hint">Right-click a service for actions</span>
+        <button id="btn-add" class="btn btn-small">Add</button>
+        <button id="btn-import" class="btn btn-small">Import</button>
+        <button id="btn-refresh" class="btn btn-small">Refresh</button>
       </div>
       <div class="table-wrap">
         <table id="service-table">

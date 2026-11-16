@@ -106,6 +106,7 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 
 - UI sepenuhnya Bahasa Inggris.
 - Tombol **Browse…** membuka file picker (Application) dan folder picker (Working Directory).
+- Toolbar atas hanya aksi global; Add/Import/Refresh ada di header Service List.
 - Klik kanan baris service menampilkan context menu Edit/Install/Start/Stop/Restart/Open Log/Delete.
 
 Batch Start/Stop/Restart berjalan di background:

@@ -43,6 +43,8 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 - UI sepenuhnya dalam Bahasa Inggris.
 - Tombol **Browse…** pada Application (file picker) dan Working Directory (folder picker).
 - Klik kanan baris service menampilkan context menu: Edit, Install, Start, Stop, Restart, Open Log, Delete.
+- Toolbar atas hanya berisi aksi global: Start All, Stop All, Restart All, Backup, Restore, Folder, App Log, About.
+- Add, Import, dan Refresh dipindahkan ke header **Service List**; aksi per-service hanya lewat context menu.
 
 - Tabel service: status, nama, display name, jenis, application, startup, restart.
 - Toolbar: Tambah, Edit, Hapus, Install, Import, Refresh, Start/Stop/Restart, Start/Stop/Restart Semua, Backup, Restore, Folder, Log App, Tentang.
