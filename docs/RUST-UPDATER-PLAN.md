@@ -201,7 +201,7 @@ Prioritas: **P0** = penting untuk operasi aman, **P1** = peningkatan, **P2** = n
 | Fitur | Manfaat |
 | --- | --- |
 | **Built-in scheduler/service mode** | Tidak perlu Task Scheduler eksternal |
-| **UI integration** | Selesai: tab Updater di `sm-gui` |
+| **UI integration** | Selesai: tab Updater dan Remote di `sm-gui` |
 | **Git submodule/LFS handling** | Project yang memakai submodule/LFS |
 | **Multi-remote/SSH docs** | Dukungan remote selain HTTPS/GCM |
 | **Backup snapshot sebelum deploy** | Rollback file non-Git (mis. storage) |

@@ -98,8 +98,16 @@ Tab **Updater** di `sm-gui` menyediakan:
 - daftar app + status terakhir;
 - Add/Edit/Remove/Test app;
 - Check All / Update All dan run per app;
-- form toolchain, service lifecycle, allowlist per app;
+- form toolchain, service lifecycle, allowlist per app, clone-on-first-run,
+  health check, dan webhook;
 - log updater terbaru.
+
+Tab **Remote** menyediakan trigger SSH dari mesin client Windows:
+
+- host/user/port/identity/wrapper/remote binary/remote config;
+- Preview perintah, Test SSH (`BatchMode=yes`), Check/Update All, Check/Run App;
+- output stdout/stderr live;
+- konfigurasi di `data/trigger-client.json` (tanpa password/token).
 
 Tidak ada polling; semua aksi dipicu tombol.
 

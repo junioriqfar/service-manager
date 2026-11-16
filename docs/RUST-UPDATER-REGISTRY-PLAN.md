@@ -2,7 +2,7 @@
 
 Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + update yang dipicu dari PC 143**. Fokusnya bukan polling setiap menit, tetapi satu trigger aman dari komputer Anda ke server 160.
 
-- Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle, clone-on-first-run, health check, webhook), **Phase B selesai** (`sm-trigger`, GUI Updater, wrapper Scheduled Task). Sisa backlog: update paralel (`maxConcurrentUpdates`) dan scheduler opsional.
+- Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle, clone-on-first-run, health check, webhook), **Phase B selesai** (`sm-trigger`, GUI Updater, GUI Remote, wrapper Scheduled Task). Sisa backlog: update paralel (`maxConcurrentUpdates`), scheduler opsional, dan GUI client macOS/Linux.
 - Basis: `sm-updater` + `sm-trigger` + GUI Updater (250 test workspace)
 - Prinsip: trigger eksplisit, aman, idempoten, tanpa polling default
 - Config target: `data/projects.json` versi 2 (kompatibel versi 1)
@@ -25,6 +25,7 @@ Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** 
 | Scheduler/polling | Tidak dipakai | Default `false` |
 | `sm-trigger` cross-platform | Selesai | Windows/macOS/Linux, shell ke `ssh` |
 | GUI tab Updater | Selesai | Registry CRUD, test, run/check, log |
+| GUI tab Remote | Selesai | Host/user/key/wrapper, preview, test SSH, run streaming |
 | Wrapper Scheduled Task elevated | Selesai | `scripts/Invoke-UpdaterTask.ps1` + action/installer |
 
 Catatan implementasi:
@@ -506,16 +507,21 @@ Contoh trigger SSH dari PC 143:
 ssh EGOV22@10.255.240.160 "C:\tools\ServiceManager\target\release\sm-updater.exe run --all"
 ```
 
-### 6.6 GUI (Tab Updater)
+### 6.6 GUI (Tab Updater dan Remote)
 
-- Tab **Services** dan **Updater**.
-- Tabel app terdaftar: name, repo, branch, status, last check, last update.
-- Tombol: Add, Edit, Remove, Test, **Update All**, Check All, Refresh.
-- Form registrasi: repo URL, local path, branch, preset/toolchain, composer/build, queue restart.
-- Bagian Service Lifecycle: stopBeforePull, stopBeforeBuild, restartAfter, startAfter, timeout.
-- Bagian Advanced Commands untuk preset `custom` (program + args + timeout).
-- Validasi nama service terhadap `data/services.json`.
-- Status badge + log.
+- Tiga tab: **Services**, **Updater**, **Remote**.
+- Tab **Updater**:
+  - Tabel app terdaftar: name, repo, branch, status, last check, last update.
+  - Tombol: Add, Edit, Remove, Test, **Update All**, Check All, Refresh.
+  - Form registrasi: repo URL, local path, branch, preset/toolchain, composer/build, queue restart,
+    service lifecycle, allowlist IP, clone-on-first-run, health check, webhook.
+  - Validasi nama service terhadap `data/services.json`.
+  - Status badge + log.
+- Tab **Remote**:
+  - Field host, user, port, identity, wrapper, remote binary, remote config, app ID.
+  - Preview perintah SSH, Test SSH (`BatchMode=yes`), Check/Update All, Check/Run App.
+  - Output stdout/stderr live via event Tauri.
+  - Konfigurasi disimpan di `data/trigger-client.json` (tidak di-commit).
 - Tidak ada background polling; semua aksi dipicu tombol/user.
 
 ### 6.7 Trigger Client Cross-Platform
@@ -525,8 +531,8 @@ Aplikasi trigger dipisahkan dari server agar bisa dibangun untuk Windows, macOS,
 | Komponen | Platform | Isi |
 | --- | --- | --- |
 | `sm-updater` | **Windows saja** | Engine update, Git/Composer/npm, SCM service, PowerShell hooks |
-| `sm-trigger` | Windows, macOS, Linux | Client SSH: Check All / Update All / status |
-| `sm-gui` | **Windows saja** | Service Manager + tab Updater lokal server |
+| `sm-trigger` | Windows, macOS, Linux | Client SSH: Check All / Update All / app tunggal |
+| `sm-gui` | **Windows saja** | Service Manager + tab Updater lokal server + tab Remote SSH client |
 
 Fitur `sm-trigger`:
 
@@ -540,10 +546,9 @@ Fitur `sm-trigger`:
   sm-trigger --host 10.255.240.160 --user EGOV22 --all
   sm-trigger --host 10.255.240.160 --user EGOV22 --all --check
   sm-trigger --host 10.255.240.160 --user EGOV22 --app kasirin
-  sm-trigger --host 10.255.240.160 --user EGOV22 --status
   ```
-- Opsional GUI Tauri ringan dengan tombol **Check All**, **Update All**, **Status**, dan pilihan profil server.
-- Output `--json` dari server (rencana) agar client bisa menampilkan status terstruktur.
+- GUI Remote (Windows): tab **Remote** di `sm-gui` dengan Preview, Test SSH, dan output live.
+- Opsional berikutnya: GUI client macOS/Linux dan output `--json` terstruktur.
 
 Build target:
 
@@ -620,6 +625,9 @@ Trigger client (Windows / macOS / Linux)
 
 **Total fase inti:** 17-25 person-days; fitur opsional 3-5 hari tambahan.
 
+Status: **A-D selesai**. E sebagian: GUI client Windows (tab Remote) selesai;
+GUI macOS/Linux dan scheduler/daemon belum.
+
 ## 11. Kriteria Penerimaan
 
 - [ ] App harus terdaftar sebelum diproses `run --all`.
@@ -671,13 +679,13 @@ Trigger client (Windows / macOS / Linux)
 
 ## 14. Rekomendasi
 
-1. **Pertahankan model trigger SSH** dari PC 143; jangan bangun polling di fase awal.
-2. Bangun registry + `sm-updater run --all` + IP/CIDR allowlist + firewall + lock sebagai fitur inti.
-3. Buat `sm-trigger` CLI cross-platform lebih dulu; GUI client menyusul.
-4. Server tetap Windows; jangan port engine updater ke macOS/Linux.
-5. Implementasi service lifecycle sebelum mengaktifkan auto-update production.
-6. Tambahkan GUI tab Updater server setelah CLI stabil.
-7. Polling/daemon/webhook hanya jika nanti benar-benar dibutuhkan.
+1. **Pertahankan model trigger SSH** dari PC 143; jangan bangun polling.
+2. Registry + `sm-updater run --all` + IP/CIDR allowlist + firewall + lock + service lifecycle sudah menjadi fitur inti.
+3. `sm-trigger` CLI cross-platform sudah ada; GUI client Windows tersedia di tab **Remote**.
+4. Server tetap Windows; engine updater tidak diport ke macOS/Linux.
+5. Service lifecycle sudah aktif dan menggunakan preflight elevated.
+6. Tab **Updater** dan **Remote** sudah tersedia di `sm-gui`.
+7. Polling/daemon hanya jika nanti benar-benar dibutuhkan.
 
 ---
 

@@ -140,7 +140,9 @@ Test GUI mencakup (total workspace 250 test):
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
 - Util: log tail, batas baris, export JSON, app log.
-- UI: label Bahasa Inggris, context menu, tombol browse, toolbar global, dan ikon/tema.
+- Updater: registry CRUD, state view, preservasi field lanjutan, validasi service.
+- Remote: normalisasi config, save/load, preview wrapper/direct, BatchMode.
+- UI: label Bahasa Inggris, context menu, tombol browse, toolbar global, tab Remote, dan ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 

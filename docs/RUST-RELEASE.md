@@ -149,17 +149,21 @@ git push origin v0.1.0
    ```
 7. Uji:
    ```powershell
-   .\sm-updater.exe list
-   .\sm-updater.exe check --project kasirin
+   .\sm-updater.exe app list
+   .\sm-updater.exe run --all --check
+   .\sm-trigger.exe --host 10.255.240.160 --user EGOV22 --all --check --dry-run
    .\sm-diag.exe
    ```
+   Atau buka tab **Updater** / **Remote** di `sm-gui`.
 
 Config dibaca dari `<folder exe>\data`. Gunakan `SERVICE_MANAGER_HOME` untuk memakai folder config lain (misalnya saat development).
 
 ## Migrasi Config
 
 - Aplikasi PowerShell lama sudah dihapus dari repositori; repositori ini hanya berisi implementasi Rust.
-- Format `data/services.json` dan `data/projects.json` tetap versi 1.
+- Format `data/services.json` tetap versi 1; `data/projects.json` versi 2 (v1 dibaca/dimigrasikan).
+- File runtime updater: `updater-state.json`, `updater.lock`, `updater-request.json`, `updater-result.json`.
+- Konfigurasi Remote Trigger client: `data/trigger-client.json` (tanpa password/token).
 - Backup config sebelum mengganti versi aplikasi.
 - Jangan menjalankan dua instance yang menulis config yang sama secara bersamaan.
 - Rollback: pulihkan config dari backup dan gunakan binary release Rust sebelumnya.
@@ -171,8 +175,11 @@ Config dibaca dari `<folder exe>\data`. Gunakan `SERVICE_MANAGER_HOME` untuk mem
 - [ ] `cargo test --workspace` (semua test hijau)
 - [ ] `Build-Release.ps1` menghasilkan ZIP dan isinya lengkap
 - [ ] `sm-gui.exe` terbuka, memuat service, dan batch Start/Stop/Restart menampilkan progress
+- [ ] Tab **Updater** menampilkan registry, test, Check All/Update All, dan log
+- [ ] Tab **Remote** menyimpan config, Preview, dan Test SSH
 - [ ] `sm-updater.exe app list/run --all --check` berjalan
 - [ ] `sm-trigger.exe --help` dan `--dry-run` berjalan
+- [ ] Wrapper `Invoke-UpdaterTask.ps1 -Check` berjalan lewat Scheduled Task elevated
 - [ ] `sm-diag.exe` menampilkan path, status admin, NSSM, dan service
 - [ ] Credential helper menyimpan PAT dan `ls-remote` berhasil
 - [ ] Log tidak memuat token/password

@@ -1,6 +1,8 @@
 # Konfigurasi Service Manager
 
-Dokumen ini menjelaskan format `data/services.json` yang dipakai aplikasi Rust (`sm-gui`).
+Dokumen ini menjelaskan format config runtime yang dipakai aplikasi Rust (`sm-gui`,
+`sm-updater`, `sm-trigger`): service Windows, registry project, dan konfigurasi Remote
+Trigger.
 
 ## Lokasi File
 
@@ -8,6 +10,9 @@ Dokumen ini menjelaskan format `data/services.json` yang dipakai aplikasi Rust (
 | --- | --- |
 | Config service | `<folder config>\data\services.json` |
 | Config project | `<folder config>\data\projects.json` |
+| Config Remote Trigger | `<folder config>\data\trigger-client.json` |
+| State updater | `<folder config>\data\updater-state.json` |
+| Lock updater | `<folder config>\data\updater.lock` |
 | Override folder | Environment variable `SERVICE_MANAGER_HOME` |
 | Backup otomatis | `<folder config>\backup\services-*.json` |
 | Export backup | `<folder config>\backup\services-export-*.json` |
@@ -160,6 +165,91 @@ Saat **Start All**, service diurutkan secara topologi berdasarkan `dependencies`
 | `manual` | Manual |
 
 Mode `delayed` diterapkan melalui Windows API `ChangeServiceConfig2` (`SERVICE_CONFIG_DELAYED_AUTO_START_INFO`).
+
+## Project Registry (`projects.json` v2)
+
+`data/projects.json` menyimpan app yang di-update. Versi 1 tetap dibaca dan dimigrasikan
+di memori. Contoh lengkap: [projects.example.json](../projects.example.json) dan
+[RUST-UPDATER.md](RUST-UPDATER.md).
+
+```json
+{
+  "version": 2,
+  "settings": {
+    "gitPath": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "composerPath": "C:\\laragon\\bin\\composer\\composer.bat",
+    "npmPath": "C:\\Program Files\\nodejs\\npm.cmd",
+    "bunPath": "C:\\Users\\EGOV22\\.bun\\bin\\bun.exe",
+    "goPath": "C:\\Program Files\\Go\\bin\\go.exe",
+    "logDir": "C:\\tools\\ServiceManager\\logs"
+  },
+  "trigger": {
+    "allowedClientIPs": ["10.255.240.143", "10.255.240.0/24", "127.0.0.1", "::1"],
+    "allowLocal": true
+  },
+  "apps": [
+    {
+      "id": "kasirin",
+      "name": "Kasirin",
+      "enabled": true,
+      "repoUrl": "https://github.com/example/kasirin.git",
+      "localPath": "D:\\Projects\\PHPProjects\\kasirin",
+      "branch": "main",
+      "preset": "laravel",
+      "composer": "auto",
+      "artisan": "auto",
+      "packageManager": "npm",
+      "packageInstall": "auto",
+      "build": "auto",
+      "queueRestart": true,
+      "services": {
+        "stopBeforePull": [],
+        "stopBeforeBuild": [],
+        "restartAfter": [],
+        "startAfter": [],
+        "waitTimeoutSeconds": 60
+      },
+      "healthCheck": { "enabled": false, "url": "", "timeoutSeconds": 60 },
+      "notify": { "webhookUrl": "", "on": [] }
+    }
+  ]
+}
+```
+
+Field penting:
+
+| Field | Keterangan |
+| --- | --- |
+| `trigger.allowedClientIPs` | Allowlist global IP/CIDR dari `SSH_CONNECTION`/`SSH_CLIENT` |
+| `apps[].allowedClientIPs` | Override allowlist untuk satu app |
+| `preset` | `auto`, `laravel`, `node`, `bun`, `go`, `static`, `custom` |
+| `packageManager` | `auto`, `npm`, `pnpm`, `yarn`, `bun`, `none` |
+| `composer` / `artisan` / `packageInstall` / `build` | `auto`, `always`, `never` |
+| `cloneOnFirstRun` | Clone repo jika `localPath` belum ada |
+| `services.*` | Lifecycle stop/restart/start service Windows |
+| `healthCheck` | HTTP check setelah deploy; gagal → `degraded` |
+| `notify` | Webhook best-effort untuk status di `on` |
+
+## Remote Trigger (`trigger-client.json`)
+
+Dipakai tab **Remote** di `sm-gui`:
+
+```json
+{
+  "host": "10.255.240.160",
+  "user": "EGOV22",
+  "port": 22,
+  "identity": "",
+  "wrapper": "C:\\tools\\ServiceManager\\scripts\\Invoke-UpdaterTask.ps1",
+  "remoteBin": "C:\\tools\\ServiceManager\\target\\release\\sm-updater.exe",
+  "remoteConfig": "",
+  "app": ""
+}
+```
+
+File ini hanya berisi alamat/user/path, bukan password atau token. GUI memakai
+`BatchMode=yes` sehingga autentikasi harus lewat SSH key/agent. Detail:
+[RUST-TRIGGER.md](RUST-TRIGGER.md).
 
 ## Service Global dan Per Project
 

@@ -11,7 +11,11 @@ Dokumen ini menjelaskan kontrol keamanan komponen Rust (`sm-win`, `sm-gui`, `sm-
 | Redaksi log | Pola token/Bearer/password/URL userinfo | `sm-core/src/security.rs` |
 | Rotasi log aplikasi | `app.log` > 5 MB → `app.log.1` | `sm-gui/src/util.rs` |
 | Elevasi | Cek token admin + `ShellExecuteW runas` | `sm-win/src/elevation.rs`, `sm-gui/src/commands.rs` |
+| SSH trigger IP allowlist | Global + per-app IP/CIDR dari `SSH_CONNECTION` | `sm-updater/src/ip.rs`, `trigger.rs` |
+| Elevated updater task | Scheduled Task `RunLevel Highest`, wrapper + nonce/expiry | `scripts/`, `sm-gui/src/remote.rs` |
+| SSH client GUI | `BatchMode=yes`, `ConnectTimeout=10`, key/agent only | `sm-gui/src/remote.rs` |
 | Argumen proses | Array argumen, tanpa penggabungan shell | `sm-win`, `sm-updater` |
+| Command admin-only | `commands.*`/`buildCommand`/`shell` hanya dari config admin | `sm-updater/src/toolchain.rs` |
 | Validasi input | Nama service, path executable, native fields | `sm-core/src/validation.rs` |
 | Config runtime | Di-ignore Git, backup otomatis | `.gitignore`, `sm-config` |
 
@@ -90,19 +94,40 @@ Log service aplikasi tidak di-redaksi karena merupakan output aplikasi pengguna;
 - file baru dibuat;
 - log updater sudah per-run (`project-update-<timestamp>.log`), tidak perlu rotasi.
 
+## SSH Trigger dan Allowlist IP
+
+- `sm-updater authorize` memvalidasi IP client dari `SSH_CONNECTION`/`SSH_CLIENT`
+  terhadap allowlist global dan per-app (IP tunggal, CIDR, IPv6).
+- Wrapper `Invoke-UpdaterTask.ps1` menjalankan `authorize` **sebelum** memicu
+  Scheduled Task elevated.
+- Client IP diteruskan ke proses updater lewat `run --client-ip` agar allowlist
+  per-app tetap berlaku setelah elevasi.
+- `sm-trigger` memakai executable `ssh` sistem; tidak menyimpan password.
+- GUI Remote memakai `BatchMode=yes` dan `ConnectTimeout=10`; autentikasi harus
+  SSH key/agent, sehingga tidak ada prompt password yang menggantung.
+- Scheduled Task `ServiceManager-Updater` berjalan `RunLevel Highest`.
+- Request file berisi nonce + timestamp; action menolak request lebih dari 15 menit
+  dan task memakai `MultipleInstances IgnoreNew`.
+- Tidak ada port HTTP baru; akses hanya lewat SSH dan firewall yang sudah ada.
+
 ## Elevasi Administrator
 
 - GUI memeriksa token admin saat start dan menampilkan banner jika tidak elevated.
 - Tombol **Jalankan sebagai Administrator** memanggil `ShellExecuteW` dengan verb `runas`, lalu keluar.
 - Operasi config (simpan/edit) tetap bisa dilakukan tanpa admin; install/start/stop/restart membutuhkan admin.
-- Updater tidak memerlukan admin; hanya akses Git dan file project.
+- Updater tanpa service lifecycle tidak memerlukan admin; app dengan service lifecycle
+  memakai preflight elevated dan **membatalkan seluruh run sebelum Git** jika tidak elevated.
+- Trigger SSH dengan service lifecycle harus lewat wrapper Scheduled Task elevated.
 
 ## Argumen dan Path
 
 - Proses dijalankan dengan array argumen; tidak ada `cmd.exe /c` kecuali untuk `.bat`/`.cmd` (composer/npm) dengan path eksplisit.
 - Nama service divalidasi: huruf, angka, titik, garis bawah, tanda hubung (1-256 karakter).
 - Executable dan native path divalidasi keberadaannya sebelum install/save.
-- `postUpdateCommand` adalah satu-satunya perintah yang dijalankan sebagai string PowerShell, dan hanya berasal dari `data/projects.json` yang dikontrol admin.
+- `preUpdateCommand`/`postUpdateCommand` adalah string PowerShell dari config admin.
+- `commands.*` (program + args) dan field `shell` hanya berasal dari config admin;
+  tidak ada perintah yang dibaca dari repository.
+- Toolchain hanya menjalankan program yang dikonfigurasi/ditemukan di PATH, bukan script dari repo.
 - Log menampilkan perintah dengan quoting, tetapi nilai sensitif tetap di-redaksi.
 
 ## Audit Sebelum Commit
@@ -116,6 +141,8 @@ git diff --cached
 Aturan `.gitignore`:
 
 - `data/services.json`, `data/projects.json`, `data/services-export-*.json`;
+- `data/trigger-client.json`, `data/updater-state.json`, `data/updater.lock`,
+  `data/updater-request.json`, `data/updater-result.json`;
 - `logs/`, `backup/`;
 - `.env`, token/key/pem/pfx, private key;
 - `/target/`, `/crates/sm-gui/gen/`, `/crates/sm-gui/ui/node_modules/`, `/crates/sm-gui/ui/dist/`.
@@ -126,10 +153,14 @@ Aturan `.gitignore`:
 cargo test -p sm-core security
 cargo test -p sm-win dpapi
 cargo test -p sm-updater credential
+cargo test -p sm-updater ip
 cargo test -p sm-gui util
+cargo test -p sm-gui remote
 ```
 
-Test mencakup redaksi pola token, rotasi log, round-trip DPAPI, validasi credential request, dan pemanggilan sink kredensial tanpa menyentuh Credential Manager asli.
+Test mencakup redaksi pola token, rotasi log, round-trip DPAPI, validasi credential request,
+allowlist IP/CIDR, konfigurasi/preview Remote Trigger, dan pemanggilan sink kredensial
+tanpa menyentuh Credential Manager asli.
 
 ## Keterbatasan
 

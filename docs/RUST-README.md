@@ -1,6 +1,6 @@
 # Service Manager RS
 
-Implementasi Service Manager dalam Rust. Status: **Phase 0-6 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, updater CLI, security hardening, release & CI, test).
+Implementasi Service Manager dalam Rust. Status: **Phase 0-7 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, registry updater, toolchain multi-bahasa, service lifecycle, SSH trigger client, GUI Remote, security hardening, release & CI, test).
 
 Rencana lengkap: [RUST-REWRITE-PLAN.md](RUST-REWRITE-PLAN.md).
 
@@ -15,9 +15,11 @@ ServiceManager/
 │  ├─ sm-core/     # model, validasi, ordering, aturan update
 │  ├─ sm-config/   # services.json & projects.json, data, backup, atomic write
 │  ├─ sm-win/      # SCM, NSSM/native, discover/import, elevation, DPAPI
-│  ├─ sm-gui/      # Tauri GUI + batch async scheduler + sm-diag
-│  └─ sm-updater/  # CLI updater Laravel + credential helper
-├─ data/           # services.json & projects.json runtime
+│  ├─ sm-gui/      # Tauri GUI (Services/Updater/Remote) + batch async + sm-diag
+│  ├─ sm-trigger/  # client SSH cross-platform (CLI + library untuk GUI)
+│  └─ sm-updater/  # registry updater, toolchain, service lifecycle, credential helper
+├─ scripts/        # wrapper Scheduled Task elevated
+├─ data/           # config runtime (services, projects, trigger-client, state)
 ├─ backup/         # semua backup config
 ├─ logs/           # log aplikasi/updater
 └─ dist/           # hasil build portable
@@ -27,8 +29,9 @@ Binary:
 
 | Binary | Fungsi |
 | --- | --- |
-| `sm-gui.exe` | GUI Tauri (release: tanpa console, jendela center) |
-| `sm-updater.exe` | Updater Laravel + credential helper (console) |
+| `sm-gui.exe` | GUI Tauri: Services, Updater, Remote Trigger |
+| `sm-updater.exe` | Registry updater + credential helper (console) |
+| `sm-trigger.exe` | Client SSH cross-platform untuk memicu updater |
 | `sm-diag.exe` | Diagnosa headless (console) |
 
 ## Build dan Test
@@ -50,9 +53,14 @@ cargo run -p sm-gui
 $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
 
 # Updater CLI
-cargo run -p sm-updater -- list
-cargo run -p sm-updater -- check --project kasirin
-cargo run -p sm-updater -- update --project kasirin
+cargo run -p sm-updater -- app list
+cargo run -p sm-updater -- run --all --check
+cargo run -p sm-updater -- run --all
+cargo run -p sm-updater -- status
+cargo run -p sm-updater -- logs kasirin
+
+# Trigger client
+cargo run -p sm-trigger -- --host 10.255.240.160 --user EGOV22 --all --check
 ```
 
 ## Release
@@ -79,7 +87,9 @@ Test read-only memakai service bawaan `EventLog` untuk memverifikasi query statu
 ## Kompatibilitas Config
 
 - `services.json` versi 1: object `{ version, services: [...] }` atau array legacy; disimpan di `data/services.json`.
-- `projects.json` versi 1; disimpan di `data/projects.json`.
+- `projects.json` versi 2: registry `{ version: 2, settings, trigger, apps, scheduler }`; v1 tetap dibaca dan dimigrasikan di memori. Disimpan di `data/projects.json`.
+- `trigger-client.json`: konfigurasi host/user SSH untuk tab Remote/GUI, disimpan di `data/trigger-client.json` (tidak di-commit).
+- `updater-state.json`, `updater.lock`, `updater-request.json`, `updater-result.json`: state runtime updater.
 - Field tidak dikenal diabaikan; nilai enum tidak dikenal dinormalisasi (tipe → NSSM, startup → Auto).
 - Config rusak dicadangkan ke `backup/services-broken-<timestamp>.json`.
 - Backup otomatis maksimal 20 file, pola `services-<timestamp>.json`.
@@ -111,11 +121,14 @@ Modul `sm-win::elevation` menyediakan cek token Administrator dan relaunch via `
 
 Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguhan. Enumerasi read-only diuji terhadap service Windows yang ada.
 
-## GUI Tauri (Phase 3)
+## GUI Tauri (Phase 3 + 7)
 
-`sm-gui` menyediakan UI React + shadCN setara WinForms: tabel service, form tambah/edit, import, backup/restore, log viewer, dark/light theme, dan banner elevasi. Detail ada di [RUST-GUI.md](RUST-GUI.md).
+`sm-gui` menyediakan UI React + shadCN dengan tiga tab: **Services**, **Updater**, dan **Remote**. Detail ada di [RUST-GUI.md](RUST-GUI.md).
 
-- UI sepenuhnya Bahasa Inggris.
+- Tab **Services**: tabel service, form tambah/edit, import, backup/restore, log viewer.
+- Tab **Updater**: registry app, toolchain, service lifecycle, test, Check/Update, log.
+- Tab **Remote**: host/user/key/wrapper, Preview, Test SSH, Check/Update All, app tunggal, output live.
+- UI sepenuhnya Bahasa Inggris, tema light/dark/system.
 - Tombol **Browse…** membuka file picker (Application) dan folder picker (Working Directory).
 - Toolbar atas hanya aksi global; Add/Import/Refresh ada di header Service List.
 - Klik kanan baris service menampilkan context menu Edit/Install/Start/Stop/Restart/Open Log/Delete.
@@ -129,20 +142,25 @@ Batch Start/Stop/Restart berjalan di background:
 - progress per service via event Tauri;
 - tombol Cancel dengan penghentian kooperatif.
 
-Test GUI mencakup scheduler batch (urutan dependensi, stop reversal, paralelisme, failure isolation, cancellation), state, dan log/export.
+Test GUI mencakup scheduler batch (urutan dependensi, stop reversal, paralelisme, failure isolation, cancellation), state, log/export, registry updater, serta konfigurasi/preview Remote Trigger.
 
-## Updater CLI (Phase 4)
+## Registry Updater (Phase 4 + 7)
 
-`sm-updater` adalah CLI updater Laravel:
+`sm-updater` adalah engine registry multi-toolchain:
 
 ```powershell
-sm-updater list
-sm-updater check --project kasirin
-sm-updater update --project kasirin
-sm-updater update            # semua project enabled
+sm-updater app add --id kasirin --repo https://... --path D:\... --branch main `
+  --preset laravel --package-manager npm
+sm-updater app list
+sm-updater app test kasirin
+sm-updater run --all --check
+sm-updater run --all
+sm-updater run --app kasirin
+sm-updater status
+sm-updater logs kasirin
 ```
 
-Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir migration, composer/npm/build/artisan kondisional, `postUpdateCommand`, log ganda (aplikasi + `storage/logs`), timeout, dan exit code. Panduan: [RUST-UPDATER.md](RUST-UPDATER.md). Roadmap: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md). Registry + SSH trigger (client Windows/macOS/Linux): [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md).
+Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state, Git fast-forward, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, clone-on-first-run, service lifecycle (stop/restart/start), health check HTTP, webhook, dan credential helper. Mode lama `list/check/update --project` tetap tersedia. Panduan: [RUST-UPDATER.md](RUST-UPDATER.md). Roadmap: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md). Registry + trigger: [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md). Client SSH: [RUST-TRIGGER.md](RUST-TRIGGER.md).
 
 ## Security Hardening (Phase 5)
 
@@ -151,6 +169,8 @@ Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir
 - Log aplikasi GUI di-redaksi dan dirotasi otomatis pada 5 MB (`app.log.1`).
 - `sm-updater credential store` — simpan PAT lewat Git Credential Manager (DPAPI), token dibaca tanpa echo dan tidak pernah ditulis ke log/file.
 - Elevasi UAC via banner GUI dan `ShellExecuteW runas`.
+- SSH trigger: allowlist IP/CIDR dua lapis, `authorize` sebelum task elevated, Scheduled Task `RunLevel Highest`, request nonce + expiry 15 menit.
+- GUI Remote memakai `BatchMode=yes` (key/agent saja) dan `ConnectTimeout=10`.
 - Detail: [RUST-SECURITY.md](RUST-SECURITY.md).
 
 ## Status Fase
@@ -164,3 +184,4 @@ Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir
 | 4. Updater | Selesai |
 | 5. Security & hardening | Selesai |
 | 6. Release | Selesai |
+| 7. Registry + SSH trigger + GUI Remote | Selesai |

@@ -84,6 +84,8 @@ ServiceManager/
    ```
 3. Sesuaikan path service/project.
 4. Jalankan `sm-gui.exe` sebagai Administrator.
+5. Di PC client, buka tab **Remote** dan isi host/user/SSH key/wrapper untuk trigger
+   dari jarak jauh, atau gunakan `sm-trigger.exe` di terminal.
 
 Config dibaca dari `<folder exe>\data`. Untuk memakai folder lain:
 
@@ -182,14 +184,14 @@ Saat ini **250 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm 
 
 | Dokumen | Isi |
 | --- | --- |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Skema `services.json`, tipe service, startup, backup |
-| [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI, tema, batch async, build frontend |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Skema `services.json`, `projects.json`, `trigger-client.json`, backup |
+| [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI Services/Updater/Remote, tema, batch async, build frontend |
 | [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md) | Cronical multi-project, queue per project |
 | [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Panduan updater registry, toolchain, service lifecycle, trigger |
 | [docs/RUST-UPDATER-PLAN.md](docs/RUST-UPDATER-PLAN.md) | Inventaris fitur, backlog, dan roadmap updater |
 | [docs/RUST-UPDATER-REGISTRY-PLAN.md](docs/RUST-UPDATER-REGISTRY-PLAN.md) | Registry, toolchain, service lifecycle, SSH trigger, IP whitelist |
 | [docs/RUST-TRIGGER.md](docs/RUST-TRIGGER.md) | Client SSH cross-platform dan wrapper Scheduled Task |
-| [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log |
+| [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log, SSH trigger, allowlist IP |
 | [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md) | Build, installer, CI, deployment |
 | [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md) | Catatan historis migrasi ke Rust |
 | [docs/RUST-README.md](docs/RUST-README.md) | Struktur crate dan status implementasi |
