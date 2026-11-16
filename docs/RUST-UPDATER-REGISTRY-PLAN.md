@@ -2,11 +2,37 @@
 
 Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + update yang dipicu dari PC 143**. Fokusnya bukan polling setiap menit, tetapi satu trigger aman dari komputer Anda ke server 160.
 
-- Status: **rencana / belum diimplementasikan**
-- Basis: `sm-updater` saat ini (37 unit test, E2E Git lokal)
+- Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle); client `sm-trigger`, GUI Updater, dan wrapper Scheduled Task belum.
+- Basis: `sm-updater` (221 test workspace, termasuk 78 test updater)
 - Prinsip: trigger eksplisit, aman, idempoten, tanpa polling default
 - Config target: `data/projects.json` versi 2 (kompatibel versi 1)
 - **Server tetap Windows**; trigger client direncanakan cross-platform (Windows, macOS, Linux).
+
+### Status Implementasi
+
+| Fitur | Status | Catatan |
+| --- | --- | --- |
+| Registry v2 + migrasi v1 | Selesai | `registry.rs`, `app add/list/show/edit/remove/test` |
+| Trigger `run --all` / `--app` / `--check` | Selesai | `trigger.rs`, lock `data/updater.lock` |
+| Allowlist IP/CIDR dua lapis | Selesai | `ip.rs`, per-app override |
+| State persisten | Selesai | `data/updater-state.json` |
+| Deteksi toolchain | Selesai | Composer, npm/pnpm/yarn/bun, Go, static, custom |
+| Service lifecycle | Selesai | Stop/start/restart via SCM, preflight elevated |
+| Custom commands | Selesai | Program + args, `shell` hanya admin |
+| Health check / notify | Belum | Schema sudah ada, belum dieksekusi |
+| `cloneOnFirstRun` | Belum | Schema sudah ada |
+| `maxConcurrentUpdates` | Belum | Saat ini serial |
+| Scheduler/polling | Tidak dipakai | Default `false` |
+| `sm-trigger` cross-platform | Belum | Fase berikutnya |
+| GUI tab Updater | Belum | Fase berikutnya |
+| Wrapper Scheduled Task elevated | Belum | Task dibuat manual, lihat dokumentasi |
+
+Catatan implementasi:
+
+- Lock bersifat **global per config**, bukan per app, agar satu trigger tidak bertabrakan.
+- `check` tidak pernah stop/restart service dan tidak memerlukan hak Administrator untuk
+  preflight kontrol service (hanya validasi nama).
+- Migration selalu `block`; tidak ada opsi menjalankan migration otomatis.
 
 ---
 
@@ -57,7 +83,7 @@ Trigger client (Windows / macOS / Linux)
 Server 160 (Windows)
    ├─ validasi IP SSH (allowedClientIPs / CIDR)
    ├─ baca registry data/projects.json
-   ├─ lock per app
+   ├─ lock global data/updater.lock
    ├─ untuk tiap app: cek Git → update jika berubah
    ├─ composer/npm/build/artisan/queue restart
    └─ tulis state + log
@@ -357,7 +383,10 @@ Alternatif: Windows Service `GlobalUpdater` berjalan sebagai akun privileged + S
 
 Dengan pola Task Scheduler ini, IP whitelist tetap dicek di wrapper sebelum task elevated dijalankan.
 
-## 6. Fitur yang Akan Dibuat
+## 6. Fitur dan Status Implementasi
+
+Tabel pada bagian ini mencakup fitur Phase A yang sudah berjalan dan backlog berikutnya.
+Status ringkas ada di bagian **Status Implementasi** di atas.
 
 ### 6.1 Registrasi Aplikasi
 

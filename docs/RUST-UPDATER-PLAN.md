@@ -4,16 +4,16 @@
 
 Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur yang sudah ada, serta fitur yang direncanakan berikut prioritasnya.
 
-- Status implementasi: **Phase 4 selesai** (fitur inti berjalan dan teruji)
+- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain)
 - Lokasi: `crates/sm-updater`
-- Test: **37 unit test** untuk crate ini; total workspace **180 test**. Config default ada di `data/projects.json`.
-- Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block)
+- Test: **78 unit test** untuk crate ini; total workspace **221 test**. Config default ada di `data/projects.json`.
+- Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
 
 ## 1. Tujuan
 
-`sm-updater` adalah CLI deployment Laravel yang aman dan dapat dijalankan tanpa interaksi browser:
+`sm-updater` adalah CLI deployment project yang aman dan dapat dijalankan tanpa interaksi browser. Mode lama tetap mendukung Laravel; mode registry mendukung Laravel, Node, Bun, Go, static, dan custom command plan. Tujuannya:
 
 - memperbarui kode dari Git tanpa merge konflik,
 - menolak update berisiko (working tree kotor, branch salah, migration baru),
@@ -143,16 +143,19 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 | Auto-resolve git | Selesai | `SERVICE_MANAGER_GIT`, Laragon, Program Files, `where git` |
 | Timeout proses | Selesai | Preflight 30s, fetch/merge 120s, tool 300s |
 | Redaksi error | Selesai | `sm_core::redact_secrets` |
-| Locking antar-run | **Belum** | Belum ada lock file |
+| Locking antar-run | Selesai | Lock global `data/updater.lock` + stale timeout |
 | Structured JSON output | **Belum** | Hanya teks |
 
 ### 3.9 Pengujian
 
-- **37 unit test** crate `sm-updater`:
-  - parsing CLI dan credential,
+- **78 unit test** crate `sm-updater`:
+  - parsing CLI, registry, dan credential,
   - scan project/override,
-  - runner nyata (exit code/timeout),
+  - runner nyata (exit code/timeout/timeout+env),
   - log dan redaksi,
+  - migrasi v1→v2, allowlist IP/CIDR, lock, state,
+  - deteksi toolchain dan command plan (termasuk lockfile ambigu),
+  - service lifecycle dan pemulihan saat build gagal,
   - matriks update: up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional.
 - **E2E lokal** dengan repository Git bare:
   - `list` mendeteksi project,

@@ -12,8 +12,11 @@ impl UpdateLogger {
         let _ = fs::create_dir_all(log_dir);
         let run_log = log_dir.join(format!("project-update-{stamp}.log"));
 
-        let project_log_dir = project_path.join("storage").join("logs");
-        let project_log = if fs::create_dir_all(&project_log_dir).is_ok() {
+        // Jangan membuat folder storage pada project non-Laravel: folder baru
+        // membuat working tree Git kotor dan update akan selalu dilewati.
+        let storage_dir = project_path.join("storage");
+        let project_log_dir = storage_dir.join("logs");
+        let project_log = if storage_dir.is_dir() && fs::create_dir_all(&project_log_dir).is_ok() {
             Some(project_log_dir.join(format!("project-update-{stamp}.log")))
         } else {
             None
@@ -61,7 +64,7 @@ mod tests {
     fn writes_run_and_project_logs() {
         let temp = tempfile::tempdir().unwrap();
         let project = temp.path().join("project");
-        fs::create_dir_all(&project).unwrap();
+        fs::create_dir_all(project.join("storage")).unwrap();
         let logger = UpdateLogger::new(&temp.path().join("logs"), &project, "20260101-000000");
         logger.log("hello");
 
@@ -71,6 +74,17 @@ mod tests {
         assert!(project_log.is_file());
         assert!(fs::read_to_string(run_log).unwrap().contains("hello"));
         assert!(fs::read_to_string(project_log).unwrap().contains("hello"));
+    }
+
+    #[test]
+    fn does_not_create_storage_for_non_laravel_project() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        fs::create_dir_all(&project).unwrap();
+        let logger = UpdateLogger::new(&temp.path().join("logs"), &project, "20260101-000000");
+        logger.log("hello");
+        assert!(logger.project_log_path().is_none());
+        assert!(!project.join("storage").exists());
     }
 
     #[test]

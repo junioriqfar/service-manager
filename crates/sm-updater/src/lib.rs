@@ -1,11 +1,21 @@
+pub mod app_update;
 pub mod cli;
 pub mod credential;
+pub mod ip;
+pub mod lock;
 pub mod log;
+pub mod registry;
 pub mod runner;
 pub mod scan;
+pub mod services;
+pub mod state;
+pub mod sync;
+pub mod toolchain;
+pub mod trigger;
 pub mod update;
 
 pub use log::UpdateLogger;
+pub use registry::{AppConfig, PackageManager, Preset, UpdaterConfig};
 pub use runner::{Output, Runner, RunnerError, SystemRunner};
 pub use scan::{discover_projects, is_laravel_project, ProjectInfo};
 pub use update::{update_project, UpdateOptions, UpdateOutcome, UpdateStatus};

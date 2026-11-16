@@ -44,7 +44,11 @@ pub struct ProjectsFile {
     pub version: u32,
     #[serde(default = "default_scan_roots")]
     pub scan_roots: Vec<String>,
-    #[serde(default = "default_allowed_ips")]
+    #[serde(
+        default = "default_allowed_ips",
+        rename = "allowedClientIPs",
+        alias = "allowedClientIps"
+    )]
     pub allowed_client_ips: Vec<String>,
     #[serde(default = "default_git_path")]
     pub git_path: String,

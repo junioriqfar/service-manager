@@ -1,25 +1,116 @@
 {
-  "version": 1,
-  "scanRoots": [
-    "D:\\Projects\\PHPProjects"
-  ],
-  "allowedClientIPs": [
-    "127.0.0.1",
-    "::1"
-  ],
-  "gitPath": "C:\\laragon\\bin\\git\\cmd\\git.exe",
-  "phpPath": "C:\\laragon\\bin\\php\\php.exe",
-  "composerPath": "C:\\laragon\\bin\\composer\\composer.bat",
-  "npmPath": "C:\\Program Files\\nodejs\\npm.cmd",
-  "logDir": "C:\\tools\\ServiceManager\\logs",
-  "projects": {
-    "contoh-project": {
+  "version": 2,
+  "settings": {
+    "gitPath": "C:\\laragon\\bin\\git\\cmd\\git.exe",
+    "phpPath": "C:\\laragon\\bin\\php\\php.exe",
+    "composerPath": "C:\\laragon\\bin\\composer\\composer.bat",
+    "npmPath": "C:\\Program Files\\nodejs\\npm.cmd",
+    "bunPath": "C:\\Users\\EGOV22\\.bun\\bin\\bun.exe",
+    "pnpmPath": "",
+    "yarnPath": "",
+    "goPath": "C:\\Program Files\\Go\\bin\\go.exe",
+    "logDir": "C:\\tools\\ServiceManager\\logs",
+    "maxConcurrentUpdates": 1
+  },
+  "trigger": {
+    "allowedClientIPs": [
+      "10.255.240.143",
+      "10.255.240.0/24",
+      "127.0.0.1",
+      "::1"
+    ],
+    "allowLocal": true
+  },
+  "apps": [
+    {
+      "id": "kasirin",
+      "name": "Kasirin",
       "enabled": true,
+      "repoUrl": "https://github.com/example/kasirin.git",
+      "localPath": "D:\\Projects\\PHPProjects\\kasirin",
       "branch": "main",
+      "preset": "laravel",
       "composer": "auto",
+      "artisan": "auto",
+      "packageManager": "npm",
+      "packageInstall": "auto",
       "build": "auto",
       "queueRestart": true,
-      "postUpdateCommand": ""
+      "services": {
+        "stopBeforePull": [],
+        "stopBeforeBuild": [],
+        "restartAfter": [],
+        "startAfter": [],
+        "waitTimeoutSeconds": 60
+      }
+    },
+    {
+      "id": "opencode-quota",
+      "name": "OpenCode Quota",
+      "enabled": true,
+      "repoUrl": "https://github.com/example/opencode-quota.git",
+      "localPath": "D:\\Projects\\BunProjects\\opencode-quota",
+      "branch": "main",
+      "preset": "bun",
+      "composer": "never",
+      "packageManager": "bun",
+      "packageInstall": "auto",
+      "build": "always",
+      "installCommand": "bun install --frozen-lockfile",
+      "buildCommand": "bun run build:win",
+      "services": {
+        "stopBeforePull": [],
+        "stopBeforeBuild": [
+          "opencode-quota"
+        ],
+        "restartAfter": [
+          "opencode-quota"
+        ],
+        "startAfter": [],
+        "waitTimeoutSeconds": 60
+      }
+    },
+    {
+      "id": "presensi-sidoarjo-server",
+      "name": "Presensi Sidoarjo Server",
+      "enabled": true,
+      "repoUrl": "https://github.com/example/presensi-sidoarjo-server.git",
+      "localPath": "D:\\Projects\\GoProjects\\presensi-sidoarjo-server",
+      "branch": "main",
+      "preset": "go",
+      "composer": "never",
+      "packageManager": "none",
+      "packageInstall": "auto",
+      "build": "always",
+      "buildCommand": "make build-windows",
+      "services": {
+        "stopBeforePull": [],
+        "stopBeforeBuild": [
+          "PresensiSidoarjoServer"
+        ],
+        "restartAfter": [
+          "PresensiSidoarjoServer"
+        ],
+        "startAfter": [],
+        "waitTimeoutSeconds": 60
+      }
+    },
+    {
+      "id": "fortunagarment",
+      "name": "Fortuna Garment",
+      "enabled": true,
+      "repoUrl": "https://github.com/example/fortunagarment.git",
+      "localPath": "D:\\Projects\\PHPProjects\\fortunagarment",
+      "branch": "main",
+      "preset": "static",
+      "composer": "never",
+      "packageManager": "none",
+      "packageInstall": "never",
+      "build": "never"
     }
+  ],
+  "scheduler": {
+    "enabled": false,
+    "checkIntervalMinutes": 5
   }
 }

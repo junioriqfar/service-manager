@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -53,6 +54,20 @@ pub trait Runner: Send + Sync {
         cwd: &Path,
         timeout: Duration,
     ) -> Result<Output, RunnerError>;
+
+    /// Jalankan dengan environment tambahan. Implementasi default mengabaikan env
+    /// agar fake runner lama tetap kompatibel.
+    fn run_with_env(
+        &self,
+        program: &Path,
+        args: &[String],
+        cwd: &Path,
+        timeout: Duration,
+        env: &BTreeMap<String, String>,
+    ) -> Result<Output, RunnerError> {
+        let _ = env;
+        self.run(program, args, cwd, timeout)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -66,56 +81,78 @@ impl Runner for SystemRunner {
         cwd: &Path,
         timeout: Duration,
     ) -> Result<Output, RunnerError> {
-        let mut child = Command::new(program)
-            .args(args)
-            .current_dir(cwd)
-            .env("GCM_CREDENTIAL_STORE", "dpapi")
-            .env("GCM_INTERACTIVE", "never")
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|source| RunnerError::Spawn {
-                program: program.to_string_lossy().to_string(),
-                source,
-            })?;
-
-        let status = match child.wait_timeout(timeout) {
-            Ok(Some(status)) => status,
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(RunnerError::Timeout {
-                    program: program.to_string_lossy().to_string(),
-                    timeout,
-                });
-            }
-            Err(error) => {
-                return Err(RunnerError::Spawn {
-                    program: program.to_string_lossy().to_string(),
-                    source: error,
-                });
-            }
-        };
-
-        let mut stdout = String::new();
-        if let Some(mut pipe) = child.stdout.take() {
-            pipe.read_to_string(&mut stdout)
-                .map_err(|error| RunnerError::Io(error.to_string()))?;
-        }
-        let mut stderr = String::new();
-        if let Some(mut pipe) = child.stderr.take() {
-            pipe.read_to_string(&mut stderr)
-                .map_err(|error| RunnerError::Io(error.to_string()))?;
-        }
-
-        Ok(Output {
-            exit_code: status.code().unwrap_or(-1),
-            stdout,
-            stderr,
-        })
+        run_process(program, args, cwd, timeout, &BTreeMap::new())
     }
+
+    fn run_with_env(
+        &self,
+        program: &Path,
+        args: &[String],
+        cwd: &Path,
+        timeout: Duration,
+        env: &BTreeMap<String, String>,
+    ) -> Result<Output, RunnerError> {
+        run_process(program, args, cwd, timeout, env)
+    }
+}
+
+fn run_process(
+    program: &Path,
+    args: &[String],
+    cwd: &Path,
+    timeout: Duration,
+    env: &BTreeMap<String, String>,
+) -> Result<Output, RunnerError> {
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .envs(env)
+        .env("GCM_CREDENTIAL_STORE", "dpapi")
+        .env("GCM_INTERACTIVE", "never")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|source| RunnerError::Spawn {
+            program: program.to_string_lossy().to_string(),
+            source,
+        })?;
+
+    let status = match child.wait_timeout(timeout) {
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(RunnerError::Timeout {
+                program: program.to_string_lossy().to_string(),
+                timeout,
+            });
+        }
+        Err(error) => {
+            return Err(RunnerError::Spawn {
+                program: program.to_string_lossy().to_string(),
+                source: error,
+            });
+        }
+    };
+
+    let mut stdout = String::new();
+    if let Some(mut pipe) = child.stdout.take() {
+        pipe.read_to_string(&mut stdout)
+            .map_err(|error| RunnerError::Io(error.to_string()))?;
+    }
+    let mut stderr = String::new();
+    if let Some(mut pipe) = child.stderr.take() {
+        pipe.read_to_string(&mut stderr)
+            .map_err(|error| RunnerError::Io(error.to_string()))?;
+    }
+
+    Ok(Output {
+        exit_code: status.code().unwrap_or(-1),
+        stdout,
+        stderr,
+    })
 }
 
 pub fn cmd_exe_path() -> std::path::PathBuf {

@@ -1,16 +1,12 @@
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use sm_config::ProjectsFile;
 use sm_core::plan_update;
 
 use crate::log::UpdateLogger;
-use crate::runner::{wrap_command, Output, Runner};
+use crate::runner::Runner;
 use crate::scan::{is_laravel_project, ProjectInfo};
-
-const PREFLIGHT_TIMEOUT: Duration = Duration::from_secs(30);
-const FETCH_TIMEOUT: Duration = Duration::from_secs(120);
-const TOOL_TIMEOUT: Duration = Duration::from_secs(300);
+use crate::sync::{powershell_path, run_tool, sync_project, SyncResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateStatus {
@@ -19,6 +15,7 @@ pub enum UpdateStatus {
     Updated,
     Dirty,
     BlockedMigration,
+    Degraded,
     Failed,
 }
 
@@ -30,6 +27,7 @@ impl UpdateStatus {
             Self::Updated => "updated",
             Self::Dirty => "dirty",
             Self::BlockedMigration => "blocked-migration",
+            Self::Degraded => "degraded",
             Self::Failed => "failed",
         }
     }
@@ -99,228 +97,33 @@ fn execute(
     }
 
     let git_path = Path::new(settings.git_path.trim());
-    if !git_path.is_file() {
-        return Err(format!("Git tidak ditemukan: {}", git_path.display()));
-    }
-
-    let status = git(
-        project,
-        git_path,
-        runner,
-        logger,
-        &["status", "--porcelain"],
-        PREFLIGHT_TIMEOUT,
-    )?;
-    let status_text = status.stdout.trim();
-    if !status_text.is_empty() {
-        for line in status_text.lines().take(10) {
-            logger.log(line);
-        }
-        return Ok((
-            UpdateStatus::Dirty,
-            "Working tree tidak bersih; project dilewati.".to_string(),
-        ));
-    }
-
-    let branch_output = ensure_git(
-        git(
-            project,
-            git_path,
-            runner,
-            logger,
-            &["rev-parse", "--abbrev-ref", "HEAD"],
-            PREFLIGHT_TIMEOUT,
-        )?,
-        "Gagal membaca branch Git",
-    )?;
-    let branch = branch_output.stdout.trim().to_string();
-    if !project.config.branch.trim().is_empty()
-        && !branch.eq_ignore_ascii_case(project.config.branch.trim())
-    {
-        return Err(format!(
-            "Branch aktif '{branch}', bukan '{}'.",
-            project.config.branch
-        ));
-    }
-    logger.log(&format!("Branch: {branch}"));
-
-    let before_output = ensure_git(
-        git(
-            project,
-            git_path,
-            runner,
-            logger,
-            &["rev-parse", "HEAD"],
-            PREFLIGHT_TIMEOUT,
-        )?,
-        "Gagal membaca SHA HEAD",
-    )?;
-    let before = before_output.stdout.trim().to_string();
-    logger.log(&format!("SHA sebelum: {before}"));
-
-    let probe = git(
-        project,
-        git_path,
-        runner,
-        logger,
-        &["ls-remote", "--heads", "origin"],
-        PREFLIGHT_TIMEOUT,
-    )?;
-    if !probe.success() || is_auth_failure(&probe) {
-        return Err(format!(
-            "Akses remote gagal. Kredensial Git belum ada/tidak valid. {}",
-            probe.combined()
-        ));
-    }
-
-    let fetch = run_command_owned(
-        runner,
-        git_path,
-        &["fetch", "--prune", "origin"],
+    let result = sync_project(
         &project.path,
-        FETCH_TIMEOUT,
-        logger,
-    )?;
-    if !fetch.success() || is_auth_failure(&fetch) {
-        return Err(format!(
-            "git fetch gagal. Kredensial Git belum ada/tidak valid. {}",
-            fetch.combined()
-        ));
-    }
-
-    let origin_ref = format!("origin/{branch}");
-    let verify = git(
-        project,
+        &project.config.branch,
         git_path,
         runner,
         logger,
-        &["rev-parse", "--verify", &origin_ref],
-        PREFLIGHT_TIMEOUT,
+        options,
+        |_| Ok(()),
     )?;
-    if !verify.success() {
-        return Err(format!("Remote {origin_ref} tidak ditemukan."));
-    }
 
-    let incoming_output = ensure_git(
-        git(
-            project,
-            git_path,
-            runner,
-            logger,
-            &["log", "--oneline", &format!("HEAD..{origin_ref}")],
-            PREFLIGHT_TIMEOUT,
-        )?,
-        "Gagal membaca commit masuk",
-    )?;
-    let incoming = split_lines(&incoming_output.stdout);
-    if incoming.is_empty() {
-        logger.log("Sudah terbaru; tidak ada commit baru.");
-        return Ok((
-            UpdateStatus::UpToDate,
-            "Sudah terbaru; tidak ada commit baru.".to_string(),
-        ));
-    }
-
-    logger.log(&format!("Commit baru ({}):", incoming.len()));
-    for line in incoming.iter().take(30) {
-        logger.log(line);
-    }
-
-    let preview_output = ensure_git(
-        git(
-            project,
-            git_path,
-            runner,
-            logger,
-            &["diff", "--name-only", &format!("HEAD..{origin_ref}")],
-            PREFLIGHT_TIMEOUT,
-        )?,
-        "Gagal membaca daftar file berubah",
-    )?;
-    let preview = split_lines(&preview_output.stdout);
-    logger.log("File berubah:");
-    for file in preview.iter().take(40) {
-        logger.log(file);
-    }
-
-    let migration_files: Vec<String> = preview
-        .iter()
-        .filter(|file| sm_core::update::is_migration_change(file))
-        .cloned()
-        .collect();
-    if !migration_files.is_empty() {
-        logger
-            .log("INFO MIGRASI: perubahan migration terdeteksi; update otomatis akan dihentikan.");
-        for file in &migration_files {
-            logger.log(&format!("MIGRASI: {file}"));
+    let outcome = match result {
+        SyncResult::UpToDate(message) => return Ok((UpdateStatus::UpToDate, message)),
+        SyncResult::Dirty(message) => return Ok((UpdateStatus::Dirty, message)),
+        SyncResult::Check(count) => {
+            return Ok((
+                UpdateStatus::Check,
+                format!("{count} commit baru terdeteksi (dry-run)."),
+            ))
         }
-    }
-
-    if options.check_only {
-        logger.log("Cek selesai. Tidak ada file yang diubah.");
-        return Ok((
-            UpdateStatus::Check,
-            format!("{} commit baru terdeteksi (dry-run).", incoming.len()),
-        ));
-    }
-
-    if !migration_files.is_empty() {
-        logger.log("DIBATALKAN: migration harus dijalankan manual. Tidak ada pull yang dilakukan.");
-        return Ok((
-            UpdateStatus::BlockedMigration,
-            format!(
-                "Update diblokir: {} file migration harus dijalankan manual.",
-                migration_files.len()
-            ),
-        ));
-    }
-
-    logger.log(&format!("git merge --ff-only {origin_ref}"));
-    let merge = run_command_owned(
-        runner,
-        git_path,
-        &["merge", "--ff-only", &origin_ref],
-        &project.path,
-        FETCH_TIMEOUT,
-        logger,
-    )?;
-    if !merge.success() {
-        return Err(format!("git merge --ff-only gagal: {}", merge.combined()));
-    }
-
-    let after_output = ensure_git(
-        git(
-            project,
-            git_path,
-            runner,
-            logger,
-            &["rev-parse", "HEAD"],
-            PREFLIGHT_TIMEOUT,
-        )?,
-        "Gagal membaca SHA HEAD setelah pull",
-    )?;
-    let after = after_output.stdout.trim().to_string();
-    if before == after {
-        logger.log("Sudah terbaru; tidak ada perubahan.");
-        return Ok((
-            UpdateStatus::UpToDate,
-            "Sudah terbaru; tidak ada perubahan.".to_string(),
-        ));
-    }
-    logger.log(&format!("Commit baru: {before}..{after}"));
-
-    let changed_output = ensure_git(
-        git(
-            project,
-            git_path,
-            runner,
-            logger,
-            &["diff", "--name-only", &before, &after],
-            PREFLIGHT_TIMEOUT,
-        )?,
-        "Gagal membaca file yang berubah",
-    )?;
-    let changed = split_lines(&changed_output.stdout);
+        SyncResult::BlockedMigration(count) => {
+            return Ok((
+                UpdateStatus::BlockedMigration,
+                format!("Update diblokir: {count} file migration harus dijalankan manual."),
+            ))
+        }
+        SyncResult::Merged(outcome) => outcome,
+    };
 
     let has_package_lock = project.path.join("package-lock.json").is_file();
     let cache_files_exist = [
@@ -332,7 +135,7 @@ fn execute(
     .any(|file| project.path.join(file).is_file());
 
     let plan = plan_update(
-        &changed,
+        &outcome.changed,
         &project.config,
         has_package_lock,
         cache_files_exist,
@@ -413,129 +216,22 @@ fn execute(
         )?;
     }
 
-    logger.log(&format!("Rollback kode: git reset --hard {before}"));
-    Ok((UpdateStatus::Updated, "Update berhasil.".to_string()))
-}
-
-fn ensure_git(output: Output, context: &str) -> Result<Output, String> {
-    if output.success() {
-        Ok(output)
-    } else {
-        Err(format!("{context}: {}", output.combined()))
-    }
-}
-
-fn is_auth_failure(output: &Output) -> bool {
-    let text = output.combined().to_ascii_lowercase();
-    text.contains("fatal:")
-        || text.contains("could not read username")
-        || text.contains("authentication failed")
-        || text.contains("terminal prompts disabled")
-}
-
-fn git(
-    project: &ProjectInfo,
-    git_path: &Path,
-    runner: &dyn Runner,
-    logger: &UpdateLogger,
-    args: &[&str],
-    timeout: Duration,
-) -> Result<Output, String> {
-    let args: Vec<&str> = args.to_vec();
-    run_command_owned(runner, git_path, &args, &project.path, timeout, logger)
-}
-
-fn run_tool(
-    runner: &dyn Runner,
-    program: &Path,
-    args: &[&str],
-    cwd: &Path,
-    logger: &UpdateLogger,
-) -> Result<Output, String> {
-    let output = run_command_owned(runner, program, args, cwd, TOOL_TIMEOUT, logger)?;
-    if !output.success() {
-        return Err(format!(
-            "Perintah '{}' gagal (exit {}): {}",
-            program.display(),
-            output.exit_code,
-            output.combined()
-        ));
-    }
-    Ok(output)
-}
-
-fn run_command_owned(
-    runner: &dyn Runner,
-    program: &Path,
-    args: &[&str],
-    cwd: &Path,
-    timeout: Duration,
-    logger: &UpdateLogger,
-) -> Result<Output, String> {
-    let args: Vec<String> = args.iter().map(|value| value.to_string()).collect();
-    run_command(runner, program, &args, cwd, timeout, logger)
-}
-
-fn run_command(
-    runner: &dyn Runner,
-    program: &Path,
-    args: &[String],
-    cwd: &Path,
-    timeout: Duration,
-    logger: &UpdateLogger,
-) -> Result<Output, String> {
     logger.log(&format!(
-        "$ {} {}",
-        program.display(),
-        args.iter()
-            .map(|arg| if arg.contains(' ') {
-                format!("\"{arg}\"")
-            } else {
-                arg.clone()
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
+        "Rollback kode: git reset --hard {}",
+        outcome.before
     ));
-
-    let (program, args) = wrap_command(program, args);
-    let output = runner
-        .run(&program, &args, cwd, timeout)
-        .map_err(|error| error.to_string())?;
-
-    let combined = output.combined();
-    if !combined.is_empty() {
-        for line in combined.lines().take(60) {
-            logger.log(line);
-        }
-    }
-    Ok(output)
-}
-
-fn split_lines(text: &str) -> Vec<String> {
-    text.lines()
-        .map(|line| line.trim().to_string())
-        .filter(|line| !line.is_empty())
-        .collect()
-}
-
-fn powershell_path() -> PathBuf {
-    std::env::var_os("SystemRoot")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
-        .join("System32")
-        .join("WindowsPowerShell")
-        .join("v1.0")
-        .join("powershell.exe")
+    Ok((UpdateStatus::Updated, "Update berhasil.".to_string()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runner::RunnerError;
+    use crate::runner::{Output, RunnerError};
     use crate::scan::ProjectInfo;
     use sm_core::ProjectOverride;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     #[derive(Debug, Clone)]
     struct Call {

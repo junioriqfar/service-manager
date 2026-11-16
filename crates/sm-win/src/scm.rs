@@ -181,6 +181,17 @@ pub fn query_status(name: &str) -> Result<ServiceStatusInfo> {
     query_status_handle(name, &service)
 }
 
+/// Pastikan proses ini punya hak start/stop sebelum update menyentuh file.
+pub fn check_control_access(name: &str) -> Result<()> {
+    let scm = open_scm()?;
+    let _service = open_service(
+        &scm,
+        name,
+        SERVICE_START | SERVICE_STOP | SERVICE_QUERY_STATUS,
+    )?;
+    Ok(())
+}
+
 fn query_status_handle(name: &str, service: &ServiceHandle) -> Result<ServiceStatusInfo> {
     let mut status = SERVICE_STATUS_PROCESS::default();
     let mut needed = 0u32;

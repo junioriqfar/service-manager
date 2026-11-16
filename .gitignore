@@ -9,6 +9,8 @@ data/services.json
 data/projects.json
 data/services-export-*.json
 data/*.bak-*
+data/updater-state.json
+data/updater.lock
 
 # Runtime artifacts
 logs/

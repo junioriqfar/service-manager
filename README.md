@@ -1,6 +1,6 @@
 # Service Manager
 
-Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, PostgreSQL native) dan **updater project Laravel**. Dibangun dengan **Rust + Tauri 2** dan frontend **React + TypeScript + Vite + Tailwind CSS + shadCN UI**. Aplikasi PowerShell lama sudah dihapus dari repositori.
+Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, PostgreSQL native) dan **updater project multi-toolchain** (Laravel, Node, Bun, Go, static, custom). Dibangun dengan **Rust + Tauri 2** dan frontend **React + TypeScript + Vite + Tailwind CSS + shadCN UI**. Aplikasi PowerShell lama sudah dihapus dari repositori.
 
 > Jalankan GUI sebagai **Administrator** untuk install/start/stop/restart service Windows.
 
@@ -14,7 +14,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Startup `auto`, `delayed`, `manual`; restart on crash + delay.
 - Log viewer (stdout/stderr, auto-refresh), backup/restore config.
 - UI Bahasa Inggris, tema **light/dark/system**, icon Lucide, file/folder picker, dan context menu klik kanan.
-- Updater Laravel `sm-updater`: cek/update Git, blokir migration, composer/npm/build/artisan, credential helper.
+- Updater `sm-updater`: registry app, trigger SSH dengan allowlist IP/CIDR, cek/update Git, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, service lifecycle, credential helper.
 - Diagnosa headless `sm-diag`.
 
 ## Komponen
@@ -22,7 +22,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 | Binary | Fungsi |
 | --- | --- |
 | `sm-gui.exe` | GUI Tauri (release tanpa console, window center) |
-| `sm-updater.exe` | Updater Laravel + credential helper (console) |
+| `sm-updater.exe` | Updater registry + trigger + credential helper (console) |
 | `sm-diag.exe` | Diagnosa config, NSSM, admin, dan status service (console) |
 
 ## Kebutuhan
@@ -35,7 +35,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 | Hak akses | Administrator untuk operasi service |
 | Node.js 22+ | Hanya untuk build frontend |
 | Rust stable + MSVC | Hanya untuk build dari source |
-| Git/PHP/Composer/npm | Untuk fitur updater Laravel |
+| Git/PHP/Composer/npm/Bun/Go | Untuk fitur updater multi-toolchain (sesuai app yang didaftarkan) |
 
 ## Struktur Folder
 
@@ -49,7 +49,7 @@ ServiceManager/
 │  ├─ sm-config/                # services.json, projects.json, backup
 │  ├─ sm-win/                   # SCM, NSSM/native, discovery, DPAPI
 │  ├─ sm-gui/                   # Tauri + React/shadCN UI
-│  └─ sm-updater/               # updater Laravel + credential helper
+│  └─ sm-updater/               # registry updater + trigger + credential helper
 ├─ data/
 │  ├─ services.json             # config runtime (tidak di-commit)
 │  └─ projects.json             # config runtime (tidak di-commit)
@@ -115,13 +115,33 @@ Atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`, `npm run build`, car
 
 Detail dan contoh config: [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md).
 
-## Updater Laravel
+## Updater Registry
 
 ```powershell
+# Registrasi app
+sm-updater app add --id kasirin --name Kasirin `
+  --repo https://github.com/example/kasirin.git `
+  --path D:\Projects\PHPProjects\kasirin --branch main `
+  --preset laravel --package-manager npm `
+  --stop-before-build kasirin --restart-after kasirin
+
+sm-updater app list
+sm-updater app show kasirin
+sm-updater app edit kasirin --branch develop
+sm-updater app test kasirin
+
+# Trigger manual (bukan polling)
+sm-updater run --all
+sm-updater run --all --check
+sm-updater run --app kasirin
+sm-updater status
+sm-updater logs kasirin
+
+# Mode lama tetap tersedia
 sm-updater list
 sm-updater check --project kasirin
 sm-updater update --project kasirin
-sm-updater update                    # semua project enabled
+
 sm-updater credential store --help
 ```
 
@@ -143,7 +163,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **180 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **221 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 
@@ -152,7 +172,7 @@ Saat ini **180 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm 
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Skema `services.json`, tipe service, startup, backup |
 | [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI, tema, batch async, build frontend |
 | [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md) | Cronical multi-project, queue per project |
-| [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Panduan updater Laravel |
+| [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Panduan updater registry, toolchain, service lifecycle, trigger |
 | [docs/RUST-UPDATER-PLAN.md](docs/RUST-UPDATER-PLAN.md) | Inventaris fitur, backlog, dan roadmap updater |
 | [docs/RUST-UPDATER-REGISTRY-PLAN.md](docs/RUST-UPDATER-REGISTRY-PLAN.md) | Registry, toolchain, service lifecycle, SSH trigger, IP whitelist |
 | [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log |

@@ -1,11 +1,16 @@
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use sm_config::{load_projects, ConfigPaths, ProjectsFile};
+use sm_core::ToggleMode;
 
 use crate::credential::{store_credential, verify_remote, CredentialRequest, GitCredentialSink};
-use crate::runner::SystemRunner;
+use crate::registry::{load_config, save_config, AppConfig, PackageManager, Preset};
+use crate::runner::{Runner, SystemRunner};
 use crate::scan::{discover_projects, ProjectInfo};
+use crate::state::load_state;
+use crate::trigger::{run_registry, RunOptions};
 use crate::update::{update_project, UpdateOptions, UpdateStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,8 +79,13 @@ pub fn parse_args(values: &[String]) -> Result<Args, String> {
 }
 
 pub fn run(values: &[String]) -> i32 {
-    if values.first().map(String::as_str) == Some("credential") {
-        return run_credential(&values[1..]);
+    match values.first().map(String::as_str) {
+        Some("app") => return run_app(&values[1..]),
+        Some("run") => return run_trigger(&values[1..]),
+        Some("status") => return run_status(&values[1..]),
+        Some("logs") => return run_logs(&values[1..]),
+        Some("credential") => return run_credential(&values[1..]),
+        _ => {}
     }
 
     let args = match parse_args(values) {
@@ -115,6 +125,1181 @@ pub fn run(values: &[String]) -> i32 {
         Mode::Menu => run_menu(&projects, &settings, &log_dir),
         Mode::Check | Mode::Update => run_targets(&args, &projects, &settings, &log_dir),
     }
+}
+
+fn default_config_path() -> PathBuf {
+    ConfigPaths::detect().projects_path()
+}
+
+fn take_value(values: &[String], index: &mut usize, flag: &str) -> Result<String, String> {
+    *index += 1;
+    values
+        .get(*index)
+        .cloned()
+        .ok_or_else(|| format!("{flag} membutuhkan nilai."))
+}
+
+fn parse_toggle(value: &str) -> Result<ToggleMode, String> {
+    match value.to_ascii_lowercase().as_str() {
+        "auto" => Ok(ToggleMode::Auto),
+        "always" => Ok(ToggleMode::Always),
+        "never" => Ok(ToggleMode::Never),
+        _ => Err(format!(
+            "Nilai toggle tidak valid: {value} (auto/always/never)"
+        )),
+    }
+}
+
+fn parse_preset(value: &str) -> Result<Preset, String> {
+    match value.to_ascii_lowercase().as_str() {
+        "auto" => Ok(Preset::Auto),
+        "laravel" => Ok(Preset::Laravel),
+        "node" => Ok(Preset::Node),
+        "bun" => Ok(Preset::Bun),
+        "go" => Ok(Preset::Go),
+        "static" => Ok(Preset::Static),
+        "custom" => Ok(Preset::Custom),
+        _ => Err(format!("Preset tidak valid: {value}")),
+    }
+}
+
+fn parse_package_manager(value: &str) -> Result<PackageManager, String> {
+    match value.to_ascii_lowercase().as_str() {
+        "auto" => Ok(PackageManager::Auto),
+        "npm" => Ok(PackageManager::Npm),
+        "pnpm" => Ok(PackageManager::Pnpm),
+        "yarn" => Ok(PackageManager::Yarn),
+        "bun" => Ok(PackageManager::Bun),
+        "none" => Ok(PackageManager::None),
+        _ => Err(format!("Package manager tidak valid: {value}")),
+    }
+}
+
+fn run_app(values: &[String]) -> i32 {
+    let Some(command) = values.first().map(String::as_str) else {
+        eprintln!("Gunakan: sm-updater app <add|list|show|remove|test>");
+        return 2;
+    };
+
+    match command {
+        "add" => app_add(&values[1..]),
+        "edit" => app_edit(&values[1..]),
+        "list" => app_list(&values[1..]),
+        "show" => app_show(&values[1..]),
+        "remove" => app_remove(&values[1..]),
+        "test" => app_test(&values[1..]),
+        "help" | "-h" => {
+            print_usage();
+            0
+        }
+        other => {
+            eprintln!("Subcommand app tidak dikenal: {other}");
+            2
+        }
+    }
+}
+
+fn app_add(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut id = String::new();
+    let mut name = String::new();
+    let mut repo_url = String::new();
+    let mut local_path = String::new();
+    let mut branch = "main".to_string();
+    let mut preset = Preset::Auto;
+    let mut package_manager = PackageManager::Auto;
+    let mut composer = ToggleMode::Auto;
+    let mut artisan = ToggleMode::Auto;
+    let mut package_install = ToggleMode::Auto;
+    let mut build = ToggleMode::Auto;
+    let mut queue_restart = true;
+    let mut install_command = String::new();
+    let mut build_command = String::new();
+    let mut pre_update_command = String::new();
+    let mut post_update_command = String::new();
+    let mut stop_before_pull: Vec<String> = Vec::new();
+    let mut stop_before_build: Vec<String> = Vec::new();
+    let mut restart_after: Vec<String> = Vec::new();
+    let mut start_after: Vec<String> = Vec::new();
+    let mut wait_timeout_seconds = 60u64;
+    let mut allowed_ips: Vec<String> = Vec::new();
+    let mut enabled = true;
+    let mut index = 0usize;
+
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--id" => match take_value(values, &mut index, "--id") {
+                Ok(value) => id = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--name" => match take_value(values, &mut index, "--name") {
+                Ok(value) => name = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--repo" => match take_value(values, &mut index, "--repo") {
+                Ok(value) => repo_url = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--path" => match take_value(values, &mut index, "--path") {
+                Ok(value) => local_path = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--branch" => match take_value(values, &mut index, "--branch") {
+                Ok(value) => branch = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--preset" => {
+                match take_value(values, &mut index, "--preset")
+                    .and_then(|value| parse_preset(&value))
+                {
+                    Ok(value) => preset = value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--package-manager" => match take_value(values, &mut index, "--package-manager")
+                .and_then(|value| parse_package_manager(&value))
+            {
+                Ok(value) => package_manager = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--composer" => {
+                match take_value(values, &mut index, "--composer")
+                    .and_then(|value| parse_toggle(&value))
+                {
+                    Ok(value) => composer = value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--build" => {
+                match take_value(values, &mut index, "--build")
+                    .and_then(|value| parse_toggle(&value))
+                {
+                    Ok(value) => build = value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--artisan" => {
+                match take_value(values, &mut index, "--artisan")
+                    .and_then(|value| parse_toggle(&value))
+                {
+                    Ok(value) => artisan = value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--package-install" => match take_value(values, &mut index, "--package-install")
+                .and_then(|value| parse_toggle(&value))
+            {
+                Ok(value) => package_install = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--no-queue-restart" => queue_restart = false,
+            "--queue-restart" => queue_restart = true,
+            "--pre-update-command" => {
+                match take_value(values, &mut index, "--pre-update-command") {
+                    Ok(value) => pre_update_command = value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--post-update-command" => {
+                match take_value(values, &mut index, "--post-update-command") {
+                    Ok(value) => post_update_command = value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--stop-before-pull" => match take_value(values, &mut index, "--stop-before-pull") {
+                Ok(value) => stop_before_pull.push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--stop-before-build" => match take_value(values, &mut index, "--stop-before-build") {
+                Ok(value) => stop_before_build.push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--restart-after" => match take_value(values, &mut index, "--restart-after") {
+                Ok(value) => restart_after.push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--start-after" => match take_value(values, &mut index, "--start-after") {
+                Ok(value) => start_after.push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--wait-timeout" => {
+                match take_value(values, &mut index, "--wait-timeout").and_then(|value| {
+                    value
+                        .parse::<u64>()
+                        .map_err(|_| "wait-timeout harus angka detik.".to_string())
+                }) {
+                    Ok(value) => wait_timeout_seconds = value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--build-command" => match take_value(values, &mut index, "--build-command") {
+                Ok(value) => build_command = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--install-command" => match take_value(values, &mut index, "--install-command") {
+                Ok(value) => install_command = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--allow-ip" | "--allow-cidr" => match take_value(values, &mut index, "--allow-ip") {
+                Ok(value) => allowed_ips.push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--disabled" => enabled = false,
+            other => {
+                eprintln!("Argumen app add tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    if id.trim().is_empty() || repo_url.trim().is_empty() || local_path.trim().is_empty() {
+        eprintln!("--id, --repo, dan --path wajib diisi.");
+        return 2;
+    }
+    if !Path::new(&local_path).is_dir() {
+        eprintln!("Local path tidak ditemukan: {local_path}");
+        return 1;
+    }
+    if name.trim().is_empty() {
+        name = id.clone();
+    }
+
+    let mut config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    if config.settings.log_dir.trim().is_empty() {
+        config.settings.log_dir = crate::trigger::default_log_dir(&config_path)
+            .to_string_lossy()
+            .to_string();
+    }
+    if config.find(&id).is_some() {
+        eprintln!("App '{id}' sudah terdaftar.");
+        return 1;
+    }
+
+    let app = AppConfig {
+        id: id.clone(),
+        name,
+        enabled,
+        repo_url,
+        local_path,
+        branch,
+        preset,
+        package_manager,
+        composer,
+        artisan,
+        package_install,
+        build,
+        queue_restart,
+        install_command,
+        build_command,
+        pre_update_command,
+        post_update_command,
+        services: crate::registry::ServicePlan {
+            stop_before_pull,
+            stop_before_build,
+            restart_after,
+            start_after,
+            wait_timeout_seconds,
+        },
+        allowed_client_ips: allowed_ips,
+        ..AppConfig::default()
+    };
+    if let Err(error) = config.validate_app(&app) {
+        eprintln!("{error}");
+        return 1;
+    }
+    config.apps.push(app);
+    if let Err(error) = save_config(&config_path, &config) {
+        eprintln!("{error}");
+        return 1;
+    }
+    println!("App '{id}' ditambahkan ke {}", config_path.display());
+    0
+}
+
+#[derive(Default)]
+struct EditOptions {
+    name: Option<String>,
+    repo_url: Option<String>,
+    local_path: Option<String>,
+    branch: Option<String>,
+    preset: Option<Preset>,
+    package_manager: Option<PackageManager>,
+    composer: Option<ToggleMode>,
+    artisan: Option<ToggleMode>,
+    package_install: Option<ToggleMode>,
+    build: Option<ToggleMode>,
+    queue_restart: Option<bool>,
+    install_command: Option<String>,
+    build_command: Option<String>,
+    pre_update_command: Option<String>,
+    post_update_command: Option<String>,
+    allowed_ips: Option<Vec<String>>,
+    clear_allow_ips: bool,
+    stop_before_pull: Option<Vec<String>>,
+    stop_before_build: Option<Vec<String>>,
+    restart_after: Option<Vec<String>>,
+    start_after: Option<Vec<String>>,
+    wait_timeout: Option<u64>,
+    enabled: Option<bool>,
+}
+
+fn app_edit(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut id = String::new();
+    let mut options = EditOptions::default();
+    let mut index = 0usize;
+
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--name" => match take_value(values, &mut index, "--name") {
+                Ok(value) => options.name = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--repo" => match take_value(values, &mut index, "--repo") {
+                Ok(value) => options.repo_url = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--path" => match take_value(values, &mut index, "--path") {
+                Ok(value) => options.local_path = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--branch" => match take_value(values, &mut index, "--branch") {
+                Ok(value) => options.branch = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--preset" => {
+                match take_value(values, &mut index, "--preset")
+                    .and_then(|value| parse_preset(&value))
+                {
+                    Ok(value) => options.preset = Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--package-manager" => match take_value(values, &mut index, "--package-manager")
+                .and_then(|value| parse_package_manager(&value))
+            {
+                Ok(value) => options.package_manager = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--composer" => {
+                match take_value(values, &mut index, "--composer")
+                    .and_then(|value| parse_toggle(&value))
+                {
+                    Ok(value) => options.composer = Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--artisan" => {
+                match take_value(values, &mut index, "--artisan")
+                    .and_then(|value| parse_toggle(&value))
+                {
+                    Ok(value) => options.artisan = Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--package-install" => match take_value(values, &mut index, "--package-install")
+                .and_then(|value| parse_toggle(&value))
+            {
+                Ok(value) => options.package_install = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--build" => {
+                match take_value(values, &mut index, "--build")
+                    .and_then(|value| parse_toggle(&value))
+                {
+                    Ok(value) => options.build = Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--queue-restart" => options.queue_restart = Some(true),
+            "--no-queue-restart" => options.queue_restart = Some(false),
+            "--install-command" => match take_value(values, &mut index, "--install-command") {
+                Ok(value) => options.install_command = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--build-command" => match take_value(values, &mut index, "--build-command") {
+                Ok(value) => options.build_command = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--pre-update-command" => {
+                match take_value(values, &mut index, "--pre-update-command") {
+                    Ok(value) => options.pre_update_command = Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--post-update-command" => {
+                match take_value(values, &mut index, "--post-update-command") {
+                    Ok(value) => options.post_update_command = Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--allow-ip" | "--allow-cidr" => match take_value(values, &mut index, "--allow-ip") {
+                Ok(value) => options.allowed_ips.get_or_insert_with(Vec::new).push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--clear-allow-ips" => options.clear_allow_ips = true,
+            "--stop-before-pull" => match take_value(values, &mut index, "--stop-before-pull") {
+                Ok(value) => options
+                    .stop_before_pull
+                    .get_or_insert_with(Vec::new)
+                    .push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--stop-before-build" => match take_value(values, &mut index, "--stop-before-build") {
+                Ok(value) => options
+                    .stop_before_build
+                    .get_or_insert_with(Vec::new)
+                    .push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--restart-after" => match take_value(values, &mut index, "--restart-after") {
+                Ok(value) => options
+                    .restart_after
+                    .get_or_insert_with(Vec::new)
+                    .push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--start-after" => match take_value(values, &mut index, "--start-after") {
+                Ok(value) => options.start_after.get_or_insert_with(Vec::new).push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--wait-timeout" => {
+                match take_value(values, &mut index, "--wait-timeout").and_then(|value| {
+                    value
+                        .parse::<u64>()
+                        .map_err(|_| "wait-timeout harus angka detik.".to_string())
+                }) {
+                    Ok(value) => options.wait_timeout = Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return 2;
+                    }
+                }
+            }
+            "--enable" => options.enabled = Some(true),
+            "--disable" => options.enabled = Some(false),
+            value if id.is_empty() => id = value.to_string(),
+            other => {
+                eprintln!("Argumen app edit tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    if id.is_empty() {
+        eprintln!("Gunakan: sm-updater app edit ID [opsi]");
+        return 2;
+    }
+
+    let mut config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let Some(app) = config.find_mut(&id) else {
+        eprintln!("App '{id}' tidak ditemukan.");
+        return 1;
+    };
+
+    if let Some(value) = options.name {
+        app.name = value;
+    }
+    if let Some(value) = options.repo_url {
+        app.repo_url = value;
+    }
+    if let Some(value) = options.local_path {
+        app.local_path = value;
+    }
+    if let Some(value) = options.branch {
+        app.branch = value;
+    }
+    if let Some(value) = options.preset {
+        app.preset = value;
+    }
+    if let Some(value) = options.package_manager {
+        app.package_manager = value;
+    }
+    if let Some(value) = options.composer {
+        app.composer = value;
+    }
+    if let Some(value) = options.artisan {
+        app.artisan = value;
+    }
+    if let Some(value) = options.package_install {
+        app.package_install = value;
+    }
+    if let Some(value) = options.build {
+        app.build = value;
+    }
+    if let Some(value) = options.queue_restart {
+        app.queue_restart = value;
+    }
+    if let Some(value) = options.install_command {
+        app.install_command = value;
+    }
+    if let Some(value) = options.build_command {
+        app.build_command = value;
+    }
+    if let Some(value) = options.pre_update_command {
+        app.pre_update_command = value;
+    }
+    if let Some(value) = options.post_update_command {
+        app.post_update_command = value;
+    }
+    if options.clear_allow_ips {
+        app.allowed_client_ips.clear();
+    }
+    if let Some(value) = options.allowed_ips {
+        app.allowed_client_ips = value;
+    }
+    if let Some(value) = options.stop_before_pull {
+        app.services.stop_before_pull = value;
+    }
+    if let Some(value) = options.stop_before_build {
+        app.services.stop_before_build = value;
+    }
+    if let Some(value) = options.restart_after {
+        app.services.restart_after = value;
+    }
+    if let Some(value) = options.start_after {
+        app.services.start_after = value;
+    }
+    if let Some(value) = options.wait_timeout {
+        app.services.wait_timeout_seconds = value;
+    }
+    if let Some(value) = options.enabled {
+        app.enabled = value;
+    }
+
+    app.normalize();
+    let edited = app.clone();
+    if let Err(error) = config.validate_app(&edited) {
+        eprintln!("{error}");
+        return 1;
+    }
+    if let Err(error) = save_config(&config_path, &config) {
+        eprintln!("{error}");
+        return 1;
+    }
+    println!("App '{id}' diperbarui di {}", config_path.display());
+    0
+}
+
+fn app_list(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut index = 0usize;
+    while index < values.len() {
+        if values[index] == "--config" {
+            match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            }
+        } else {
+            eprintln!("Argumen app list tidak dikenal: {}", values[index]);
+            return 2;
+        }
+        index += 1;
+    }
+
+    let config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    if config.apps.is_empty() {
+        println!("Belum ada app terdaftar.");
+        return 0;
+    }
+    println!(
+        "{:<20} {:<10} {:<10} {:<30} PATH",
+        "ID", "ENABLED", "BRANCH", "REPO"
+    );
+    for app in &config.apps {
+        println!(
+            "{:<20} {:<10} {:<10} {:<30} {}",
+            app.id,
+            if app.enabled { "yes" } else { "no" },
+            app.branch,
+            app.repo_url,
+            app.local_path
+        );
+    }
+    0
+}
+
+fn app_show(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut id = String::new();
+    let mut index = 0usize;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            value if id.is_empty() => id = value.to_string(),
+            other => {
+                eprintln!("Argumen app show tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+    let config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let Some(app) = config.find(&id) else {
+        eprintln!("App '{id}' tidak ditemukan.");
+        return 1;
+    };
+    match serde_json::to_string_pretty(app) {
+        Ok(json) => {
+            println!("{json}");
+            0
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            1
+        }
+    }
+}
+
+fn app_remove(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut id = String::new();
+    let mut index = 0usize;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            value if id.is_empty() => id = value.to_string(),
+            other => {
+                eprintln!("Argumen app remove tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+    let mut config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let before = config.apps.len();
+    config.apps.retain(|app| !app.id.eq_ignore_ascii_case(&id));
+    if config.apps.len() == before {
+        eprintln!("App '{id}' tidak ditemukan.");
+        return 1;
+    }
+    if let Err(error) = save_config(&config_path, &config) {
+        eprintln!("{error}");
+        return 1;
+    }
+    println!("App '{id}' dihapus dari registry.");
+    0
+}
+
+fn app_test(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut id = String::new();
+    let mut index = 0usize;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            value if id.is_empty() => id = value.to_string(),
+            other => {
+                eprintln!("Argumen app test tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+    let config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let Some(app) = config.find(&id) else {
+        eprintln!("App '{id}' tidak ditemukan.");
+        return 1;
+    };
+    if let Err(error) = config.validate_app(app) {
+        eprintln!("{error}");
+        return 1;
+    }
+    let path = Path::new(&app.local_path);
+    if !path.is_dir() {
+        eprintln!("Local path tidak ditemukan: {}", path.display());
+        return 1;
+    }
+    let settings = crate::registry::project_settings(&config);
+    if !Path::new(&settings.git_path).is_file() {
+        eprintln!("Git tidak ditemukan: {}", settings.git_path);
+        return 1;
+    }
+
+    let runner = SystemRunner;
+    let branch = runner.run(
+        Path::new(&settings.git_path),
+        &[
+            "-C".to_string(),
+            app.local_path.clone(),
+            "rev-parse".to_string(),
+            "--abbrev-ref".to_string(),
+            "HEAD".to_string(),
+        ],
+        path,
+        Duration::from_secs(30),
+    );
+    match branch {
+        Ok(output) if output.success() => {
+            println!("Branch aktif : {}", output.stdout.trim());
+        }
+        Ok(output) => {
+            eprintln!("Gagal membaca branch: {}", output.combined());
+            return 1;
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    }
+
+    let remote = runner.run(
+        Path::new(&settings.git_path),
+        &[
+            "-C".to_string(),
+            app.local_path.clone(),
+            "ls-remote".to_string(),
+            "--heads".to_string(),
+            "origin".to_string(),
+        ],
+        path,
+        Duration::from_secs(30),
+    );
+    match remote {
+        Ok(output) if output.success() => println!("Remote       : OK"),
+        Ok(output) => {
+            eprintln!("Remote gagal: {}", output.combined());
+            return 1;
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    }
+
+    for marker in [
+        "composer.json",
+        "composer.lock",
+        "artisan",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lock",
+        "bun.lockb",
+        "go.mod",
+    ] {
+        if path.join(marker).is_file() {
+            println!("Detected     : {marker}");
+        }
+    }
+    println!("App '{}' valid.", app.id);
+    0
+}
+
+fn run_trigger(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut app = None;
+    let mut check_only = false;
+    let mut index = 0usize;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--app" => match take_value(values, &mut index, "--app") {
+                Ok(value) => app = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--check" => check_only = true,
+            "--all" => {}
+            other => {
+                eprintln!("Argumen run tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let runner = SystemRunner;
+    let outcomes = match run_registry(
+        &config,
+        &config_path,
+        &runner,
+        RunOptions {
+            check_only,
+            app: app.clone(),
+        },
+    ) {
+        Ok(outcomes) => outcomes,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+
+    let mut failed = 0;
+    let mut forbidden = 0;
+    for outcome in &outcomes {
+        println!(
+            "{}: {} - {}",
+            outcome.app_id, outcome.status, outcome.message
+        );
+        if outcome.forbidden {
+            forbidden += 1;
+        } else if outcome.status == "failed" {
+            failed += 1;
+        }
+    }
+    if failed > 0 {
+        1
+    } else if forbidden > 0 && app.is_some() {
+        3
+    } else {
+        0
+    }
+}
+
+fn run_status(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut index = 0usize;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            other => {
+                eprintln!("Argumen status tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+    let state = load_state(&config_path);
+    if state.apps.is_empty() {
+        println!("Belum ada state updater.");
+        return 0;
+    }
+    for (id, app) in &state.apps {
+        println!(
+            "{:<20} {:<15} checked={} updated={} error={}",
+            id, app.status, app.last_checked_at, app.last_updated_at, app.last_error
+        );
+    }
+    0
+}
+
+fn run_logs(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut id = String::new();
+    let mut tail = 50usize;
+    let mut index = 0usize;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--tail" => match take_value(values, &mut index, "--tail").and_then(|value| {
+                value
+                    .parse::<usize>()
+                    .map_err(|_| "--tail harus angka.".to_string())
+            }) {
+                Ok(value) => tail = value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            value if id.is_empty() => id = value.to_string(),
+            other => {
+                eprintln!("Argumen logs tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+
+    if id.is_empty() {
+        let log_dir = if config.settings.log_dir.trim().is_empty() {
+            crate::trigger::default_log_dir(&config_path)
+        } else {
+            PathBuf::from(config.settings.log_dir.trim())
+        };
+        let logs = recent_logs(&log_dir, 10);
+        if logs.is_empty() {
+            println!("Belum ada log di {}", log_dir.display());
+            return 0;
+        }
+        for log in logs {
+            println!("{}", log.display());
+        }
+        return 0;
+    }
+
+    let Some(app) = config.find(&id) else {
+        eprintln!("App '{id}' tidak ditemukan.");
+        return 1;
+    };
+    let project_logs = Path::new(&app.local_path).join("storage/logs");
+    let Some(file) = latest_log(&project_logs) else {
+        eprintln!(
+            "Belum ada log project untuk '{}' di {}.",
+            app.id,
+            project_logs.display()
+        );
+        return 1;
+    };
+    println!("{}", file.display());
+    match std::fs::read_to_string(&file) {
+        Ok(content) => {
+            let lines: Vec<&str> = content.lines().collect();
+            let start = lines.len().saturating_sub(tail);
+            for line in &lines[start..] {
+                println!("{line}");
+            }
+            0
+        }
+        Err(error) => {
+            eprintln!("Gagal membaca log: {error}");
+            1
+        }
+    }
+}
+
+fn recent_logs(dir: &Path, limit: usize) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.starts_with("project-update-") && name.ends_with(".log"))
+                .unwrap_or(false)
+        })
+        .collect();
+    files.sort();
+    files.reverse();
+    files.truncate(limit);
+    files
+}
+
+fn latest_log(dir: &Path) -> Option<PathBuf> {
+    recent_logs(dir, 1).into_iter().next()
 }
 
 fn log_dir(settings: &ProjectsFile, config_path: &std::path::Path) -> PathBuf {
@@ -491,11 +1676,37 @@ fn print_usage() {
         "Service Manager Project Updater
 
 Penggunaan:
-  sm-updater                          Menu interaktif
-  sm-updater list                     Daftar project
-  sm-updater check [--project NAMA]   Cek update (dry-run)
-  sm-updater update [--project NAMA]  Update project
-  sm-updater --all                    Proses semua project aktif
+  sm-updater                          Menu interaktif (mode lama)
+  sm-updater list                     Daftar project (mode lama)
+  sm-updater check [--project NAMA]   Cek update (dry-run, mode lama)
+  sm-updater update [--project NAMA]  Update project (mode lama)
+  sm-updater --all                    Proses semua project aktif (mode lama)
+
+Registry:
+  sm-updater app add                  Daftarkan app
+      --id ID --repo URL --path PATH [--branch main]
+      [--name NAMA] [--preset auto|laravel|node|bun|go|static|custom]
+      [--package-manager auto|npm|pnpm|yarn|bun|none]
+      [--composer auto|always|never] [--artisan auto|always|never]
+      [--package-install auto|always|never] [--build auto|always|never]
+      [--install-command CMD] [--build-command CMD]
+      [--pre-update-command CMD] [--post-update-command CMD]
+      [--stop-before-pull SERVICE] [--stop-before-build SERVICE]
+      [--restart-after SERVICE] [--start-after SERVICE]
+      [--wait-timeout DETIK] [--no-queue-restart]
+      [--allow-ip IP|CIDR] [--disabled]
+  sm-updater app edit ID [opsi yang sama]
+  sm-updater app list [--config PATH]
+  sm-updater app show ID [--config PATH]
+  sm-updater app remove ID [--config PATH]
+  sm-updater app test ID [--config PATH]
+
+Trigger:
+  sm-updater run --all [--check]      Proses semua app aktif
+  sm-updater run --app ID [--check]   Proses satu app
+  sm-updater status                   Status update terakhir
+  sm-updater logs [ID] [--tail N]     Log updater/project
+
   sm-updater --config PATH            Path projects.json
   sm-updater credential store         Simpan PAT Git (DPAPI/Credential Manager)
       --host HOST --username USER --project PATH [--git PATH]
