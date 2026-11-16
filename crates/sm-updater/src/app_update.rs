@@ -69,15 +69,23 @@ fn execute_app(
     if project.exists() && !project.is_dir() {
         return Err(format!("Local path bukan folder: {}", project.display()));
     }
-    if !project.is_dir() {
-        ensure_project(app, settings, runner, logger)?;
-    }
 
     let lifecycle = Lifecycle::new(services, app.services.wait_timeout_seconds);
     if options.check_only {
         lifecycle.validate_readonly(&app.services)?;
     } else {
         lifecycle.validate(&app.services)?;
+    }
+
+    if !project.is_dir() {
+        if options.check_only {
+            return Ok((
+                UpdateStatus::Check,
+                "Project belum ada; clone diperlukan (dry-run tidak melakukan clone).".to_string(),
+            ));
+        }
+        ensure_project(app, settings, runner, logger)?;
+        return execute_first_clone(app, settings, runner, logger, &lifecycle);
     }
 
     let plan_cell: RefCell<Option<ToolchainPlan>> = RefCell::new(None);
@@ -201,6 +209,96 @@ fn execute_app(
         outcome.before
     ));
     Ok((UpdateStatus::Updated, "Update berhasil.".to_string()))
+}
+
+fn execute_first_clone(
+    app: &AppConfig,
+    settings: &UpdaterSettings,
+    runner: &dyn Runner,
+    logger: &UpdateLogger,
+    lifecycle: &Lifecycle<'_>,
+) -> Result<(UpdateStatus, String), String> {
+    let project = Path::new(&app.local_path);
+    let changed = synthetic_first_clone_changes();
+    let plan = toolchain::resolve_plan(app, project, &changed, settings)?;
+    for note in &plan.notes {
+        logger.log(&format!("INFO: {note}"));
+    }
+
+    run_custom_list(
+        &app.commands.pre_update,
+        project,
+        runner,
+        logger,
+        "pre-update",
+    )?;
+    run_shell_option(
+        &app.pre_update_command,
+        project,
+        runner,
+        logger,
+        "pre-update command",
+    )?;
+
+    if let Err(error) = lifecycle.stop_before_build(&app.services) {
+        restore_services(lifecycle, logger);
+        return Err(error);
+    }
+    if let Err(error) = execute_plan(&plan, runner, logger) {
+        restore_services(lifecycle, logger);
+        return Err(error);
+    }
+    if let Err(error) = run_custom_list(
+        &app.commands.post_update,
+        project,
+        runner,
+        logger,
+        "post-update",
+    )
+    .and_then(|_| {
+        run_shell_option(
+            &app.post_update_command,
+            project,
+            runner,
+            logger,
+            "post-update command",
+        )
+    }) {
+        restore_services(lifecycle, logger);
+        return Err(error);
+    }
+    if let Err(error) = lifecycle.finish(&app.services) {
+        return Ok((
+            UpdateStatus::Degraded,
+            format!("Clone selesai tetapi service gagal dipulihkan: {error}"),
+        ));
+    }
+    if let Err(error) = run_health_check(app, runner, logger) {
+        return Ok((
+            UpdateStatus::Degraded,
+            format!("Clone selesai tetapi health check gagal: {error}"),
+        ));
+    }
+    Ok((
+        UpdateStatus::Updated,
+        "Clone pertama selesai; dependency/build dijalankan.".to_string(),
+    ))
+}
+
+fn synthetic_first_clone_changes() -> Vec<String> {
+    [
+        "composer.json",
+        "composer.lock",
+        "package.json",
+        "package-lock.json",
+        "bun.lock",
+        "go.mod",
+        "src/main.ts",
+        "resources/js/app.ts",
+    ]
+    .iter()
+    .map(|value| value.to_string())
+    .collect()
 }
 
 fn ensure_project(
@@ -1006,6 +1104,70 @@ mod tests {
         assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
         assert!(runner.has_call("clone"));
         assert!(target.is_dir());
+    }
+
+    #[test]
+    fn check_mode_does_not_clone_missing_project() {
+        let mut fixture = fixture();
+        let target = fixture._temp.path().join("not-cloned");
+        fixture.app.local_path = target.to_string_lossy().to_string();
+        fixture.app.clone_on_first_run = true;
+        fixture.app.services = ServicePlan::default();
+        let services = FakeServices::default();
+        let runner = FakeRunner::new(standard_handler("", "", ""));
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions { check_only: true },
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Check);
+        assert!(!runner.has_call("clone"));
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn clone_on_first_run_installs_and_builds_node() {
+        let mut fixture = fixture();
+        let target = fixture._temp.path().join("cloned-node");
+        fixture.app.local_path = target.to_string_lossy().to_string();
+        fixture.app.clone_on_first_run = true;
+        fixture.app.preset = Preset::Node;
+        fixture.app.package_manager = crate::registry::PackageManager::Npm;
+        fixture.app.package_install = sm_core::ToggleMode::Always;
+        fixture.app.build = sm_core::ToggleMode::Always;
+        fixture.app.build_command = "npm run build".into();
+        fixture.app.services = ServicePlan::default();
+        let clone_target = target.clone();
+        let inner = standard_handler("", "", "");
+        let runner = FakeRunner::new(move |program, args| {
+            if args.first().map(String::as_str) == Some("clone") {
+                std::fs::create_dir_all(&clone_target).unwrap();
+                std::fs::write(clone_target.join("package.json"), r#"{"scripts":{}}"#).unwrap();
+                std::fs::write(clone_target.join("package-lock.json"), "{}").unwrap();
+                return ok("");
+            }
+            inner(program, args)
+        });
+        let services = FakeServices::default();
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
+        assert!(runner.has_call("clone"));
+        assert!(runner.has_call("ci"));
+        assert!(runner.has_call("npm run build"));
     }
 
     #[test]

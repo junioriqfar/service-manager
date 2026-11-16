@@ -1165,7 +1165,7 @@ fn run_trigger(values: &[String]) -> i32 {
     }
     if failed > 0 {
         1
-    } else if forbidden > 0 && app.is_some() {
+    } else if forbidden > 0 {
         3
     } else {
         0

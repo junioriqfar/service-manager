@@ -275,7 +275,8 @@ Aturan:
 ```
 
 - `cloneOnFirstRun: true` menjalankan `git clone --branch <branch> --single-branch`
-  jika `localPath` belum ada.
+  jika `localPath` belum ada. Clone pertama langsung menjalankan install/build.
+  Mode `check` tidak pernah clone.
 - Health check memakai `curl.exe` (`-fsS --max-time N`) setelah service restart.
   Gagal health check → status `degraded` (file sudah ter-update).
 - Webhook hanya dikirim jika status ada di `notify.on`, payload JSON
