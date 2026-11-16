@@ -25,7 +25,7 @@ Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** 
 | Scheduler/polling | Tidak dipakai | Default `false` |
 | `sm-trigger` cross-platform | Selesai | Windows/macOS/Linux, shell ke `ssh` |
 | GUI tab Updater | Selesai | Registry CRUD, test, run/check, log |
-| GUI tab Remote | Selesai | Host/user/key/wrapper, preview, test SSH, run streaming |
+| GUI tab Remote | Selesai | Host/user, key/password (DPAPI), wrapper, preview, test SSH, run streaming |
 | Wrapper Scheduled Task elevated | Selesai | `scripts/Invoke-UpdaterTask.ps1` + action/installer |
 
 Catatan implementasi:
@@ -78,7 +78,7 @@ Jadi sifatnya **event-driven / manual-triggered**, bukan background loop. Otomat
 
 ```
 Trigger client (Windows / macOS / Linux)
-   │  SSH (key/agent)
+   │  SSH (key/agent atau password)
    │  sm-trigger --host 10.255.240.160 --all
    ▼
 Server 160 (Windows)
@@ -413,7 +413,7 @@ Status ringkas ada di bagian **Status Implementasi** di atas.
 | Firewall | Windows Firewall membatasi port SSH hanya dari IP allowed |
 | Local trigger | Tanpa env SSH (langsung di server) diizinkan jika `allowLocal` |
 | Unauthorized | Exit code khusus (mis. `3`) + log IP ditolak |
-| Auth | SSH key/agent; tidak menyimpan password |
+| Auth | CLI: SSH key/agent atau password interaktif; GUI: key/agent atau password (DPAPI opsional) |
 | Host key | Verifikasi `known_hosts` |
 | Dry-run | `sm-trigger --all --check` |
 | Single app | `sm-trigger --app kasirin` |
@@ -518,10 +518,13 @@ ssh EGOV22@10.255.240.160 "C:\tools\ServiceManager\target\release\sm-updater.exe
   - Validasi nama service terhadap `data/services.json`.
   - Status badge + log.
 - Tab **Remote**:
-  - Field host, user, port, identity, wrapper, remote binary, remote config, app ID.
-  - Preview perintah SSH, Test SSH (`BatchMode=yes`), Check/Update All, Check/Run App.
+  - Field host, user, port, auth mode (key/password), identity, password + remember
+    (DPAPI), wrapper, remote binary, remote config, app ID.
+  - Preview perintah SSH, Test SSH (`BatchMode=yes` untuk key; `SSH_ASKPASS` untuk
+    password), Check/Update All, Check/Run App.
   - Output stdout/stderr live via event Tauri.
   - Konfigurasi disimpan di `data/trigger-client.json` (tidak di-commit).
+  - Tooltip pada aksi utama; klik kanan app Updater: Run/Check/Test/Log/Edit/Delete.
 - Tidak ada background polling; semua aksi dipicu tombol/user.
 
 ### 6.7 Trigger Client Cross-Platform
@@ -539,8 +542,9 @@ Fitur `sm-trigger`:
 - CLI ringan tanpa dependensi Windows.
 - Profil server: host, port, user, identity file, known_hosts.
 - Menjalankan `ssh` sistem (OpenSSH Client di Windows 10/11, bawaan macOS/Linux).
-- Tidak menyimpan password; gunakan SSH key/agent.
-- Verifikasi host key.
+- CLI tidak menyimpan password; password diketik interaktif jika server meminta.
+- GUI Remote mendukung password dengan `SSH_ASKPASS` dan opsi Remember via DPAPI.
+- Verifikasi host key; GUI memakai `accept-new` (TOFU) untuk host baru.
 - Perintah:
   ```powershell
   sm-trigger --host 10.255.240.160 --user EGOV22 --all
@@ -603,7 +607,8 @@ Trigger client (Windows / macOS / Linux)
 - Stop/restart service membutuhkan Administrator; updater gagal sebelum mengubah file jika tidak elevated.
 - Custom command memakai program + args, bukan string shell dari repo.
 - Log di-redaksi, termasuk IP yang ditolak.
-- Trigger client memverifikasi host key (`known_hosts`) dan tidak menyimpan password.
+- Trigger client memverifikasi host key (`known_hosts`); GUI memakai `accept-new` (TOFU).
+- Password tidak disimpan plaintext; GUI hanya menyimpan ciphertext DPAPI jika Remember aktif.
 - Tidak ada HTTP trigger listener di server pada fase awal.
 
 ## 9. Migrasi Config
@@ -649,20 +654,20 @@ GUI macOS/Linux dan scheduler/daemon belum.
 - [ ] State/log per app tersedia di CLI dan GUI.
 - [ ] Config v1 tetap terbaca; migrasi v2 aman + backup.
 - [ ] `sm-trigger` dapat dibangun untuk Windows, macOS, dan Linux.
-- [ ] Client memverifikasi host key dan tidak menyimpan password.
-- [ ] Tidak ada token/password di config/log.
+- [ ] Client memverifikasi host key; password hanya disimpan sebagai ciphertext DPAPI (opsional).
+- [ ] Tidak ada token/password plaintext di config/log.
 
 ## 12. Non-Goals
 
 - Polling setiap menit secara default.
 - Menjalankan engine updater penuh di macOS/Linux (hanya trigger client).
 - Membuka HTTP trigger listener tanpa kebutuhan.
-- Menyimpan password SSH di client.
+- Menyimpan password SSH plaintext di client/config/log.
 - Menjalankan kode/string shell arbitrer dari repo; custom command harus dideklarasikan admin.
 - Auto-run migration.
 - Merge conflict resolution otomatis.
 - Menyimpan token di config.
-- Deploy non-Laravel pada fase awal.
+- Deploy app yang belum terdaftar di registry.
 
 ## 13. Pertanyaan Terbuka
 

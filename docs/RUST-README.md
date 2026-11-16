@@ -127,7 +127,7 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 
 - Tab **Services**: tabel service, form tambah/edit, import, backup/restore, log viewer.
 - Tab **Updater**: registry app, toolchain, service lifecycle, test, Check/Update, log.
-- Tab **Remote**: host/user/key/wrapper, Preview, Test SSH, Check/Update All, app tunggal, output live.
+- Tab **Remote**: host/user, key atau password (DPAPI), wrapper, Preview, Test SSH, Check/Update All, app tunggal, output live.
 - UI sepenuhnya Bahasa Inggris, tema light/dark/system.
 - Tombol **Browse…** membuka file picker (Application) dan folder picker (Working Directory).
 - Toolbar atas hanya aksi global; Add/Import/Refresh ada di header Service List.

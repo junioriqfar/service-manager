@@ -145,15 +145,18 @@ GUI Remote mendukung dua mode:
 ## GUI Remote Trigger (Windows)
 
 `sm-gui` memiliki tab **Remote** untuk memakai logika `sm-trigger` tanpa terminal
-(library yang sama; tidak perlu `sm-trigger.exe` terpisah di client):
+(library yang sama; mode password memerlukan `sm-trigger.exe` satu folder sebagai
+`SSH_ASKPASS` helper):
 
-1. Isi Host, User, Port, Identity file (opsional), Wrapper script, dan remote binary.
+1. Isi Host, User, Port, Auth mode (key/password), Identity file atau Password,
+   Wrapper script, dan remote binary.
 2. **Preview** untuk melihat perintah SSH.
-3. **Test SSH** untuk memastikan key/agent bisa login (BatchMode).
+3. **Test SSH** untuk memastikan key/agent atau password bisa login.
 4. **Check All / Update All** atau **Check App / Run App**.
 
-Konfigurasi tersimpan di `data/trigger-client.json` pada mesin client. GUI hanya
-mendukung key/agent authentication (tidak ada prompt password interaktif).
+Konfigurasi tersimpan di `data/trigger-client.json` pada mesin client. Password
+opsional disimpan dengan DPAPI jika **Remember password** dicentang; tanpa itu
+password hanya ada di memori.
 
 ## Uji
 
