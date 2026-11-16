@@ -1,6 +1,6 @@
 # Rencana dan Inventaris Fitur `sm-updater`
 
-> Rencana auto-update berbasis registry (repo URL, path, branch, scheduler): [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md).
+> Rencana registry + trigger update (repo URL, path, branch, SSH trigger): [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md).
 
 Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur yang sudah ada, serta fitur yang direncanakan berikut prioritasnya.
 

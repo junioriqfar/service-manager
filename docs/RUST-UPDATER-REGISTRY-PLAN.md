@@ -1,76 +1,75 @@
-# Rencana Auto-Update Berbasis Registry
+# Rencana Registry + Trigger Update
 
-Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + auto-update**. Aplikasi yang ingin diperbarui harus didaftarkan terlebih dahulu: alamat repo, path lokal, branch, dan kebijakan update.
+Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + update yang dipicu dari PC 143**. Fokusnya bukan polling setiap menit, tetapi satu trigger aman dari komputer Anda ke server 160.
 
 - Status: **rencana / belum diimplementasikan**
 - Basis: `sm-updater` saat ini (37 unit test, E2E Git lokal)
-- Prinsip: aman, idempoten, bisa berjalan otomatis di server tanpa RDP ke PC kantor
-- Config target: `data/projects.json` versi 2 (dengan kompatibilitas versi 1)
+- Prinsip: trigger eksplisit, aman, idempoten, tanpa polling default
+- Config target: `data/projects.json` versi 2 (kompatibel versi 1)
 
 ---
 
-## 1. Tujuan
+## 1. Koreksi Alur Lama
 
-1. Aplikasi Laravel **didaftarkan eksplisit** sebelum bisa di-update otomatis.
-2. Setiap aplikasi menyimpan **repo URL, local path, branch, dan policy update**.
-3. Server memantau perubahan Git secara berkala dan menjalankan:
-   - `git pull`/fast-forward,
-   - Composer/npm/build/artisan bila perlu,
-   - restart queue/service bila perlu.
-4. Tidak perlu mengetik perintah berulang atau RDP ke PC kantor.
-5. Tetap aman: tidak ada update jika working tree kotor, branch salah, atau ada migration baru.
-6. Status dan log dapat dipantau dari CLI dan GUI.
+Alur lama **bukan polling** dan bukan Task Scheduler. Yang terjadi:
 
-## 2. Perbedaan dengan Kondisi Saat Ini
+1. Anda menjalankan trigger dari PC 143.
+2. Trigger masuk ke server 160 melalui **SSH**.
+3. `ProjectUpdate.ps1` membaca environment `SSH_CONNECTION` atau `SSH_CLIENT`.
+4. IP client dibandingkan dengan `allowedClientIPs` di `projects.json`.
+5. Jika diizinkan, script melakukan cek/fetch/update satu kali lalu selesai.
 
-| Aspek | Saat ini | Target |
+Jadi sifatnya **event-driven / manual-triggered**, bukan background loop. Otomatisasi yang dimaksud adalah otomatisasi langkah setelah trigger: `git pull`, Composer, npm/build, dan queue restart.
+
+## 2. Tujuan
+
+1. Aplikasi harus **didaftarkan** dulu: repo URL, local path, branch, dan policy update.
+2. Anda memicu update dari PC 143 (SSH) atau dari GUI server.
+3. Server mengecek semua app terdaftar dan hanya mengupdate yang berubah.
+4. Tidak ada polling setiap menit secara default.
+5. Trigger dari IP yang tidak diizinkan ditolak.
+6. Tetap aman: working tree kotor/branch salah/migration baru tidak diupdate otomatis.
+7. Status dan log dapat dilihat dari CLI/GUI.
+
+## 3. Perbedaan dengan Kondisi Saat Ini
+
+| Aspek | Sekarang | Target |
 | --- | --- | --- |
-| Penemuan project | Scan `scanRoots` + override | **Registry aplikasi** (utama) + scan sebagai import |
-| Repo URL | Tidak disimpan | Wajib/opsional per app, dipakai untuk clone/validasi |
-| Update | Manual `sm-updater update` | Otomatis oleh scheduler/daemon |
-| Jadwal | Task Scheduler eksternal (dokumentasi) | Interval per app, update window, retry/backoff |
-| Status | Log per run | State persisten + riwayat + status GUI |
-| Credential | GCM/DPAPI akun yang menjalankan | Profil kredensial per host + strategi akun service |
-| GUI | Belum ada | Tab **Updater**: daftar app, tambah/edit, check/update now, log |
-| Service restart | `queue:restart` | `queue:restart` + daftar service yang direstart (opsional) |
+| Penentuan project | Scan `scanRoots` | Registry aplikasi eksplisit |
+| Repo URL | Tidak disimpan | Disimpan per app |
+| Trigger | SSH manual ke script PowerShell | SSH manual ke `sm-updater run --all` (atau GUI) |
+| Polling | Tidak ada | **Tetap tidak ada secara default** |
+| IP allowlist | `SSH_CONNECTION`/`SSH_CLIENT` | Dipertahankan di Rust |
+| Update | Manual satu project/all | Satu trigger untuk semua app terdaftar |
+| Status | Log per run | State persisten + riwayat |
+| Ganti service | `queue:restart` | `queue:restart` + service restart opsional |
+| GUI | Belum ada | Tab Updater, tombol Update All |
 
-## 3. Arsitektur Target
+## 4. Arsitektur Target
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ sm-gui (tab Services | tab Updater)                         │
-│ - daftar app, form registrasi, status, check/update now     │
-└───────────────────────┬─────────────────────────────────────┘
-                        │ Tauri commands
-┌───────────────────────▼─────────────────────────────────────┐
-│ sm-updater (library + CLI + scheduler)                      │
-│ - registry config, validation, state, lock, polling         │
-│ - git/composer/npm/artisan pipeline                         │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-        ┌───────────────┼────────────────┐
-        ▼               ▼                ▼
-   Git + GCM       PHP/Composer/npm   Windows SCM/NSSM
+PC 143 (client)
+   │  ssh EGOV22@10.255.240.160
+   │  sm-updater run --all
+   ▼
+Server 160
+   ├─ validasi IP SSH (allowedClientIPs)
+   ├─ baca registry data/projects.json
+   ├─ lock per app
+   ├─ untuk tiap app: cek Git → update jika berubah
+   ├─ composer/npm/build/artisan/queue restart
+   └─ tulis state + log
 ```
 
-### 3.1 Model Penjadwalan
+Tidak ada daemon/polling pada fase awal. Trigger bisa berupa:
 
-Dua opsi, dapat dipilih saat implementasi:
+- SSH remote command dari PC 143 (sama seperti sekarang),
+- menjalankan `sm-updater` langsung di server,
+- tombol **Update All** di GUI (nanti).
 
-| Opsi | Cara kerja | Kelebihan | Kekurangan |
-| --- | --- | --- | --- |
-| **A. Task Scheduler** (rekomendasi awal) | Setiap 1-5 menit jalankan `sm-updater run --due` | Tidak perlu daemon; mudah dipantau; berjalan sebagai akun EGOV22 | Butuh task eksternal |
-| **B. Windows Service** `GlobalUpdater` | NSSM menjalankan `sm-updater daemon` | Selalu hidup, satu service | Credential DPAPI harus milik akun service; lifecycle lebih kompleks |
+## 5. Schema Registry (`data/projects.json` versi 2)
 
-**Catatan credential:** DPAPI/GCM terikat pada user yang menyimpan token. Jika service berjalan sebagai `LocalSystem`, token milik `EGOV22` tidak otomatis tersedia. Gunakan salah satu:
-
-- jalankan service sebagai akun `EGOV22` (service logon),
-- gunakan deploy key SSH untuk service account,
-- simpan token di credential manager akun service.
-
-## 4. Schema Registry (`data/projects.json` versi 2)
-
-Versi 1 tetap dibaca. Saat migrasi, `scanRoots`/`projects` lama dapat diubah menjadi `apps` atau dipertahankan sebagai fallback.
+Versi 1 tetap dibaca. `scanRoots`/`projects` lama dapat dimigrasikan menjadi `apps`.
 
 ```json
 {
@@ -81,12 +80,8 @@ Versi 1 tetap dibaca. Saat migrasi, `scanRoots`/`projects` lama dapat diubah men
     "composerPath": "C:\\laragon\\bin\\composer\\composer.bat",
     "npmPath": "C:\\Program Files\\nodejs\\npm.cmd",
     "logDir": "C:\\tools\\ServiceManager\\logs",
-    "maxConcurrentUpdates": 1,
-    "defaultCheckIntervalMinutes": 5,
-    "defaultUpdateWindow": {
-      "start": "01:00",
-      "end": "05:00"
-    }
+    "allowedClientIPs": ["10.255.240.143", "127.0.0.1", "::1"],
+    "maxConcurrentUpdates": 1
   },
   "apps": [
     {
@@ -97,9 +92,6 @@ Versi 1 tetap dibaca. Saat migrasi, `scanRoots`/`projects` lama dapat diubah men
       "localPath": "D:\\Projects\\PHPProjects\\kasirin",
       "branch": "main",
       "credentialProfile": "github-junioriqfar",
-      "autoUpdate": "apply",
-      "checkIntervalMinutes": 5,
-      "updateWindow": { "start": "01:00", "end": "05:00" },
       "cloneOnFirstRun": false,
       "composer": "auto",
       "build": "auto",
@@ -118,276 +110,243 @@ Versi 1 tetap dibaca. Saat migrasi, `scanRoots`/`projects` lama dapat diubah men
         "on": ["failed", "updated"]
       }
     }
-  ]
+  ],
+  "scheduler": {
+    "enabled": false,
+    "checkIntervalMinutes": 5
+  }
 }
 ```
 
-### 4.1 Field Wajib Registrasi
+### 5.1 Field Wajib Registrasi
 
 | Field | Wajib | Keterangan |
 | --- | --- | --- |
-| `id` | Ya | Slug unik, huruf kecil/angka/`-` |
+| `id` | Ya | Slug unik |
 | `name` | Ya | Nama tampilan |
-| `repoUrl` | Ya | HTTPS/SSH; tidak boleh berisi token/password |
-| `localPath` | Ya | Folder project; harus Laravel atau kosong untuk clone |
+| `repoUrl` | Ya | HTTPS/SSH, tanpa token di URL |
+| `localPath` | Ya | Folder project atau target clone |
 | `branch` | Ya | Branch yang dipantau |
-| `enabled` | Ya | Aktif/nonaktif |
-| `autoUpdate` | Ya | `off`, `check`, `apply` |
+| `enabled` | Ya | Ikut trigger atau tidak |
+| `composer`/`build` | Tidak | `auto`, `always`, `never` |
+| `queueRestart` | Tidak | Restart queue setelah update |
 
-### 4.2 Field Opsional Penting
+### 5.2 Field Trigger
 
-- `cloneOnFirstRun` — clone repo jika `localPath` belum ada.
-- `checkIntervalMinutes` — interval polling (default 5).
-- `updateWindow` — hanya update dalam jam tertentu.
-- `composer`/`build` — `auto`, `always`, `never`.
-- `migrationPolicy` — saat ini hanya `block` (aman); `allow` tidak disarankan.
-- `restartServices` — service Windows yang direstart setelah update.
-- `preUpdateCommand`/`postUpdateCommand` — hook PowerShell.
-- `notify` — webhook opsional.
-- `healthCheck` — cek URL setelah deploy.
+| Field | Default | Keterangan |
+| --- | --- | --- |
+| `allowedClientIPs` | `["127.0.0.1","::1"]` | IP SSH yang boleh memicu |
+| `scheduler.enabled` | `false` | Polling hanya jika diaktifkan |
+| `scheduler.checkIntervalMinutes` | `5` | Hanya dipakai jika scheduler aktif |
+| `maxConcurrentUpdates` | `1` | Batas update paralel (jika banyak app) |
 
-## 5. Fitur yang Akan Dibuat
+`autoUpdate` per app tidak diperlukan pada fase trigger. App yang `enabled` akan diproses saat `run --all`. Mode `check` tetap tersedia untuk dry-run.
 
-### 5.1 Registrasi Aplikasi
+## 6. Fitur yang Akan Dibuat
+
+### 6.1 Registrasi Aplikasi
 
 | Fitur | Deskripsi |
 | --- | --- |
 | Add app (CLI) | `sm-updater app add --id ... --repo ... --path ... --branch ...` |
 | Add app (GUI) | Form di tab Updater |
-| Interactive add | Prompt bertahap jika argumen tidak lengkap |
-| Edit app | Ubah repo/path/branch/policy |
-| Remove app | Hapus dari registry (tidak menghapus folder) |
-| Enable/disable | Toggle per app |
-| List/status | Tabel app + status terakhir |
-| Test connection | `git ls-remote` + validasi path/Laravel + branch |
-| Clone on first run | Clone repo ke `localPath` bila belum ada |
+| Edit/Remove/Enable | Kelola registry tanpa mengubah folder project |
+| Test connection | `git ls-remote`, validasi path/branch/Laravel |
+| Clone on first run | Clone repo jika `localPath` belum ada |
 | Import dari scan | Ubah project hasil scan menjadi registry entry |
-| Validasi | ID unik, URL valid, path tidak konflik, branch ada |
+| Validasi | ID unik, URL bersih, path tidak konflik |
 
-### 5.2 Deteksi Perubahan Otomatis
+### 6.2 Trigger dari PC 143
 
 | Fitur | Deskripsi |
 | --- | --- |
-| Poll remote | `git ls-remote origin refs/heads/<branch>` setiap interval |
-| Bandingkan SHA | Bandingkan remote SHA dengan SHA lokal/`origin/<branch>` |
-| Fetch selektif | Fetch hanya jika SHA remote berubah |
-| Update window | Hanya jalankan pada jam yang diizinkan |
-| Jitter/backoff | Hindari semua app polling bersamaan; backoff saat gagal |
-| Skip jika dirty | Working tree kotor → status `dirty`, tidak update |
-| Skip jika branch salah | Branch aktif ≠ config → status `failed`/blocked |
-| Migration guard | Perubahan migration → status `blocked-migration` |
-| Lock | Lock global + per app mencegah update bersamaan |
-| Retry | Retry terbatas untuk kegagalan jaringan |
-| Idempotensi | App yang sudah terbaru tidak diubah |
+| SSH trigger | `sm-updater run --all` dari PC 143 |
+| IP allowlist | Baca `SSH_CONNECTION`/`SSH_CLIENT`, cocokkan `allowedClientIPs` |
+| Local trigger | Tanpa env SSH (langsung di server) diizinkan secara default |
+| Unauthorized | Exit code khusus (mis. `3`) + pesan jelas |
+| Dry-run | `sm-updater run --all --check` |
+| Single app | `sm-updater run --app kasirin` |
+| Lock | Cegah dua trigger berjalan bersamaan |
+| No-op | App tanpa perubahan tidak diubah |
 
-### 5.3 Pipeline Update
+### 6.3 Pipeline Update
 
-Pipeline yang sudah ada dipertahankan:
+Pipeline lama dipertahankan:
 
 1. Validasi repo/path/branch.
-2. Cek working tree.
-3. Preflight auth.
+2. Cek working tree bersih.
+3. Preflight auth remote.
 4. Fetch + fast-forward.
 5. Blokir migration.
 6. Composer jika perlu.
 7. npm ci/install + build jika perlu.
 8. `php artisan optimize:clear`.
 9. `php artisan queue:restart`.
-10. Hook pre/post.
+10. Pre/post command.
 11. Restart service terpilih (opsional).
 12. Health check (opsional).
 13. Simpan state + log + rollback hint.
 
-Tambahan target:
+### 6.4 State, Riwayat, dan Lock
 
-- `preUpdateCommand` sebelum pull (mis. maintenance mode).
-- `restartServices` setelah update.
-- `healthCheck` setelah update.
-- Status akhir per app disimpan.
+File runtime: `data/updater-state.json` dan `data/updater.lock` (tidak di-commit).
 
-### 5.4 State dan Riwayat
+Status per app:
 
-File: `data/updater-state.json` (runtime, tidak di-commit).
+- `idle`
+- `checking`
+- `updating`
+- `up-to-date`
+- `blocked-migration`
+- `dirty`
+- `failed`
 
-```json
-{
-  "version": 1,
-  "apps": {
-    "kasirin": {
-      "status": "up-to-date",
-      "lastCheckedAt": "2026-11-16T14:00:00+07:00",
-      "lastUpdatedAt": "2026-11-16T13:30:00+07:00",
-      "lastCommit": "abc1234",
-      "lastError": null,
-      "nextCheckAt": "2026-11-16T14:05:00+07:00"
-    }
-  }
-}
-```
+Data yang disimpan:
 
-Fitur:
+- `lastCheckedAt`, `lastUpdatedAt`, `lastCommit`, `lastError`, `durationMs`.
+- Riwayat update (JSONL/log).
+- Lock: PID, timestamp, app; stale lock timeout.
 
-- Status: `idle`, `checking`, `updating`, `up-to-date`, `blocked-migration`, `dirty`, `failed`.
-- Riwayat update (JSONL atau log terpisah) per app.
-- Lock file: `data/updater.lock` (PID, timestamp, app).
-- Stale lock recovery.
-- Retention log (mis. 30 hari / 100 run).
-
-### 5.5 CLI
+### 6.5 CLI
 
 ```powershell
 # Registry
-sm-updater app add --id kasirin --name Kasirin --repo https://... --path D:\... --branch main --auto apply
+sm-updater app add --id kasirin --name Kasirin --repo https://... --path D:\... --branch main
 sm-updater app list
 sm-updater app show kasirin
 sm-updater app edit kasirin --branch develop
 sm-updater app remove kasirin
-sm-updater app enable kasirin
-sm-updater app disable kasirin
 sm-updater app test kasirin
 
-# Operasi
-sm-updater check --app kasirin
-sm-updater update --app kasirin
-sm-updater run --due                 # dipanggil scheduler
-sm-updater run --app kasirin         # paksa cek/update
-sm-updater daemon --interval 300     # opsi service
+# Trigger (dari PC 143 atau server)
+sm-updater run --all
+sm-updater run --all --check
+sm-updater run --app kasirin
+sm-updater run --app kasirin --check
+
+# Status/log
 sm-updater status
 sm-updater logs kasirin
-sm-updater rollback --app kasirin --sha <sha>
 ```
 
 Kompatibilitas: `list`, `check`, `update`, `--project`, `--all` tetap bekerja.
 
-### 5.6 GUI (Tab Updater)
+Contoh trigger SSH dari PC 143:
 
-Tambahan pada `sm-gui`:
+```powershell
+ssh EGOV22@10.255.240.160 "C:\tools\ServiceManager\target\release\sm-updater.exe run --all"
+```
 
-- Tab **Services** (sekarang) dan **Updater**.
-- Tabel app: name, repo, branch, auto mode, status, last check, last update.
-- Tombol: Add, Edit, Remove, Check Now, Update Now, Open Log, Refresh.
-- Form registrasi:
-  - name/id, repo URL, local path, branch,
-  - auto update (off/check/apply), interval, update window,
-  - composer/build/queue restart,
-  - restart services, pre/post command, webhook.
-- Tombol **Test Connection**.
-- Badge status + progress saat update.
-- Dialog konfirmasi untuk update manual.
-- Semua teks Bahasa Inggris dan mendukung dark/light mode.
+### 6.6 GUI (Tab Updater)
 
-### 5.7 Notifikasi dan Health Check (Opsional)
+- Tab **Services** dan **Updater**.
+- Tabel app terdaftar: name, repo, branch, status, last check, last update.
+- Tombol: Add, Edit, Remove, Test, **Update All**, Check All, Refresh.
+- Form registrasi: repo URL, local path, branch, composer/build, queue restart, service restart, hooks.
+- Status badge + log.
+- Tidak ada background polling; semua aksi dipicu tombol/user.
 
-- Webhook generic (Discord/Telegram/Slack/custom) untuk `updated`, `failed`, `blocked-migration`.
-- Health check HTTP setelah update; gagal → status `failed` + notifikasi.
-- Retry/backoff untuk webhook.
-- Redaksi token/webhook secret di log.
+### 6.7 Opsional (Fase Lanjutan)
 
-### 5.8 Integrasi Service Manager
+- `scheduler.enabled=true` + `run --due` via Task Scheduler.
+- Windows Service `GlobalUpdater` (`daemon`).
+- Webhook GitHub/GitLab (real-time, butuh endpoint publik).
+- Notifikasi webhook dan health check.
+- Rollback command/otomatis.
+- Update window.
 
-- App updater dapat direstart service tertentu setelah update (mis. queue worker).
-- `GlobalUpdater` dapat didaftarkan sebagai service NSSM/GUI Service Manager.
-- Status `GlobalUpdater` terlihat di tab Services.
-- `queue:restart` tetap default untuk queue Laravel.
-
-## 6. Alur Auto-Update
+## 7. Alur Trigger
 
 ```
-Scheduler (tiap 1-5 menit)
-  └─ sm-updater run --due
-       ├─ baca registry + state
-       ├─ untuk setiap app enabled:
-       │    ├─ cek lock (skip jika sedang update)
-       │    ├─ cek update window
-       │    ├─ git ls-remote (remote SHA)
-       │    ├─ jika SHA sama → up-to-date, update state
-       │    ├─ fetch + cek migration
-       │    ├─ jika migration → blocked-migration + notifikasi
+PC 143
+  └─ ssh server160 "sm-updater run --all"
+       ├─ cek SSH client IP
+       ├─ baca registry
+       ├─ lock global/per app
+       ├─ untuk tiap app enabled:
+       │    ├─ validasi repo/path/branch
+       │    ├─ git ls-remote/fetch
+       │    ├─ jika tidak berubah → up-to-date
+       │    ├─ migration? → blocked-migration
        │    ├─ fast-forward merge
        │    ├─ composer/npm/build/artisan
        │    ├─ queue:restart / restartServices
-       │    ├─ health check
-       │    └─ simpan state + log + notifikasi
-       └─ keluar dengan exit code sesuai hasil
+       │    └─ simpan state + log
+       └─ ringkasan + exit code
 ```
 
-## 7. Keamanan
+## 8. Keamanan
 
-- `repoUrl` tidak boleh mengandung `username:password@`.
-- `credentialProfile` hanya referensi host/username; token tetap di GCM/DPAPI.
-- Service auto-update harus berjalan sebagai akun yang memiliki akses kredensial.
-- `preUpdateCommand`/`postUpdateCommand` hanya dari config yang dikontrol admin.
-- `data/` dan `backup/` dibatasi ACL.
-- Log di-redaksi; webhook secret tidak ditulis.
-- Lock mencegah dua worker.
-- Migration tetap manual (tidak auto-run).
+- IP allowlist dari `SSH_CONNECTION`/`SSH_CLIENT` (sama seperti perilaku lama).
+- `repoUrl` tidak boleh berisi kredensial.
+- Token tetap di GCM/DPAPI; config hanya menyimpan profil/host.
+- Trigger lokal tanpa SSH diizinkan untuk admin server.
+- `pre/postUpdateCommand` hanya dari config admin.
+- Lock mencegah trigger ganda.
+- Migration tetap manual.
+- Log di-redaksi.
 
-## 8. Migrasi Config
+## 9. Migrasi Config
 
-- `projects.json` v1 tetap dibaca.
-- Perintah `sm-updater migrate-config` mengubah `projects`/`scanRoots` menjadi `apps` tanpa menghapus data.
-- Backup otomatis sebelum menulis config baru ke `backup/`.
-- Aplikasi yang belum punya `repoUrl` dapat diisi lewat GUI/CLI; update otomatis tidak aktif sampai registrasi lengkap.
+- v1 `projects.json` tetap dibaca.
+- `sm-updater migrate-config` mengubah `projects`/`scanRoots` menjadi `apps`.
+- Backup otomatis ke `backup/` sebelum menulis.
+- App tanpa `repoUrl` tetap bisa update manual, tetapi tidak masuk registry sampai dilengkapi.
 
-## 9. Fase Implementasi
+## 10. Fase Implementasi
 
 | Fase | Deliverable | Estimasi |
 | --- | --- | --- |
-| A. Registry & validasi | Schema v2, migrasi v1→v2, `app add/list/edit/remove/test`, clone-on-first-run, test | 3-5 hari |
-| B. Engine auto-update | Polling, lock, state, retry, update window, `run --due`, `daemon`, test | 5-7 hari |
-| C. GUI Updater | Tab, tabel, form registrasi, test connection, status, check/update now | 5-7 hari |
-| D. Integrasi & notifikasi | Restart service, pre/post hook, webhook, health check, rollback | 3-5 hari |
-| E. Hardening & rilis | Log retention, ACL, dokumentasi, E2E, release | 2-3 hari |
+| A. Registry & trigger | Schema v2, migrasi, `app add/list/edit/remove/test`, `run --all`, IP allowlist, lock, test | 4-6 hari |
+| B. GUI Updater | Tab, tabel, form registrasi, test, Update All/Check All, status/log | 5-7 hari |
+| C. Integrasi | Restart service, pre/post hook, health check, webhook opsional | 3-5 hari |
+| D. Opsional | Task Scheduler/polling, daemon, rollback | 3-5 hari |
 
-**Total estimasi:** 18-27 person-days.
+**Total fase inti:** 12-18 person-days; fitur opsional 3-5 hari tambahan.
 
-## 10. Kriteria Penerimaan
+## 11. Kriteria Penerimaan
 
-- [ ] App hanya bisa auto-update setelah terdaftar dengan repo URL, path, dan branch.
-- [ ] Config v1 tetap terbaca; migrasi v2 tidak kehilangan data.
-- [ ] `sm-updater app test` memvalidasi repo, auth, path, branch, dan Laravel.
-- [ ] Polling tidak menjalankan update jika SHA remote belum berubah.
-- [ ] Lock mencegah update ganda; stale lock dapat dipulihkan.
-- [ ] Migration baru selalu diblokir (tidak auto-run).
-- [ ] `run --due` dan `daemon` berjalan di Task Scheduler/service.
-- [ ] State dan log per app dapat dilihat di CLI dan GUI.
-- [ ] GUI dapat add/edit/remove/test/check/update tanpa CLI.
+- [ ] App harus terdaftar sebelum diproses `run --all`.
+- [ ] Trigger dari PC 143 diizinkan hanya jika IP ada di `allowedClientIPs`.
+- [ ] Trigger dari IP lain ditolak dengan exit code jelas.
+- [ ] Trigger tidak melakukan polling; hanya satu kali cek/update.
+- [ ] App tanpa perubahan tidak diubah.
+- [ ] Working tree kotor/branch salah/migration baru tidak diupdate otomatis.
+- [ ] Satu trigger memproses semua app enabled dengan lock.
+- [ ] State/log per app tersedia di CLI dan GUI.
+- [ ] Config v1 tetap terbaca; migrasi v2 aman + backup.
 - [ ] Tidak ada token/password di config/log.
-- [ ] Semua fitur baru memiliki unit test + update dokumentasi.
 
-## 11. Non-Goals
+## 12. Non-Goals
 
-- Auto-run `php artisan migrate`.
-- Menyelesaikan merge conflict otomatis.
-- Mengubah branch otomatis.
-- Menyimpan token di `projects.json`.
-- Menggantikan Git Credential Manager.
+- Polling setiap menit secara default.
+- Auto-run migration.
+- Merge conflict resolution otomatis.
+- Menyimpan token di config.
 - Deploy non-Laravel pada fase awal.
 
-## 12. Pertanyaan Terbuka
+## 13. Pertanyaan Terbuka
 
-1. Auto-update dijalankan lewat **Task Scheduler** atau **Windows Service**?
-2. Akun service mana yang akan dipakai (`EGOV22`, akun khusus, atau SSH deploy key)?
-3. Apakah update harus dibatasi jam tertentu (mis. malam hari)?
-4. Apakah webhook/notifikasi diperlukan? Ke mana?
-5. Apakah `cloneOnFirstRun` diperlukan (repo belum ada di server)?
-6. Apakah rollback otomatis setelah health check gagal diinginkan?
-7. Apakah GUI Updater harus masuk ke aplikasi yang sama atau aplikasi terpisah?
+1. Trigger dari PC 143 tetap via **SSH remote command**, atau ada aplikasi/shortcut khusus?
+2. Apakah trigger harus bisa dijalankan tanpa login RDP (SSH key) — seperti sekarang?
+3. Apakah GUI Updater perlu tombol **Update All** atau cukup CLI/SSH?
+4. Apakah `allowedClientIPs` tetap dipakai, atau mau ditambah token/secret?
+5. Apakah clone repo otomatis diperlukan untuk app baru?
+6. Apakah service queue perlu direstart selain `php artisan queue:restart`?
 
-## 13. Rekomendasi Awal
+## 14. Rekomendasi
 
-1. Mulai dari **registry + CLI** (Fase A), karena menjadi fondasi semua fitur.
-2. Gunakan **Task Scheduler** dengan `sm-updater run --due` sebagai langkah pertama; service `GlobalUpdater` menyusul.
-3. Jalankan sebagai akun `EGOV22` yang sudah memiliki kredensial Git.
-4. Default `autoUpdate: check` untuk app baru, lalu ubah ke `apply` setelah verifikasi.
-5. Pertahankan migration `block` dan backup `backup/` di semua kondisi.
-6. Integrasikan GUI setelah engine stabil agar UI tidak menangani logika deploy.
+1. **Pertahankan model trigger SSH** dari PC 143; jangan bangun polling di fase awal.
+2. Bangun registry + `sm-updater run --all` + IP allowlist + lock sebagai fitur inti.
+3. Tambahkan GUI tab Updater setelah CLI stabil.
+4. Polling/daemon/webhook hanya jika nanti benar-benar dibutuhkan.
+5. Default app baru: `enabled: true`, tetapi update hanya berjalan saat trigger.
 
 ---
 
 ## Referensi
 
 - Implementasi saat ini: [RUST-UPDATER.md](RUST-UPDATER.md)
-- Inventaris & backlog saat ini: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md)
+- Inventaris fitur: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md)
 - Service global/queue: [RUST-SERVICES.md](RUST-SERVICES.md)
 - Keamanan: [RUST-SECURITY.md](RUST-SECURITY.md)
