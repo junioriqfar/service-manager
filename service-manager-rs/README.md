@@ -138,7 +138,7 @@ sm-updater update --project kasirin
 sm-updater update            # semua project enabled
 ```
 
-Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir migration, composer/npm/build/artisan kondisional, `postUpdateCommand`, log ganda (aplikasi + `storage/logs`), timeout, dan exit code. Detail ada di [docs/RUST-UPDATER.md](../docs/RUST-UPDATER.md).
+Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir migration, composer/npm/build/artisan kondisional, `postUpdateCommand`, log ganda (aplikasi + `storage/logs`), timeout, dan exit code. Panduan: [docs/RUST-UPDATER.md](../docs/RUST-UPDATER.md). Roadmap: [docs/RUST-UPDATER-PLAN.md](../docs/RUST-UPDATER-PLAN.md).
 
 ## Security Hardening (Phase 5)
 

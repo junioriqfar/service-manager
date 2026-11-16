@@ -2,6 +2,8 @@
 
 CLI updater Laravel berbasis Rust. Binary mandiri, kompatibel dengan `projects.json` versi 1.
 
+> Inventaris fitur, backlog, dan rencana iterasi berikutnya: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md).
+
 ## Build
 
 ```powershell

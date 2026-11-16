@@ -147,7 +147,8 @@ Saat ini **178 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm 
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Skema `services.json`, tipe service, startup, backup |
 | [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI, tema, batch async, build frontend |
 | [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md) | Cronical multi-project, queue per project |
-| [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Updater Laravel |
+| [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Panduan updater Laravel |
+| [docs/RUST-UPDATER-PLAN.md](docs/RUST-UPDATER-PLAN.md) | Inventaris fitur, backlog, dan roadmap updater |
 | [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log |
 | [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md) | Build, installer, CI, deployment |
 | [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md) | Catatan historis migrasi ke Rust |
