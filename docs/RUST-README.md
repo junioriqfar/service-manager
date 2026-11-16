@@ -170,7 +170,7 @@ Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state,
 - `sm-updater credential store` — simpan PAT lewat Git Credential Manager (DPAPI), token dibaca tanpa echo dan tidak pernah ditulis ke log/file.
 - Elevasi UAC via banner GUI dan `ShellExecuteW runas`.
 - SSH trigger: allowlist IP/CIDR dua lapis, `authorize` sebelum task elevated, Scheduled Task `RunLevel Highest`, request nonce + expiry 15 menit.
-- GUI Remote memakai `BatchMode=yes` (key/agent saja) dan `ConnectTimeout=10`.
+- GUI Remote mendukung key/agent (`BatchMode=yes`) atau password via `SSH_ASKPASS`; password opsional disimpan dengan DPAPI.
 - Detail: [RUST-SECURITY.md](RUST-SECURITY.md).
 
 ## Status Fase

@@ -83,7 +83,7 @@ export function ServiceTable({
           <span className="hidden text-xs text-muted-foreground min-[1100px]:inline">
             Right-click a service for actions
           </span>
-          <Button type="button" variant="outline" size="sm" onClick={onAdd}>
+          <Button type="button" variant="outline" size="sm" onClick={onAdd} title="Add a new service configuration">
             <Plus />
             Add
           </Button>
@@ -93,11 +93,12 @@ export function ServiceTable({
             size="sm"
             onClick={onImport}
             disabled={importing}
+            title="Scan installed Windows services to import"
           >
             {importing ? <Loader2 className="animate-spin" /> : <ImportIcon />}
             Import
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
+          <Button type="button" variant="outline" size="sm" onClick={onRefresh} title="Reload service list and SCM status">
             <RefreshCw className={cn(refreshing && "animate-spin")} />
             Refresh
           </Button>

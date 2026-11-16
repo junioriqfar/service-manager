@@ -124,6 +124,24 @@ Get-ScheduledTask -TaskName ServiceManager-Updater
 Get-ScheduledTaskInfo -TaskName ServiceManager-Updater
 ```
 
+## Autentikasi Password
+
+CLI `sm-trigger` memakai `ssh` sistem, jadi password bisa diketik saat diminta
+(interaktif di terminal). Password tidak disimpan oleh CLI.
+
+GUI Remote mendukung dua mode:
+
+- **SSH key / agent** — `BatchMode=yes`, cocok untuk key tanpa passphrase atau agent.
+- **Password** — GUI memakai `sm-trigger.exe` sebagai `SSH_ASKPASS` helper
+  (`SSH_ASKPASS_REQUIRE=force`). Password dikirim lewat environment proses sementara,
+  tidak ditulis ke command line/log.
+  - Opsi **Remember password** menyimpannya dengan **DPAPI** di
+    `data/trigger-client.json` sebagai ciphertext (`passwordProtected`).
+  - Tanpa Remember, password hanya ada di memori selama sesi.
+  - `sm-trigger.exe` harus berada satu folder dengan `sm-gui.exe`.
+- Host key baru memakai `StrictHostKeyChecking=accept-new` (TOFU). Setelah host key
+  tersimpan di `known_hosts`, verifikasi tetap dilakukan.
+
 ## GUI Remote Trigger (Windows)
 
 `sm-gui` memiliki tab **Remote** untuk memakai logika `sm-trigger` tanpa terminal

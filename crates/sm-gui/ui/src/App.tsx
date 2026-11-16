@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { AboutDialog } from "@/components/about-dialog";
 import { AdminBanner } from "@/components/admin-banner";
 import { BatchDialog } from "@/components/batch-dialog";
+import { Hint } from "@/components/hint";
 import { ImportDialog } from "@/components/import-dialog";
 import { LogPanel } from "@/components/log-panel";
 import { RemoteTriggerView } from "@/components/remote-trigger-view";
@@ -29,6 +30,7 @@ import { UpdaterView } from "@/components/updater-view";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { batchSummaryText, countsLabel } from "@/lib/service";
 import { errorMessage, invoke, listen } from "@/lib/tauri";
 import type {
@@ -49,8 +51,10 @@ type SingleActionCommand = "start_service" | "stop_service" | "restart_service";
 function App() {
   return (
     <ThemeProvider>
-      <ServiceManager />
-      <Toaster />
+      <TooltipProvider delayDuration={250}>
+        <ServiceManager />
+        <Toaster />
+      </TooltipProvider>
     </ThemeProvider>
   );
 }
@@ -583,6 +587,7 @@ function ServiceManager() {
               onClick={() => setView("services")}
               role="tab"
               aria-selected={view === "services"}
+              title="Services: install, start, stop, restart Windows services"
             >
               <ServerCog />
               Services
@@ -594,6 +599,7 @@ function ServiceManager() {
               onClick={() => setView("updater")}
               role="tab"
               aria-selected={view === "updater"}
+              title="Updater: registry apps, toolchain, check/update"
             >
               <PackageOpen />
               Updater
@@ -605,6 +611,7 @@ function ServiceManager() {
               onClick={() => setView("remote")}
               role="tab"
               aria-selected={view === "remote"}
+              title="Remote: trigger the server over SSH"
             >
               <RadioTower />
               Remote
@@ -621,6 +628,7 @@ function ServiceManager() {
                     size="sm"
                     onClick={() => void runBatch("start")}
                     disabled={!hasInstalled || batchRunning}
+                    title="Start all installed services in dependency order"
                   >
                     <Play className="text-emerald-600 dark:text-emerald-400" />
                     Start All
@@ -631,6 +639,7 @@ function ServiceManager() {
                     size="sm"
                     onClick={() => void runBatch("stop")}
                     disabled={!hasInstalled || batchRunning}
+                    title="Stop all installed services in reverse dependency order"
                   >
                     <Square className="fill-current text-red-600 dark:text-red-400" />
                     Stop All
@@ -641,6 +650,7 @@ function ServiceManager() {
                     size="sm"
                     onClick={() => void runBatch("restart")}
                     disabled={!hasInstalled || batchRunning}
+                    title="Restart all installed services"
                   >
                     <RotateCcw className="text-blue-600 dark:text-blue-400" />
                     Restart All
@@ -650,7 +660,7 @@ function ServiceManager() {
                 <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
 
                 <div className="flex items-center gap-1.5" role="group" aria-label="Global actions">
-                  <Button type="button" variant="outline" size="sm" onClick={() => void backupConfig()}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void backupConfig()} title="Export service config to backup folder">
                     <Download />
                     Backup
                   </Button>
@@ -659,19 +669,20 @@ function ServiceManager() {
                     variant="outline"
                     size="sm"
                     onClick={() => restoreInputRef.current?.click()}
+                    title="Restore service config from a JSON file"
                   >
                     <Upload />
                     Restore
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleOpenFolder}>
+                  <Button type="button" variant="outline" size="sm" onClick={handleOpenFolder} title="Open config folder">
                     <FolderOpen />
                     Folder
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleOpenAppLog}>
+                  <Button type="button" variant="outline" size="sm" onClick={handleOpenAppLog} title="Open application log">
                     <FileText />
                     App Log
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void openAbout()}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void openAbout()} title="About Service Manager">
                     <Info />
                     About
                   </Button>
@@ -680,10 +691,11 @@ function ServiceManager() {
                 <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
               </>
             )}
-            <ThemeToggle />
+            <Hint label="Theme: light, dark, or system" side="left">
+              <ThemeToggle />
+            </Hint>
           </div>
         </header>
-
         <main className="flex min-h-0 flex-1 flex-col gap-3 p-3">
           {view === "updater" ? (
             <UpdaterView />

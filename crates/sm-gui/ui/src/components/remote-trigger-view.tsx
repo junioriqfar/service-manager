@@ -14,6 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { errorMessage, invoke, listen } from "@/lib/tauri";
 import type {
   RemoteTriggerConfig,
@@ -27,6 +35,10 @@ const DEFAULT_CONFIG: RemoteTriggerConfig = {
   user: "",
   port: 22,
   identity: "",
+  authMode: "key",
+  password: "",
+  rememberPassword: false,
+  passwordProtected: "",
   wrapper: "C:\\tools\\ServiceManager\\scripts\\Invoke-UpdaterTask.ps1",
   remoteBin: "C:\\tools\\ServiceManager\\target\\release\\sm-updater.exe",
   remoteConfig: "",
@@ -42,15 +54,17 @@ function Field({
   label,
   htmlFor,
   className,
+  hint,
   children,
 }: {
   label: string;
   htmlFor: string;
   className?: string;
+  hint?: string;
   children: ReactNode;
 }) {
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("space-y-1.5", className)} title={hint}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
     </div>
@@ -194,8 +208,8 @@ export function RemoteTriggerView() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="rounded-lg border bg-card px-3 py-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="max-h-[60%] shrink-0 overflow-y-auto rounded-lg border bg-card px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="mr-auto">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -203,25 +217,25 @@ export function RemoteTriggerView() {
               Remote Trigger
             </h2>
             <p className="text-xs text-muted-foreground">
-              Run sm-trigger over SSH from this client. Key/agent auth only (BatchMode).
+              Run sm-trigger over SSH from this client. Key/agent or saved password.
             </p>
           </div>
           <Badge variant={running ? "warning" : "secondary"}>{status}</Badge>
-          <Button type="button" variant="outline" size="sm" onClick={() => void preview()} disabled={running}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void preview()} disabled={running} title="Show the SSH command without executing it">
             <Eye />
             Preview
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => void testSsh()} disabled={running}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void testSsh()} disabled={running} title="Test SSH authentication and connection">
             <Terminal />
             Test SSH
           </Button>
-          <Button type="button" size="sm" onClick={() => void save()} disabled={running || loading}>
+          <Button type="button" size="sm" onClick={() => void save()} disabled={running || loading} title="Save host, auth, and wrapper settings">
             Save
           </Button>
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Host" htmlFor="remote-host">
+          <Field label="Host" htmlFor="remote-host" hint="Server hostname or IP address">
             <Input
               id="remote-host"
               value={config.host}
@@ -229,7 +243,7 @@ export function RemoteTriggerView() {
               placeholder="10.255.240.160"
             />
           </Field>
-          <Field label="User" htmlFor="remote-user">
+          <Field label="User" htmlFor="remote-user" hint="Windows account used for SSH login">
             <Input
               id="remote-user"
               value={config.user}
@@ -237,7 +251,7 @@ export function RemoteTriggerView() {
               placeholder="EGOV22"
             />
           </Field>
-          <Field label="Port" htmlFor="remote-port">
+          <Field label="Port" htmlFor="remote-port" hint="SSH port (default 22)">
             <Input
               id="remote-port"
               type="number"
@@ -247,15 +261,55 @@ export function RemoteTriggerView() {
               onChange={(event) => set("port", Number(event.target.value) || 22)}
             />
           </Field>
-          <Field label="Identity file" htmlFor="remote-identity">
-            <Input
-              id="remote-identity"
-              value={config.identity}
-              onChange={(event) => set("identity", event.target.value)}
-              placeholder="C:\Users\you\.ssh\id_ed25519"
-            />
+          <Field label="Authentication" htmlFor="remote-auth" hint="Use SSH key/agent or password authentication">
+            <Select
+              value={config.authMode}
+              onValueChange={(value) => set("authMode", value)}
+            >
+              <SelectTrigger id="remote-auth">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="key">SSH key / agent</SelectItem>
+                <SelectItem value="password">Password</SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
-          <Field label="Wrapper script" htmlFor="remote-wrapper" className="sm:col-span-2">
+          {config.authMode === "password" ? (
+            <>
+              <Field label="Password" htmlFor="remote-password" className="sm:col-span-2" hint="Password is sent to ssh via SSH_ASKPASS; not written to logs">
+                <Input
+                  id="remote-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={config.password}
+                  onChange={(event) => set("password", event.target.value)}
+                  placeholder="SSH password"
+                />
+              </Field>
+              <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
+                <div>
+                  <Label htmlFor="remote-remember">Remember password</Label>
+                  <p className="text-xs text-muted-foreground">Encrypted with DPAPI.</p>
+                </div>
+                <Switch
+                  id="remote-remember"
+                  checked={config.rememberPassword}
+                  onCheckedChange={(checked) => set("rememberPassword", checked)}
+                />
+              </div>
+            </>
+          ) : (
+            <Field label="Identity file" htmlFor="remote-identity" className="sm:col-span-2" hint="Private key path; optional when ssh-agent is configured">
+              <Input
+                id="remote-identity"
+                value={config.identity}
+                onChange={(event) => set("identity", event.target.value)}
+                placeholder="C:\Users\you\.ssh\id_ed25519 (optional with ssh-agent)"
+              />
+            </Field>
+          )}
+          <Field label="Wrapper script" htmlFor="remote-wrapper" className="sm:col-span-2" hint="Remote PowerShell wrapper; recommended for service lifecycle">
             <Input
               id="remote-wrapper"
               value={config.wrapper}
@@ -263,7 +317,7 @@ export function RemoteTriggerView() {
               placeholder="C:\tools\ServiceManager\scripts\Invoke-UpdaterTask.ps1"
             />
           </Field>
-          <Field label="Remote sm-updater.exe" htmlFor="remote-bin" className="sm:col-span-2">
+          <Field label="Remote sm-updater.exe" htmlFor="remote-bin" className="sm:col-span-2" hint="Updater binary used when no wrapper is set">
             <Input
               id="remote-bin"
               value={config.remoteBin}
@@ -271,7 +325,7 @@ export function RemoteTriggerView() {
               placeholder="C:\tools\ServiceManager\target\release\sm-updater.exe"
             />
           </Field>
-          <Field label="Remote projects.json (optional)" htmlFor="remote-config" className="sm:col-span-2">
+          <Field label="Remote projects.json (optional)" htmlFor="remote-config" className="sm:col-span-2" hint="Optional remote registry config path">
             <Input
               id="remote-config"
               value={config.remoteConfig}
@@ -279,7 +333,7 @@ export function RemoteTriggerView() {
               placeholder="C:\tools\ServiceManager\data\projects.json"
             />
           </Field>
-          <Field label="App ID (optional)" htmlFor="remote-app">
+          <Field label="App ID (optional)" htmlFor="remote-app" hint="App ID for Check App / Run App">
             <Input
               id="remote-app"
               value={config.app}
@@ -294,6 +348,7 @@ export function RemoteTriggerView() {
               size="sm"
               onClick={() => void run(config.app.trim() || null, true)}
               disabled={running || !config.app.trim()}
+              title="Check the configured app without changing files"
             >
               <Search />
               Check App
@@ -303,6 +358,7 @@ export function RemoteTriggerView() {
               size="sm"
               onClick={() => void run(config.app.trim() || null, false)}
               disabled={running || !config.app.trim()}
+              title="Run update for the configured app"
             >
               <Play />
               Run App
@@ -317,6 +373,7 @@ export function RemoteTriggerView() {
             size="sm"
             onClick={() => void run(null, true)}
             disabled={running || loading}
+            title="Check all apps on the server"
           >
             {running ? <Loader2 className="animate-spin" /> : <Search />}
             Check All
@@ -326,6 +383,7 @@ export function RemoteTriggerView() {
             size="sm"
             onClick={() => void run(null, false)}
             disabled={running || loading}
+            title="Update all apps; services may restart"
           >
             {running ? <Loader2 className="animate-spin" /> : <Play />}
             Update All
@@ -350,6 +408,7 @@ export function RemoteTriggerView() {
             size="sm"
             onClick={() => setOutput([])}
             disabled={running || output.length === 0}
+            title="Clear the output panel"
           >
             <Trash2 />
             Clear

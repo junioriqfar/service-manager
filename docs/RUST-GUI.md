@@ -75,6 +75,8 @@ Header memiliki tiga tab: **Services**, **Updater**, dan **Remote**.
   package manager hasil deteksi.
 - **Check All/Update All** berjalan di `spawn_blocking`, jadi UI tidak freeze.
 - Dialog hasil menampilkan status per app; log terbaru tampil di panel bawah.
+- Klik kanan baris app: Run, Check, Test, Log, Edit, Delete.
+- Tooltip tersedia pada tab, tombol aksi, dan field penting.
 - Tidak ada polling/auto-update. Aksi hanya dipicu tombol atau `sm-trigger` via SSH.
 - Service lifecycle membutuhkan GUI/task elevated; tanpa Administrator, update dengan
   service akan gagal sebelum file diubah.
@@ -83,15 +85,17 @@ Header memiliki tiga tab: **Services**, **Updater**, dan **Remote**.
 
 Tab **Remote** adalah GUI client untuk memicu `sm-trigger` lewat SSH dari mesin ini.
 
-- Field: host, user, port, identity file, wrapper script, remote `sm-updater.exe`,
-  remote `projects.json` opsional, dan app ID opsional.
+- Field: host, user, port, auth mode (key/password), identity file, password +
+  remember (DPAPI), wrapper script, remote `sm-updater.exe`, remote `projects.json`
+  opsional, dan app ID opsional.
 - **Preview** menampilkan perintah `ssh` yang akan dijalankan.
-- **Test SSH** menjalankan `echo sm-trigger-ok` dengan `BatchMode=yes` dan
-  `ConnectTimeout=10` (key/agent saja, tanpa prompt password).
+- **Test SSH** menjalankan `echo sm-trigger-ok` dengan `BatchMode=yes`/`ConnectTimeout=10`
+  untuk mode key, atau `SSH_ASKPASS` + `NumberOfPasswordPrompts=1` untuk mode password.
 - **Check All / Update All** memicu wrapper/task di server.
 - **Check App / Run App** untuk satu app.
 - Output stdout/stderr di-stream lewat event Tauri `remote-trigger-output`.
-- Konfigurasi disimpan di `data/trigger-client.json` (tidak di-commit).
+- Konfigurasi disimpan di `data/trigger-client.json` (tidak di-commit). Password hanya
+  disimpan jika **Remember password** aktif, dalam bentuk DPAPI ciphertext.
 
 Tab ini bisa dipakai di PC client Windows tanpa perlu terminal. Untuk macOS/Linux,
 gunakan CLI `sm-trigger`.
@@ -135,7 +139,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 250 test):
+Test GUI mencakup (total workspace 254 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

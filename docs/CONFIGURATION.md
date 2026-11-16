@@ -240,6 +240,9 @@ Dipakai tab **Remote** di `sm-gui`:
   "user": "EGOV22",
   "port": 22,
   "identity": "",
+  "authMode": "key",
+  "rememberPassword": false,
+  "passwordProtected": "",
   "wrapper": "C:\\tools\\ServiceManager\\scripts\\Invoke-UpdaterTask.ps1",
   "remoteBin": "C:\\tools\\ServiceManager\\target\\release\\sm-updater.exe",
   "remoteConfig": "",
@@ -247,8 +250,18 @@ Dipakai tab **Remote** di `sm-gui`:
 }
 ```
 
-File ini hanya berisi alamat/user/path, bukan password atau token. GUI memakai
-`BatchMode=yes` sehingga autentikasi harus lewat SSH key/agent. Detail:
+Field autentikasi:
+
+| Field | Keterangan |
+| --- | --- |
+| `authMode` | `key` atau `password` |
+| `identity` | Path private key (mode key; opsional jika memakai ssh-agent) |
+| `rememberPassword` | Simpan password dengan DPAPI jika `true` |
+| `passwordProtected` | Ciphertext DPAPI (hex); bukan password plaintext |
+| `password` | Hanya ada di memori saat runtime, tidak ditulis ke file |
+
+File ini hanya berisi alamat/user/path, bukan password plaintext. Mode password
+memakai `SSH_ASKPASS`; mode key memakai `BatchMode=yes`. Detail:
 [RUST-TRIGGER.md](RUST-TRIGGER.md).
 
 ## Service Global dan Per Project

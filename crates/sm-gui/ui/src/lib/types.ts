@@ -181,6 +181,10 @@ export interface RemoteTriggerConfig {
   user: string;
   port: number;
   identity: string;
+  authMode: string;
+  password: string;
+  rememberPassword: boolean;
+  passwordProtected: string;
   wrapper: string;
   remoteBin: string;
   remoteConfig: string;

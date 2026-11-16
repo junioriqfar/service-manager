@@ -104,10 +104,14 @@ Tab **Updater** di `sm-gui` menyediakan:
 
 Tab **Remote** menyediakan trigger SSH dari mesin client Windows:
 
-- host/user/port/identity/wrapper/remote binary/remote config;
-- Preview perintah, Test SSH (`BatchMode=yes`), Check/Update All, Check/Run App;
+- host/user/port, autentikasi key/agent atau password (opsional Remember via DPAPI),
+  identity/wrapper/remote binary/remote config;
+- Preview perintah, Test SSH, Check/Update All, Check/Run App;
 - output stdout/stderr live;
-- konfigurasi di `data/trigger-client.json` (tanpa password/token).
+- konfigurasi di `data/trigger-client.json` (password plaintext tidak disimpan).
+
+Tab **Updater** mendukung klik kanan pada baris app: Run, Check, Test, Log, Edit, Delete.
+Beberapa tombol utama memiliki tooltip.
 
 Tidak ada polling; semua aksi dipicu tombol.
 

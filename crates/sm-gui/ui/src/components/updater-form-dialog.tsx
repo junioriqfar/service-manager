@@ -334,7 +334,7 @@ export function UpdaterFormDialog({
                 onChange={(event) => set("localPath", event.target.value)}
                 placeholder="D:\Projects\NodeProjects\app"
               />
-              <Button type="button" variant="outline" onClick={() => void browseFolder()}>
+              <Button type="button" variant="outline" onClick={() => void browseFolder()} title="Choose the project folder">
                 <FolderOpen />
                 Browse…
               </Button>
@@ -552,10 +552,10 @@ export function UpdaterFormDialog({
         )}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} title="Discard changes">
             Cancel
           </Button>
-          <Button type="button" onClick={() => void save()} disabled={saving}>
+          <Button type="button" onClick={() => void save()} disabled={saving} title="Save this app to the registry">
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
             {saving ? "Saving…" : "Save"}
           </Button>

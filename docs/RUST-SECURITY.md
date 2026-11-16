@@ -13,7 +13,7 @@ Dokumen ini menjelaskan kontrol keamanan komponen Rust (`sm-win`, `sm-gui`, `sm-
 | Elevasi | Cek token admin + `ShellExecuteW runas` | `sm-win/src/elevation.rs`, `sm-gui/src/commands.rs` |
 | SSH trigger IP allowlist | Global + per-app IP/CIDR dari `SSH_CONNECTION` | `sm-updater/src/ip.rs`, `trigger.rs` |
 | Elevated updater task | Scheduled Task `RunLevel Highest`, wrapper + nonce/expiry | `scripts/`, `sm-gui/src/remote.rs` |
-| SSH client GUI | `BatchMode=yes`, `ConnectTimeout=10`, key/agent only | `sm-gui/src/remote.rs` |
+| SSH client GUI | Key: `BatchMode=yes`; password: `SSH_ASKPASS` + DPAPI | `sm-gui/src/remote.rs`, `sm-trigger/src/main.rs` |
 | Argumen proses | Array argumen, tanpa penggabungan shell | `sm-win`, `sm-updater` |
 | Command admin-only | `commands.*`/`buildCommand`/`shell` hanya dari config admin | `sm-updater/src/toolchain.rs` |
 | Validasi input | Nama service, path executable, native fields | `sm-core/src/validation.rs` |
@@ -59,6 +59,9 @@ sm_win::dpapi_unprotect(&ciphertext, Some(b"entropy"))?;
 - Buffer output dibebaskan dengan `LocalFree`.
 - Data kosong dikembalikan sebagai kosong (tidak memanggil API).
 - Test: round-trip tanpa entropy, dengan entropy, entropy salah, dan payload kosong.
+- Password SSH mode "Remember password" di GUI memakai entropy
+  `ServiceManager-RemoteTrigger`; ciphertext disimpan sebagai hex di
+  `data/trigger-client.json`.
 
 DPAPI **bukan** pengganti Credential Manager untuk token Git. Gunakan DPAPI hanya bila aplikasi perlu menyimpan rahasia lokal sendiri; saat ini token Git tetap di GCM.
 
@@ -103,8 +106,15 @@ Log service aplikasi tidak di-redaksi karena merupakan output aplikasi pengguna;
 - Client IP diteruskan ke proses updater lewat `run --client-ip` agar allowlist
   per-app tetap berlaku setelah elevasi.
 - `sm-trigger` memakai executable `ssh` sistem; tidak menyimpan password.
-- GUI Remote memakai `BatchMode=yes` dan `ConnectTimeout=10`; autentikasi harus
-  SSH key/agent, sehingga tidak ada prompt password yang menggantung.
+- GUI Remote mendukung key/agent (`BatchMode=yes`) atau password:
+  - Password dikirim ke `ssh` melalui `SSH_ASKPASS` (`SSH_ASKPASS_REQUIRE=force`);
+    helper adalah `sm-trigger.exe` yang membaca environment sementara.
+  - Password tidak pernah masuk command line atau log.
+  - Jika **Remember password** aktif, password disimpan dengan DPAPI di
+    `data/trigger-client.json` sebagai ciphertext; tanpa itu hanya ada di memori.
+  - Mode password memakai `PreferredAuthentications=password,keyboard-interactive`
+    dan `NumberOfPasswordPrompts=1`.
+  - Host key baru memakai `StrictHostKeyChecking=accept-new` (TOFU).
 - Scheduled Task `ServiceManager-Updater` berjalan `RunLevel Highest`.
 - Request file berisi nonce + timestamp; action menolak request lebih dari 15 menit
   dan task memakai `MultipleInstances IgnoreNew`.

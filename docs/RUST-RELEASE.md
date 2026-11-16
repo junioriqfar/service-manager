@@ -176,7 +176,8 @@ Config dibaca dari `<folder exe>\data`. Gunakan `SERVICE_MANAGER_HOME` untuk mem
 - [ ] `Build-Release.ps1` menghasilkan ZIP dan isinya lengkap
 - [ ] `sm-gui.exe` terbuka, memuat service, dan batch Start/Stop/Restart menampilkan progress
 - [ ] Tab **Updater** menampilkan registry, test, Check All/Update All, dan log
-- [ ] Tab **Remote** menyimpan config, Preview, dan Test SSH
+- [ ] Tab **Remote** menyimpan config, Preview, Test SSH (key dan password/DPAPI)
+- [ ] Klik kanan app di tab Updater menampilkan Run/Check/Test/Log/Edit/Delete
 - [ ] `sm-updater.exe app list/run --all --check` berjalan
 - [ ] `sm-trigger.exe --help` dan `--dry-run` berjalan
 - [ ] Wrapper `Invoke-UpdaterTask.ps1 -Check` berjalan lewat Scheduled Task elevated

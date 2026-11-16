@@ -16,7 +16,8 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - UI Bahasa Inggris, tema **light/dark/system**, icon Lucide, file/folder picker, dan context menu klik kanan.
 - Updater `sm-updater`: registry app, trigger SSH dengan allowlist IP/CIDR, cek/update Git, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, service lifecycle, credential helper.
 - Client `sm-trigger` cross-platform (Windows/macOS/Linux) untuk memicu update via SSH tanpa polling.
-- GUI tab **Remote** di `sm-gui` untuk trigger via SSH dengan output live (Windows client).
+- GUI tab **Remote** di `sm-gui` untuk trigger via SSH dengan output live (Windows client), mendukung SSH key/agent atau password (DPAPI).
+- Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Run, Check, Test, Log, Edit, Delete.
 - GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, dan log.
 - Wrapper elevated `scripts/Invoke-UpdaterTask.ps1` + Scheduled Task `ServiceManager-Updater`.
 - Diagnosa headless `sm-diag`.
@@ -84,8 +85,8 @@ ServiceManager/
    ```
 3. Sesuaikan path service/project.
 4. Jalankan `sm-gui.exe` sebagai Administrator.
-5. Di PC client, buka tab **Remote** dan isi host/user/SSH key/wrapper untuk trigger
-   dari jarak jauh, atau gunakan `sm-trigger.exe` di terminal.
+5. Di PC client, buka tab **Remote** dan isi host/user/SSH key atau password/wrapper
+   untuk trigger dari jarak jauh, atau gunakan `sm-trigger.exe` di terminal.
 
 Config dibaca dari `<folder exe>\data`. Untuk memakai folder lain:
 
@@ -178,7 +179,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **250 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **254 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 

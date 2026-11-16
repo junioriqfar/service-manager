@@ -75,10 +75,12 @@ mod ui_tests {
     const UPDATER_VIEW: &str = include_str!("../ui/src/components/updater-view.tsx");
     const UPDATER_FORM: &str = include_str!("../ui/src/components/updater-form-dialog.tsx");
     const REMOTE_VIEW: &str = include_str!("../ui/src/components/remote-trigger-view.tsx");
+    const HINT: &str = include_str!("../ui/src/components/hint.tsx");
+    const TOOLTIP: &str = include_str!("../ui/src/components/ui/tooltip.tsx");
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{HINT}\n{TOOLTIP}"
         )
     }
 
@@ -246,6 +248,13 @@ mod ui_tests {
         assert!(UPDATER_FORM.contains("Browse…"));
         assert!(UPDATER_VIEW.contains("lucide-react"));
         assert!(UPDATER_FORM.contains("lucide-react"));
+        assert!(UPDATER_VIEW.contains("ContextMenu"));
+        for action in ["Run", "Check", "Test", "Log", "Edit", "Delete"] {
+            assert!(
+                UPDATER_VIEW.contains(action),
+                "missing updater context action: {action}"
+            );
+        }
     }
 
     #[test]
@@ -260,6 +269,8 @@ mod ui_tests {
             "Check App",
             "Run App",
             "Save",
+            "Password",
+            "Remember password",
         ] {
             assert!(REMOTE_VIEW.contains(label), "missing remote label: {label}");
         }
@@ -281,10 +292,15 @@ mod ui_tests {
             "remoteConfig",
             "identity",
             "wrapper",
-            "BatchMode",
+            "authMode",
+            "DPAPI",
         ] {
             assert!(REMOTE_VIEW.contains(field), "missing remote field: {field}");
         }
         assert!(REMOTE_VIEW.contains("lucide-react"));
+        assert!(APP.contains("TooltipProvider"));
+        assert!(APP.contains("Hint"));
+        assert!(HINT.contains("TooltipTrigger"));
+        assert!(TOOLTIP.contains("TooltipPrimitive"));
     }
 }

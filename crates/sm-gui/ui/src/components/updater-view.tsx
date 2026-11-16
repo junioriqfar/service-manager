@@ -16,6 +16,13 @@ import { UpdaterFormDialog } from "@/components/updater-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -189,7 +196,7 @@ export function UpdaterView() {
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
           <div className="mr-auto">
             <h2 className="text-sm font-semibold">Updater Apps</h2>
@@ -203,6 +210,7 @@ export function UpdaterView() {
             size="sm"
             onClick={() => void refresh(true)}
             disabled={loading || running !== null}
+            title="Reload the app registry and status"
           >
             {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
             Refresh
@@ -213,6 +221,7 @@ export function UpdaterView() {
             size="sm"
             onClick={() => setForm({ open: true, edit: false, app: null })}
             disabled={running !== null}
+            title="Register a new application"
           >
             <Plus />
             Add App
@@ -223,6 +232,7 @@ export function UpdaterView() {
             size="sm"
             onClick={() => void run(null, true)}
             disabled={running !== null || apps.length === 0}
+            title="Check all registered apps without changing files"
           >
             {running === "check" ? <Loader2 className="animate-spin" /> : <Search />}
             Check All
@@ -232,13 +242,14 @@ export function UpdaterView() {
             size="sm"
             onClick={() => void run(null, false)}
             disabled={running !== null || apps.length === 0}
+            title="Update all apps; services may restart"
           >
             {running === "update" ? <Loader2 className="animate-spin" /> : <Play />}
             Update All
           </Button>
         </div>
 
-        <div className="min-h-0 overflow-auto rounded-lg border bg-card">
+        <div className="min-h-0 flex-[3] overflow-auto rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -260,12 +271,15 @@ export function UpdaterView() {
                 </TableRow>
               )}
               {apps.map((app) => (
-                <TableRow
-                  key={app.id}
-                  data-state={app.id === selectedId ? "selected" : undefined}
-                  className="cursor-pointer"
-                  onClick={() => setSelectedId(app.id)}
-                >
+                <ContextMenu key={app.id}>
+                  <ContextMenuTrigger asChild>
+                    <TableRow
+                      key={app.id}
+                      data-state={app.id === selectedId ? "selected" : undefined}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedId(app.id)}
+                      onContextMenu={() => setSelectedId(app.id)}
+                    >
                   <TableCell>
                     <div className="font-medium">{app.name || app.id}</div>
                     <div className="text-xs text-muted-foreground">{app.id}</div>
@@ -370,13 +384,53 @@ export function UpdaterView() {
                       </Button>
                     </div>
                   </TableCell>
-                </TableRow>
+                    </TableRow>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent className="w-48">
+                    <ContextMenuItem
+                      disabled={running !== null}
+                      onSelect={() => void run(app.id, false)}
+                    >
+                      <Play />
+                      Run
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      disabled={running !== null}
+                      onSelect={() => void run(app.id, true)}
+                    >
+                      <Search />
+                      Check
+                    </ContextMenuItem>
+                    <ContextMenuItem onSelect={() => void testApp(app)}>
+                      <FlaskConical />
+                      Test
+                    </ContextMenuItem>
+                    <ContextMenuItem onSelect={() => setSelectedId(app.id)}>
+                      <FileText />
+                      Log
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onSelect={() => setForm({ open: true, edit: true, app })}
+                    >
+                      <Pencil />
+                      Edit
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      onSelect={() => setDeleteTarget(app)}
+                    >
+                      <Trash2 />
+                      Delete
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               ))}
             </TableBody>
           </Table>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col rounded-lg border bg-card">
+        <div className="flex min-h-0 flex-[2] flex-col overflow-hidden rounded-lg border bg-card">
           <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
             <div className="min-w-0">
               <div className="text-sm font-medium">
@@ -392,6 +446,7 @@ export function UpdaterView() {
               size="sm"
               onClick={() => void loadLog(selectedId)}
               disabled={!selectedId || logLoading}
+              title="Reload the latest log for the selected app"
             >
               {logLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               Reload
