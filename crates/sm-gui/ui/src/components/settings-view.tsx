@@ -27,6 +27,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -43,6 +51,7 @@ import type {
   ApacheChangeView,
   ApacheMappingScanView,
   ApacheToolPath,
+  PhpPathChangeView,
   ServiceRow,
   Settings,
   SettingsDiagnostics,
@@ -87,7 +96,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     key: "php",
     label: "PHP",
     required: true,
-    description: "PHP CLI used by Laravel commands and Composer.",
+    description: "PHP CLI used by Laravel commands and Composer. App commands may use ${PHP} and ${PHP_HOME}.",
   },
   {
     key: "composer",
@@ -784,6 +793,10 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const [apacheSelectedService, setApacheSelectedService] = useState("");
   const [apacheSelectedApps, setApacheSelectedApps] = useState<Set<string>>(new Set());
   const [apacheServiceRows, setApacheServiceRows] = useState<ServiceRow[]>([]);
+  const [phpPathChange, setPhpPathChange] = useState<PhpPathChangeView | null>(null);
+  const [phpDialogOpen, setPhpDialogOpen] = useState(false);
+  const [phpApplying, setPhpApplying] = useState<"variable" | "new_path" | null>(null);
+  const [phpApplyError, setPhpApplyError] = useState<string | null>(null);
   const [busyTools, setBusyTools] = useState<Partial<Record<ToolKey, ToolBusy>>>({});
   const [toolMessages, setToolMessages] = useState<
     Partial<Record<ToolKey, ToolMessage>>
@@ -1171,7 +1184,21 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       setApachePreviewOpen(result.apachePending !== null);
       setApacheApplyResult(null);
       setApacheApplyError(null);
-      if (result.apachePending) {
+      const reviewedPhpChange =
+        result.phpPathChange && result.phpPathChange.references.length > 0
+          ? result.phpPathChange
+          : null;
+      setPhpPathChange(reviewedPhpChange);
+      setPhpDialogOpen(reviewedPhpChange !== null);
+      setPhpApplyError(null);
+      if (reviewedPhpChange) {
+        toast.success(
+          `Settings saved. ${reviewedPhpChange.references.length} hardcoded PHP reference${
+            reviewedPhpChange.references.length === 1 ? "" : "s"
+          } need review.`,
+          { duration: 8000 },
+        );
+      } else if (result.apachePending) {
         toast.success("Settings saved. Review the pending Apache change before applying it.");
       } else {
         toast.success("Settings saved.");
@@ -1180,6 +1207,48 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       toast.error(errorMessage(error), { duration: 10000 });
     } finally {
       setSaving(false);
+    }
+  }
+
+  function dismissPhpPathChange() {
+    setPhpDialogOpen(false);
+    setPhpPathChange(null);
+    setPhpApplyError(null);
+  }
+
+  async function applyPhpReferences(mode: "variable" | "new_path") {
+    if (!phpPathChange || phpApplying) return;
+    const appIds = Array.from(
+      new Set(phpPathChange.references.map((reference) => reference.appId)),
+    );
+    setPhpApplying(mode);
+    setPhpApplyError(null);
+    try {
+      await invoke<UpdaterApp[]>("replace_php_references", {
+        appIds,
+        oldPath: phpPathChange.oldPath,
+        oldRoot: phpPathChange.oldRoot,
+        newPath: phpPathChange.newPath,
+        newRoot: phpPathChange.newRoot,
+        mode,
+      });
+      toast.success(
+        mode === "variable"
+          ? `Updated PHP references in ${appIds.length} app${
+              appIds.length === 1 ? "" : "s"
+            } to use \${PHP}/\${PHP_HOME}. projects.json was backed up first.`
+          : `Updated PHP references in ${appIds.length} app${
+              appIds.length === 1 ? "" : "s"
+            } to the new PHP path. projects.json was backed up first.`,
+        { duration: 8000 },
+      );
+      dismissPhpPathChange();
+    } catch (error) {
+      const message = errorMessage(error);
+      setPhpApplyError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setPhpApplying(null);
     }
   }
 
@@ -2108,6 +2177,128 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={phpDialogOpen && phpPathChange !== null}
+        onOpenChange={(open) => {
+          if (open) {
+            setPhpDialogOpen(true);
+          } else {
+            dismissPhpPathChange();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Terminal className="h-4 w-4" />
+              PHP references found
+            </DialogTitle>
+            <DialogDescription>
+              The saved PHP path changed, but some app commands still contain the old PHP path or
+              root. Nothing is rewritten until you choose an action.
+            </DialogDescription>
+          </DialogHeader>
+
+          {phpPathChange && (
+            <div className="space-y-3">
+              <div className="grid gap-2 rounded-md border bg-background/40 p-3 text-xs sm:grid-cols-2">
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Old PHP path</div>
+                  <div className="break-all font-mono">{phpPathChange.oldPath || "—"}</div>
+                  <div className="mt-1 break-all font-mono text-muted-foreground">
+                    Old PHP root: {phpPathChange.oldRoot || "—"}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">New PHP path</div>
+                  <div className="break-all font-mono">{phpPathChange.newPath || "—"}</div>
+                  <div className="mt-1 break-all font-mono text-muted-foreground">
+                    New PHP root: {phpPathChange.newRoot || "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-xs font-medium">
+                  References ({phpPathChange.references.length})
+                </div>
+                <div className="max-h-64 space-y-1 overflow-auto pr-1">
+                  {phpPathChange.references.map((reference, index) => (
+                    <div
+                      key={`${reference.appId}-${reference.field}-${index}`}
+                      className="rounded-md border bg-background/40 px-2 py-2 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">
+                          {reference.appName || reference.appId}
+                        </span>
+                        <Badge variant="outline" title="App id">
+                          {reference.appId}
+                        </Badge>
+                        <Badge
+                          variant="secondary"
+                          title="Command field that contains the old PHP path/root"
+                        >
+                          {reference.field}
+                        </Badge>
+                      </div>
+                      <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-muted-foreground">
+                        {reference.value}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                <strong>Use {"${PHP}"}</strong> rewrites the old PHP executable to {"${PHP}"} and the
+                old PHP folder to {"${PHP_HOME}"}. <strong>Use new path</strong> writes the saved new
+                path/root literally. Apply only to apps listed above; other apps are not changed.
+                projects.json is backed up first.
+              </p>
+
+              {phpApplyError && (
+                <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>{phpApplyError}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              onClick={() => void applyPhpReferences("variable")}
+              disabled={phpApplying !== null}
+              title="Replace the old PHP path with ${PHP} and the old root with ${PHP_HOME}"
+            >
+              {phpApplying === "variable" ? <Loader2 className="animate-spin" /> : null}
+              {"Use ${PHP}"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void applyPhpReferences("new_path")}
+              disabled={phpApplying !== null || !phpPathChange?.newPath.trim()}
+              title="Replace the old PHP path/root with the saved new path/root in the listed apps"
+            >
+              {phpApplying === "new_path" ? <Loader2 className="animate-spin" /> : null}
+              Use new path
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => dismissPhpPathChange()}
+              disabled={phpApplying !== null}
+              title="Close this dialog without changing projects.json"
+            >
+              Leave
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

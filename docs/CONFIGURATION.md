@@ -234,6 +234,44 @@ Catatan:
 - **Migrate Trigger** adalah aksi eksplisit: menyalin `projects.json.trigger` ke
   `settings.json.trigger`; `projects.json` tidak diubah.
 
+### Variabel command (`${NAME}`)
+
+`settings.json.variables` menyimpan variabel admin tambahan. Selain itu backend
+membangun variabel built-in dari path tool efektif:
+
+| Variabel | Sumber |
+| --- | --- |
+| `PHP` | `tools.php.path` |
+| `PHP_HOME` | folder induk `tools.php.path` |
+| `GIT` | `tools.git.path` |
+| `COMPOSER` | `tools.composer.path` |
+| `NPM` | `tools.npm.path` |
+| `BUN` | `tools.bun.path` |
+| `GO` | `tools.go.path` |
+| `APACHE` | `tools.apache.path` |
+| `APACHE_HOME` | `tools.apache.root` |
+| `APACHE_CONFIG` | `tools.apache.config` |
+
+Nama built-in menang atas variabel admin dengan nama yang sama. Ekspansi:
+
+- `${NAME}` diganti rekursif maksimal 8 level;
+- placeholder tidak dikenal dibiarkan apa adanya;
+- environment variable Windows **tidak** diekspansi (tidak ada `%VAR%` atau `$env:VAR`);
+- tidak ada pembacaan file project/repo.
+
+Dipakai untuk `installCommand`, `buildCommand`, `preUpdateCommand`,
+`postUpdateCommand`, serta `program`, `args[]`, `cwd`, `shell`, dan value `env` pada
+`commands.install/build/preUpdate/postUpdate`. Built-in path/args updater (Git,
+Composer, npm, Bun, Go, PHP artisan) tidak melalui ekspansi.
+
+Jika `tools.php.path` berubah, Save Settings mengembalikan `phpPathChange` berisi
+referensi path/root PHP lama pada command app. Pencocokan case-insensitive dan
+slash-insensitive; field yang sudah memakai `${PHP}`/`${PHP_HOME}` dilewati.
+`projects.json` tidak diubah sampai user memilih **Use ${PHP}** atau
+**Use new path** di dialog GUI. Command `replace_php_references` membackup
+`backup/projects-<timestamp>.json`, hanya mengubah app/field yang direferensikan,
+lalu menyimpan config secara atomik.
+
 ### Perubahan Apache dan `services.json`
 
 **Save Settings tidak langsung menulis `services.json`.** Jika

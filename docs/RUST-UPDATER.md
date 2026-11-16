@@ -134,6 +134,9 @@ Template: [settings.example.json](../settings.example.json); file runtime
   IP/CIDR IPv4/IPv6. Jika `settings.json` ada, trigger ini authoritative.
 - `privilegedExecution` menyimpan `mode`, `taskName`, `userId`, dan `logonType` untuk
   Scheduled Task di tab Settings.
+- `variables` dapat berisi variabel admin tambahan untuk command. Built-in
+  `PHP`, `PHP_HOME`, `GIT`, `COMPOSER`, `NPM`, `BUN`, `GO`, `APACHE`,
+  `APACHE_HOME`, dan `APACHE_CONFIG` selalu tersedia dan menang atas nama yang sama.
 - Path wajib: Git, PHP, Composer, npm. Tool lain opsional.
 - Password/token plaintext ditolak saat load/save.
 - Tab **Settings** di GUI dapat mengisi path tool, menjalankan Auto-detect/Test,
@@ -211,8 +214,9 @@ Field v1 yang tersedia: `scanRoots`, `allowedClientIPs`, `gitPath`, `phpPath`,
 | `packageManager` | `auto`, `npm`, `pnpm`, `yarn`, `bun`, `none` | Lockfile ganda wajib eksplisit |
 | `packageInstall` | `auto`, `always`, `never` | Install dependency Node/Go |
 | `build` | `auto`, `always`, `never` | Build command |
-| `installCommand` / `buildCommand` | string | Override perintah install/build (PowerShell) |
-| `commands.preUpdate` / `postUpdate` | array command | Program + args, dijalankan sebelum/sesudah merge |
+| `installCommand` / `buildCommand` | string | Override perintah install/build (PowerShell); mendukung `${NAME}` |
+| `preUpdateCommand` / `postUpdateCommand` | string | Shell command sebelum/sesudah merge; mendukung `${NAME}` |
+| `commands.install/build/preUpdate/postUpdate` | array command | Program + args/cwd/shell/env; seluruh field mendukung `${NAME}` |
 | `cloneOnFirstRun` | bool | Clone repo jika `localPath` belum ada |
 | `webServerService` | string | Nama service Apache di `services.json` yang menyajikan app; kosong = tidak terhubung eksplisit |
 | `healthCheck` | object | HTTP check setelah service restart |
@@ -258,8 +262,45 @@ GUI tab Settings menyediakan **Apache App Mapping** (Sprint 2.3):
 - tidak ada perubahan otomatis pada `projects.json` dari hasil deteksi.
 
 Parser tidak mengevaluasi `<IfModule>` atau kondisi runtime Apache; semua
-`DocumentRoot` yang terlihat di config/include akan dianalisis. Scan path PHP
-hardcoded/`${PHP}` tetap Sprint 2.4.
+`DocumentRoot` yang terlihat di config/include akan dianalisis.
+
+### Variabel command dan scan PHP hardcoded
+
+Command app mendukung placeholder `${NAME}`:
+
+| Variabel | Nilai |
+| --- | --- |
+| `PHP` | `settings.tools.php.path` |
+| `PHP_HOME` | Folder induk path PHP |
+| `GIT` / `COMPOSER` / `NPM` / `BUN` / `GO` | Path tool dari settings |
+| `APACHE` | `settings.tools.apache.path` |
+| `APACHE_HOME` | `settings.tools.apache.root` |
+| `APACHE_CONFIG` | `settings.tools.apache.config` |
+
+`settings.json.variables` menambah variabel admin; built-in menang jika namanya
+sama. Ekspansi rekursif maksimal 8 level, placeholder `${NAME}` yang tidak dikenal
+dibiarkan, dan environment variable tidak dibaca. Yang diekspansi: `installCommand`,
+`buildCommand`, `preUpdateCommand`, `postUpdateCommand`, serta `program`, `args[]`,
+`cwd`, `shell`, dan value `env` pada `commands.*`. Built-in path/args updater tidak
+diubah.
+
+Jika `tools.php.path` berubah saat **Save Settings**, backend memindai command app
+untuk path/root lama:
+
+- field yang dipindai: `installCommand`, `buildCommand`, `preUpdateCommand`,
+  `postUpdateCommand`, dan `commands.*`;
+- pencocokan case-insensitive serta menganggap `/` dan `\` sama;
+- field yang sudah memakai `${PHP}`/`${PHP_HOME}` dilewati;
+- hasilnya dikembalikan sebagai `phpPathChange` (app/field/value) dan **tidak**
+  mengubah `projects.json`.
+
+Rewrite hanya lewat command eksplisit `replace_php_references`:
+
+- mode `variable`: path lama → `${PHP}`, root lama → `${PHP_HOME}`;
+- mode `new_path`: path/root lama → path/root baru;
+- hanya app yang direferensikan, dengan backup
+  `backup/projects-<timestamp>.json` dan save atomik;
+- sisa string dipertahankan.
 
 ## Deteksi Toolchain
 

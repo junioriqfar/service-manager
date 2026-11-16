@@ -14,6 +14,7 @@ pub mod sync;
 pub mod toolchain;
 pub mod trigger;
 pub mod update;
+pub mod variables;
 
 pub use log::UpdateLogger;
 pub use registry::{AppConfig, PackageManager, Preset, UpdaterConfig};
@@ -26,3 +27,4 @@ pub use settings::{
     UpdateTimeouts, UpdaterDefaults, SETTINGS_VERSION,
 };
 pub use update::{update_project, UpdateOptions, UpdateOutcome, UpdateStatus};
+pub use variables::expand_variables;

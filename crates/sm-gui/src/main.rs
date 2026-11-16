@@ -4,6 +4,7 @@ mod apache;
 mod apache_config;
 mod batch;
 mod commands;
+mod php_paths;
 mod remote;
 mod settings;
 mod state;
@@ -63,6 +64,7 @@ fn main() {
             apache::apply_apache_change,
             apache_config::detect_apache_mappings,
             apache_config::apply_apache_mappings,
+            php_paths::replace_php_references,
             settings::detect_tool,
             settings::test_tool,
             settings::task_status,
@@ -381,6 +383,12 @@ mod ui_tests {
             "Already mapped",
             "Suggestions",
             "Parser warnings",
+            "PHP references found",
+            "Old PHP path",
+            "New PHP path",
+            "Use new path",
+            "Use ${PHP}",
+            "Leave",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(label),
@@ -401,6 +409,7 @@ mod ui_tests {
             "apply_apache_change",
             "detect_apache_mappings",
             "apply_apache_mappings",
+            "replace_php_references",
             "list_services",
             "pick_executable",
             "pick_directory",
@@ -436,6 +445,11 @@ mod ui_tests {
             "confidence",
             "existingService",
             "alreadyMapped",
+            "phpPathChange",
+            "oldRoot",
+            "newRoot",
+            "references",
+            "appName",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(field),

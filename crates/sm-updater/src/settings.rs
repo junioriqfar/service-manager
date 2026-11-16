@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sm_config::ConfigPaths;
 
-use crate::registry::{TriggerSettings, UpdaterSettings};
+use crate::registry::{build_tool_variables, TriggerSettings, UpdaterSettings};
 
 pub const SETTINGS_VERSION: u32 = 1;
 const MAX_TIMEOUT_SECONDS: u64 = 24 * 60 * 60;
@@ -608,6 +608,18 @@ impl Settings {
 
     /// Adapter agar kode updater/toolchain lama tetap memakai [`UpdaterSettings`].
     pub fn to_updater_settings(&self) -> UpdaterSettings {
+        let variables = build_tool_variables(
+            &self.tools.git.path,
+            &self.tools.php.path,
+            &self.tools.composer.path,
+            &self.tools.npm.path,
+            &self.tools.bun.path,
+            &self.tools.go.path,
+            self.tools.apache.path(),
+            &self.tools.apache.root,
+            &self.tools.apache.config,
+            &self.variables,
+        );
         UpdaterSettings {
             git_path: self.tools.git.path.clone(),
             php_path: self.tools.php.path.clone(),
@@ -619,6 +631,7 @@ impl Settings {
             go_path: self.tools.go.path.clone(),
             log_dir: self.updater.log_dir.clone(),
             max_concurrent_updates: self.updater.max_concurrent_updates,
+            variables,
         }
     }
 }
@@ -761,7 +774,7 @@ mod tests {
     }
 
     fn legacy_settings() -> UpdaterSettings {
-        UpdaterSettings {
+        let mut settings = UpdaterSettings {
             git_path: r"C:\legacy\git.exe".into(),
             php_path: r"C:\legacy\php.exe".into(),
             composer_path: r"C:\legacy\composer.bat".into(),
@@ -772,7 +785,10 @@ mod tests {
             go_path: r"C:\legacy\go.exe".into(),
             log_dir: r"C:\legacy\logs".into(),
             max_concurrent_updates: 2,
-        }
+            variables: BTreeMap::new(),
+        };
+        settings.refresh_variables();
+        settings
     }
 
     fn legacy_trigger() -> TriggerSettings {
@@ -852,6 +868,14 @@ mod tests {
         );
         assert!(!settings.trigger.allow_local);
         assert_eq!(settings.to_updater_settings(), legacy);
+
+        let variables = settings.to_updater_settings().variables;
+        assert_eq!(variables["PHP"], r"C:\legacy\php.exe");
+        assert_eq!(variables["PHP_HOME"], r"C:\legacy");
+        assert_eq!(variables["GIT"], r"C:\legacy\git.exe");
+        assert_eq!(variables["APACHE"], "");
+        assert_eq!(variables["APACHE_HOME"], "");
+        assert_eq!(variables["APACHE_CONFIG"], "");
     }
 
     #[test]
@@ -1068,8 +1092,19 @@ mod tests {
         settings.tools.go.path = r"C:\tools\go.exe".into();
         settings.tools.pnpm.path = r"C:\tools\pnpm.cmd".into();
         settings.tools.yarn.path = r"C:\tools\yarn.cmd".into();
+        settings.tools.apache = ApacheToolPath {
+            tool: ToolPath::new(r"C:\Apache24\bin\httpd.exe"),
+            root: r"C:\Apache24".into(),
+            config: "conf/httpd.conf".into(),
+        };
         settings.updater.log_dir = r"C:\logs".into();
         settings.updater.max_concurrent_updates = 4;
+        settings
+            .variables
+            .insert("PROJECT_ROOT".into(), r"D:\Projects".into());
+        settings
+            .variables
+            .insert("PHP".into(), r"C:\bogus\php.exe".into());
 
         let updater = settings.to_updater_settings();
         assert_eq!(updater.git_path, r"C:\tools\git.exe");
@@ -1082,6 +1117,17 @@ mod tests {
         assert_eq!(updater.go_path, r"C:\tools\go.exe");
         assert_eq!(updater.log_dir, r"C:\logs");
         assert_eq!(updater.max_concurrent_updates, 4);
+        assert_eq!(updater.variables["PHP"], r"C:\tools\php.exe");
+        assert_eq!(updater.variables["PHP_HOME"], r"C:\tools");
+        assert_eq!(updater.variables["GIT"], r"C:\tools\git.exe");
+        assert_eq!(updater.variables["COMPOSER"], r"C:\tools\composer.bat");
+        assert_eq!(updater.variables["NPM"], r"C:\tools\npm.cmd");
+        assert_eq!(updater.variables["BUN"], r"C:\tools\bun.exe");
+        assert_eq!(updater.variables["GO"], r"C:\tools\go.exe");
+        assert_eq!(updater.variables["APACHE"], r"C:\Apache24\bin\httpd.exe");
+        assert_eq!(updater.variables["APACHE_HOME"], r"C:\Apache24");
+        assert_eq!(updater.variables["APACHE_CONFIG"], "conf/httpd.conf");
+        assert_eq!(updater.variables["PROJECT_ROOT"], r"D:\Projects");
     }
 
     #[test]

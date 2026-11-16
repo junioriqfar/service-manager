@@ -7,6 +7,7 @@ use sm_core::ToggleMode;
 
 use crate::registry::{AppConfig, CommandSpec, PackageManager, Preset, UpdaterSettings};
 use crate::sync::{shell_command, TOOL_TIMEOUT};
+pub use crate::variables::expand_variables;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlannedCommand {
@@ -149,12 +150,20 @@ pub fn resolve_plan(
         package_install_requested(app, preset, package_manager, project, changed);
     if !install_override.is_empty() {
         if install_requested {
-            plan.install
-                .push(shell_planned("install command", install_override, project));
+            plan.install.push(shell_planned(
+                "install command",
+                &expand_variables(install_override, &settings.variables),
+                project,
+            ));
         }
     } else if preset == Preset::Custom {
         if install_requested {
-            append_specs(&mut plan.install, &app.commands.install, project)?;
+            append_specs(
+                &mut plan.install,
+                &app.commands.install,
+                project,
+                &settings.variables,
+            )?;
         }
     } else if let Some(manager) = package_manager {
         if install_requested {
@@ -169,16 +178,27 @@ pub fn resolve_plan(
     let build_override = app.build_command.trim();
     if preset == Preset::Custom {
         if app.build.normalized() != ToggleMode::Never {
-            append_specs(&mut plan.build, &app.commands.build, project)?;
+            append_specs(
+                &mut plan.build,
+                &app.commands.build,
+                project,
+                &settings.variables,
+            )?;
             if !build_override.is_empty() {
-                plan.build
-                    .push(shell_planned("build command", build_override, project));
+                plan.build.push(shell_planned(
+                    "build command",
+                    &expand_variables(build_override, &settings.variables),
+                    project,
+                ));
             }
         }
     } else if build_requested {
         if !build_override.is_empty() {
-            plan.build
-                .push(shell_planned("build command", build_override, project));
+            plan.build.push(shell_planned(
+                "build command",
+                &expand_variables(build_override, &settings.variables),
+                project,
+            ));
         } else if preset == Preset::Go {
             if app.build.normalized() == ToggleMode::Always {
                 return Err(
@@ -205,7 +225,12 @@ pub fn resolve_plan(
                     .to_string(),
             );
         }
-        append_specs(&mut plan.build, &app.commands.build, project)?;
+        append_specs(
+            &mut plan.build,
+            &app.commands.build,
+            project,
+            &settings.variables,
+        )?;
     }
 
     if preset == Preset::Laravel {
@@ -640,9 +665,10 @@ pub(crate) fn append_specs(
     target: &mut Vec<PlannedCommand>,
     specs: &[CommandSpec],
     project: &Path,
+    variables: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     for spec in specs {
-        target.push(planned_from_spec(spec, project)?);
+        target.push(planned_from_spec(spec, project, variables)?);
     }
     Ok(())
 }
@@ -650,10 +676,14 @@ pub(crate) fn append_specs(
 pub(crate) fn planned_from_spec(
     spec: &CommandSpec,
     project: &Path,
+    variables: &BTreeMap<String, String>,
 ) -> Result<PlannedCommand, String> {
-    let cwd = resolve_cwd(&spec.cwd, project)?;
-    if !spec.shell.trim().is_empty() {
-        let (program, args) = shell_command(spec.shell.trim());
+    let cwd_text = expand_variables(&spec.cwd, variables);
+    let cwd = resolve_cwd(&cwd_text, project)?;
+    let shell = expand_variables(&spec.shell, variables);
+    let shell = shell.trim();
+    if !shell.is_empty() {
+        let (program, args) = shell_command(shell);
         return Ok(PlannedCommand {
             label: if spec.name.trim().is_empty() {
                 "custom shell".to_string()
@@ -664,10 +694,12 @@ pub(crate) fn planned_from_spec(
             args,
             cwd,
             timeout: Duration::from_secs(spec.timeout_seconds.max(1)),
-            env: spec.env.clone(),
+            env: expanded_env(&spec.env, variables),
         });
     }
-    if spec.program.trim().is_empty() {
+    let program_text_owned = expand_variables(&spec.program, variables);
+    let program_text = program_text_owned.trim();
+    if program_text.is_empty() {
         return Err(format!(
             "Command '{}' tidak punya program.",
             if spec.name.trim().is_empty() {
@@ -677,7 +709,6 @@ pub(crate) fn planned_from_spec(
             }
         ));
     }
-    let program_text = spec.program.trim();
     let program = PathBuf::from(program_text);
     if (program_text.contains('\\') || program_text.contains('/')) && !program.is_file() {
         return Err(format!(
@@ -692,11 +723,24 @@ pub(crate) fn planned_from_spec(
             spec.name.trim().to_string()
         },
         program,
-        args: spec.args.clone(),
+        args: spec
+            .args
+            .iter()
+            .map(|arg| expand_variables(arg, variables))
+            .collect(),
         cwd,
         timeout: Duration::from_secs(spec.timeout_seconds.max(1)),
-        env: spec.env.clone(),
+        env: expanded_env(&spec.env, variables),
     })
+}
+
+fn expanded_env(
+    env: &BTreeMap<String, String>,
+    variables: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    env.iter()
+        .map(|(key, value)| (key.clone(), expand_variables(value, variables)))
+        .collect()
 }
 
 fn resolve_cwd(value: &str, project: &Path) -> Result<PathBuf, String> {
@@ -800,7 +844,7 @@ mod tests {
         ] {
             std::fs::write(tools.join(name), b"dummy").unwrap();
         }
-        let settings = UpdaterSettings {
+        let mut settings = UpdaterSettings {
             git_path: tools.join("git.exe").to_string_lossy().to_string(),
             php_path: tools.join("php.exe").to_string_lossy().to_string(),
             composer_path: tools.join("composer.bat").to_string_lossy().to_string(),
@@ -809,6 +853,7 @@ mod tests {
             go_path: tools.join("go.exe").to_string_lossy().to_string(),
             ..UpdaterSettings::default()
         };
+        settings.refresh_variables();
         Fixture {
             _temp: temp,
             project,
@@ -1011,5 +1056,79 @@ mod tests {
         let plan = resolve_plan(&app, &fixture.project, &[], &fixture.settings).unwrap();
         assert_eq!(plan.install.len(), 1);
         assert_eq!(plan.install[0].label, "composer install");
+    }
+
+    #[test]
+    fn custom_command_specs_expand_variables() {
+        let fixture = fixture(&[]);
+        let php = fixture.settings.variables["PHP"].clone();
+        let php_home = fixture.settings.variables["PHP_HOME"].clone();
+        let spec = CommandSpec {
+            name: "php artisan".into(),
+            program: "${PHP}".into(),
+            args: vec![
+                "${PHP_HOME}\\artisan".into(),
+                "migrate".into(),
+                "--force".into(),
+            ],
+            cwd: "${PHP_HOME}".into(),
+            env: BTreeMap::from([("SM_PHP_HOME".into(), "${PHP_HOME}".into())]),
+            ..CommandSpec::default()
+        };
+
+        let command = planned_from_spec(&spec, &fixture.project, &fixture.settings.variables)
+            .expect("custom command");
+
+        assert_eq!(command.program, PathBuf::from(&php));
+        assert_eq!(command.args[0], format!(r"{php_home}\artisan"));
+        assert_eq!(command.cwd, PathBuf::from(&php_home));
+        assert_eq!(command.env["SM_PHP_HOME"], php_home);
+    }
+
+    #[test]
+    fn custom_shell_spec_expands_variables() {
+        let fixture = fixture(&[]);
+        let php = fixture.settings.variables["PHP"].clone();
+        let php_home = fixture.settings.variables["PHP_HOME"].clone();
+        let spec = CommandSpec {
+            name: "shell".into(),
+            shell: r#""${PHP}" "${PHP_HOME}\artisan" migrate"#.into(),
+            cwd: "${PHP_HOME}".into(),
+            ..CommandSpec::default()
+        };
+
+        let command = planned_from_spec(&spec, &fixture.project, &fixture.settings.variables)
+            .expect("custom shell command");
+
+        assert_eq!(command.cwd, PathBuf::from(&php_home));
+        assert_eq!(
+            command.args.last().unwrap(),
+            &format!(r#""{php}" "{php_home}\artisan" migrate"#)
+        );
+    }
+
+    #[test]
+    fn install_and_build_commands_expand_variables() {
+        let fixture = fixture(&[]);
+        let php = fixture.settings.variables["PHP"].clone();
+        let php_home = fixture.settings.variables["PHP_HOME"].clone();
+        let mut app = app(Preset::Custom);
+        app.package_install = ToggleMode::Always;
+        app.build = ToggleMode::Always;
+        app.install_command = r#""${PHP}" artisan migrate"#.into();
+        app.build_command = r#"echo ${PHP_HOME}"#.into();
+
+        let plan = resolve_plan(&app, &fixture.project, &[], &fixture.settings).unwrap();
+
+        assert_eq!(plan.install.len(), 1);
+        assert_eq!(
+            plan.install[0].args.last().unwrap(),
+            &format!(r#""{php}" artisan migrate"#)
+        );
+        assert_eq!(plan.build.len(), 1);
+        assert_eq!(
+            plan.build[0].args.last().unwrap(),
+            &format!("echo {php_home}")
+        );
     }
 }

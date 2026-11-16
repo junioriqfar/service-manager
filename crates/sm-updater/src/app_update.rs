@@ -110,6 +110,7 @@ fn execute_app(
                 runner,
                 logger,
                 "pre-update",
+                &settings.variables,
             )?;
             run_shell_option(
                 &app.pre_update_command,
@@ -117,6 +118,7 @@ fn execute_app(
                 runner,
                 logger,
                 "pre-update command",
+                &settings.variables,
             )?;
             lifecycle.stop_before_pull(&app.services)
         },
@@ -176,6 +178,7 @@ fn execute_app(
         runner,
         logger,
         "post-update",
+        &settings.variables,
     )
     .and_then(|_| {
         run_shell_option(
@@ -184,6 +187,7 @@ fn execute_app(
             runner,
             logger,
             "post-update command",
+            &settings.variables,
         )
     }) {
         restore_services(&lifecycle, logger);
@@ -231,6 +235,7 @@ fn execute_first_clone(
         runner,
         logger,
         "pre-update",
+        &settings.variables,
     )?;
     run_shell_option(
         &app.pre_update_command,
@@ -238,6 +243,7 @@ fn execute_first_clone(
         runner,
         logger,
         "pre-update command",
+        &settings.variables,
     )?;
 
     if let Err(error) = lifecycle.stop_before_build(&app.services) {
@@ -254,6 +260,7 @@ fn execute_first_clone(
         runner,
         logger,
         "post-update",
+        &settings.variables,
     )
     .and_then(|_| {
         run_shell_option(
@@ -262,6 +269,7 @@ fn execute_first_clone(
             runner,
             logger,
             "post-update command",
+            &settings.variables,
         )
     }) {
         restore_services(lifecycle, logger);
@@ -534,9 +542,10 @@ fn run_custom_list(
     runner: &dyn Runner,
     logger: &UpdateLogger,
     stage: &str,
+    variables: &std::collections::BTreeMap<String, String>,
 ) -> Result<(), String> {
     for spec in specs {
-        let result = toolchain::planned_from_spec(spec, project)
+        let result = toolchain::planned_from_spec(spec, project, variables)
             .and_then(|command| run_planned(&command, runner, logger));
         if let Err(error) = result {
             if spec.continue_on_error {
@@ -555,8 +564,10 @@ fn run_shell_option(
     runner: &dyn Runner,
     logger: &UpdateLogger,
     label: &str,
+    variables: &std::collections::BTreeMap<String, String>,
 ) -> Result<(), String> {
-    let line = line.trim();
+    let expanded = crate::variables::expand_variables(line.trim(), variables);
+    let line = expanded.trim();
     if line.is_empty() {
         return Ok(());
     }
@@ -740,13 +751,14 @@ mod tests {
         for name in ["git.exe", "php.exe", "composer.bat", "npm.cmd"] {
             std::fs::write(tools.join(name), b"dummy").unwrap();
         }
-        let settings = UpdaterSettings {
+        let mut settings = UpdaterSettings {
             git_path: tools.join("git.exe").to_string_lossy().to_string(),
             php_path: tools.join("php.exe").to_string_lossy().to_string(),
             composer_path: tools.join("composer.bat").to_string_lossy().to_string(),
             npm_path: tools.join("npm.cmd").to_string_lossy().to_string(),
             ..UpdaterSettings::default()
         };
+        settings.refresh_variables();
         let app = AppConfig {
             id: "demo".into(),
             name: "Demo".into(),
@@ -893,6 +905,61 @@ mod tests {
         assert_eq!(outcome.status, UpdateStatus::Failed);
         assert!(outcome.message.contains("api"));
         assert!(runner.calls().is_empty());
+    }
+
+    #[test]
+    fn pre_and_post_commands_expand_settings_variables() {
+        let mut fixture = fixture();
+        let php = fixture.settings.variables["PHP"].clone();
+        let php_home = fixture.settings.variables["PHP_HOME"].clone();
+        fixture.app.commands.pre_update = vec![CommandSpec {
+            name: "pre-php".into(),
+            program: "${PHP}".into(),
+            args: vec!["${PHP_HOME}\\artisan".into(), "migrate".into()],
+            ..CommandSpec::default()
+        }];
+        fixture.app.pre_update_command = "Write-Output ${PHP_HOME}".into();
+        fixture.app.post_update_command = "Write-Output ${PHP}".into();
+        let services = FakeServices::new(&["api"], &["api"]);
+        let runner = FakeRunner::new(standard_handler(
+            "abc1234 fix\n",
+            "src/app.ts\n",
+            "src/app.ts\n",
+        ));
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
+        let calls = runner.calls();
+        assert!(
+            calls.iter().any(|call| {
+                call.program == php
+                    && call.args.first().map(String::as_str)
+                        == Some(format!("{php_home}\\artisan").as_str())
+            }),
+            "custom pre command must receive expanded program/args: {calls:?}"
+        );
+        assert!(
+            calls.iter().any(|call| call
+                .args
+                .iter()
+                .any(|arg| arg.contains(&format!("Write-Output {php_home}")))),
+            "preUpdateCommand must expand PHP_HOME: {calls:?}"
+        );
+        assert!(
+            calls.iter().any(|call| call
+                .args
+                .iter()
+                .any(|arg| arg.contains(&format!("Write-Output {php}")))),
+            "postUpdateCommand must expand PHP: {calls:?}"
+        );
     }
 
     #[test]

@@ -352,9 +352,25 @@ export interface ApacheMappingScanView {
   error: string | null;
 }
 
+export interface PhpReferenceView {
+  appId: string;
+  appName: string;
+  field: string;
+  value: string;
+}
+
+export interface PhpPathChangeView {
+  oldPath: string;
+  oldRoot: string;
+  newPath: string;
+  newRoot: string;
+  references: PhpReferenceView[];
+}
+
 export interface SettingsSaveResult {
   settings: Settings;
   apachePending: ApacheChangeView | null;
+  phpPathChange: PhpPathChangeView | null;
 }
 
 export interface ToolDetection {

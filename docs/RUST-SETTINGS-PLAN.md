@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1–2.3 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions). Sprint 2.4 belum.
+Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded).
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -24,7 +24,7 @@ Dokumen ini menjawab revisi pengguna:
 | Privileged Execution: status/install/repair/remove/test Scheduled Task | Selesai |
 | Propagasi Apache + affected apps/services | Selesai (Sprint 2.2: preview, pending, apply, backup, rollback, audit) |
 | Saran DocumentRoot → `webServerService` | Selesai (Sprint 2.3: parser config/includes/variabel, konfirmasi user) |
-| Propagasi PHP hardcoded/`${PHP}` | Belum (Sprint 2.4) |
+| Propagasi PHP hardcoded/`${PHP}` | Selesai (Sprint 2.4: variabel command + scan/replace eksplisit) |
 | Migrasi trigger global ke settings.json | Selesai (Sprint 2.1, eksplisit) |
 | `webServerService` per app | Selesai (Sprint 2.1) |
 | Doctor lengkap, audit, log retention, dry-run | Belum (Phase 3) |
@@ -90,6 +90,28 @@ Catatan implementasi Sprint 2.2:
   tidak menulis executable kosong ke service; propagation membutuhkan path baru.
 - DocumentRoot dan `webServerService` otomatis (Sprint 2.3) serta path PHP
   hardcoded/`${PHP}` (Sprint 2.4) tetap di luar Sprint 2.2.
+
+Catatan implementasi Sprint 2.3:
+
+- `apache_config` parser read-only mendukung `Define`, `${VAR}`, `ServerRoot`,
+  `Include`, `IncludeOptional`, wildcard include, dan include bersarang dengan batas
+  kedalaman/file/ukuran.
+- `detect_apache_mappings` hanya memberi saran. Mapping baru ditulis oleh
+  `apply_apache_mappings` setelah user memilih app; `projects.json` dibackup ke
+  `backup/projects-<timestamp>.json`.
+- App yang sudah punya `webServerService` ditampilkan sebagai `alreadyMapped` dan
+  tidak ditimpa otomatis.
+
+Catatan implementasi Sprint 2.4:
+
+- Built-in variabel command: `${PHP}`, `${PHP_HOME}`, `${GIT}`, `${COMPOSER}`,
+  `${NPM}`, `${BUN}`, `${GO}`, `${APACHE}`, `${APACHE_HOME}`, `${APACHE_CONFIG}`.
+  `settings.json.variables` menambah variabel admin; built-in menang jika nama sama.
+- Ekspansi hanya untuk config admin, recursive maksimal 8 level, unknown placeholder
+  dibiarkan, tidak membaca environment/repo.
+- Perubahan path PHP memindai `installCommand`/`buildCommand`/`preUpdateCommand`/
+  `postUpdateCommand` dan `commands.*`. User memilih **Use ${PHP}**, **Use new path**,
+  atau **Leave**; tidak ada rewrite otomatis. `projects.json` dibackup sebelum replace.
 
 ## 1. Keputusan Arsitektur
 
@@ -190,7 +212,7 @@ Catatan implementasi Sprint 2.2:
 
 Catatan:
 
-- `variables` disiapkan untuk fase lanjutan; fase 1 hanya fixed paths.
+- `variables` menyimpan variabel admin untuk command; Sprint 2.4 menambahkan built-in `${PHP}` dan variabel tool lain (lihat bawah).
 - Field `version`/`detectedAt` diisi oleh deteksi, bukan tangan user.
 - Path boleh memakai environment variable Windows (`%ProgramFiles%`) pada fase 2.
 - Password/token **tidak boleh** ada di file ini sebagai plaintext.
@@ -366,7 +388,8 @@ Tab **Settings**:
 
 ### Fase 4 — Optional
 
-- Variabel `${PHP_HOME}` dan environment expansion.
+- Environment expansion (`%VAR%`) untuk path admin; `${PHP_HOME}` dan variabel tool
+  command sudah tersedia sejak Sprint 2.4.
 - Credential manager UI untuk PAT/service account.
 - Windows Service mode jika benar-benar dibutuhkan.
 
@@ -416,7 +439,8 @@ Tab **Settings**:
 
 ## 8. Acceptance Criteria Fase 2
 
-- [ ] Migrasi settings lama + backup.
+- [x] Migrasi settings lama + backup (fallback in-memory; Save Settings/Migrate
+  Trigger menulis settings.json dan membackup file lama).
 - [x] Global trigger pindah ke settings.json (Sprint 2.1; migrasi eksplisit).
 - [x] Perubahan Apache menampilkan affected services/apps (Sprint 2.2).
 - [x] Apply Apache service baru setelah konfirmasi, dengan backup/rollback/audit
@@ -424,6 +448,8 @@ Tab **Settings**:
 - [x] `webServerService` opsional pada app.
 - [x] Effective PHP/Apache version tampil di daftar app.
 - [x] Saran DocumentRoot → `webServerService` dengan konfirmasi user (Sprint 2.3).
+- [x] `${PHP}`/`${PHP_HOME}` plus scan path PHP hardcoded dan replace eksplisit
+  (Sprint 2.4; tidak ada rewrite otomatis).
 
 ---
 
@@ -517,7 +543,31 @@ Status: **Selesai**.
 
 ### Sprint 2.4 — PHP hardcoded path + `${PHP}`
 
-- Scan custom commands/install/build/pre/post untuk path PHP lama.
-- Tampilkan affected app/field; jangan rewrite otomatis.
-- Dukungan `${PHP}`, `${PHP_HOME}`, `${APACHE_HOME}`, `${GIT}` pada config admin.
-- Tests + docs.
+Status: **Selesai**.
+
+- `UpdaterSettings.variables` menyimpan built-in `PHP`, `PHP_HOME`, `GIT`,
+  `COMPOSER`, `NPM`, `BUN`, `GO`, `APACHE`, `APACHE_HOME`, `APACHE_CONFIG`
+  (plus variabel admin dari `settings.json.variables`). Nilai built-in selalu
+  menang atas nama yang sama.
+- `expand_variables` mengganti `${NAME}` secara rekursif maksimal 8 level;
+  placeholder tidak dikenal dibiarkan, environment variable tidak dibaca, dan
+  tidak ada akses file/repo.
+- Ekspansi dipakai untuk `installCommand`, `buildCommand`, program/args/cwd/shell
+  serta value `env` pada `commands.*`, dan `preUpdateCommand`/`postUpdateCommand`.
+  Built-in tool path/args tidak diubah.
+- Save Settings membandingkan PHP path efektif lama/baru. Jika berubah dan masih
+  ada command app yang memuat path/root lama (case-insensitive, slash-insensitive),
+  `SettingsSaveResult.phpPathChange` membawa daftar app/field/value. Tidak ada
+  penulisan otomatis.
+- Dialog GUI menampilkan old/new PHP path/root dan referensi. **Use ${PHP}**
+  memanggil `replace_php_references` mode `variable` (path → `${PHP}`, root →
+  `${PHP_HOME}`); **Use new path** memakai path/root baru; **Leave** hanya menutup.
+- Replace hanya untuk app yang direferensikan, membackup
+  `backup/projects-<timestamp>.json`, menyimpan `projects.json` atomik, lalu
+  mengembalikan view updater terbaru. Nilai lain di string dipertahankan.
+- Tests: ekspansi variabel (PHP/PHP_HOME/rekursif/unknown), custom command,
+  install/build/pre/post, scan seluruh field command, skip `${PHP}`, case/slash
+  normalization, replace variable/new_path, backup, selected apps, dan ada/tidaknya
+  `phpPathChange`.
+- Batasan: scan hanya field command app, bukan file project; replacement tidak
+  dijalankan otomatis dan tidak menyentuh Apache.

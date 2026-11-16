@@ -13,6 +13,7 @@ use sm_updater::settings::{
 };
 
 use crate::apache::{self, ApacheChangeView};
+use crate::php_paths::{self, PhpPathChangeView};
 
 const TASK_SCRIPT_INSTALL: &str = "Install-UpdaterTask.ps1";
 const TASK_SCRIPT_TEST: &str = "Invoke-UpdaterTask.ps1";
@@ -174,12 +175,14 @@ pub struct SettingsView {
 }
 
 /// Hasil Save Settings. `apachePending` berisi preview service/app yang perlu
-/// di-apply terpisah; settings sendiri sudah tersimpan saat nilai ini dikembalikan.
+/// di-apply terpisah; `phpPathChange` berisi referensi path PHP lama yang perlu
+/// ditinjau user. Settings sendiri sudah tersimpan saat nilai ini dikembalikan.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsSaveResult {
     pub settings: Settings,
     pub apache_pending: Option<ApacheChangeView>,
+    pub php_path_change: Option<PhpPathChangeView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -820,11 +823,32 @@ fn save_settings_view_at(
     // Nilai efektif lama harus dibaca sebelum settings.json ditulis ulang.
     let (old_settings, _) = load_settings_at(&settings_file, &paths.projects_path())?;
     let config = load_config(&paths.projects_path())?;
+    let old_php_path = old_settings.tools.php.path.trim().to_string();
+    let old_php_root = php_paths::php_home(&old_php_path);
 
     if settings_file.is_file() {
         backup_settings_file(&settings_file)?;
     }
     let settings = save_settings_at(&settings_file, settings)?;
+
+    let new_php_path = settings.tools.php.path.trim().to_string();
+    let new_php_root = php_paths::php_home(&new_php_path);
+    let php_path_change = if php_paths::php_path_changed(&old_php_path, &new_php_path) {
+        let references = php_paths::scan_php_references(&config, &old_php_path, &old_php_root);
+        if references.is_empty() {
+            None
+        } else {
+            Some(PhpPathChangeView {
+                old_path: old_php_path,
+                old_root: old_php_root,
+                new_path: new_php_path,
+                new_root: new_php_root,
+                references,
+            })
+        }
+    } else {
+        None
+    };
 
     let pending_path = apache::pending_path_for(&paths.data_dir());
     let pending =
@@ -855,6 +879,7 @@ fn save_settings_view_at(
     Ok(SettingsSaveResult {
         settings,
         apache_pending,
+        php_path_change,
     })
 }
 
@@ -1699,5 +1724,96 @@ mod tests {
         let second = save_settings_view_at(&paths, result.settings).unwrap();
         assert!(second.apache_pending.is_none());
         assert!(!apache::pending_path_for(&paths.data_dir()).exists());
+    }
+
+    fn php_config(path: &Path, install_command: &str) {
+        use sm_updater::registry::{save_config, AppConfig, CommandSpec, UpdaterConfig};
+
+        let mut config = UpdaterConfig::default();
+        config.apps.push(AppConfig {
+            id: "demo".into(),
+            name: "Demo".into(),
+            repo_url: "https://example.com/demo.git".into(),
+            local_path: r"C:\project\demo".into(),
+            preset: sm_updater::registry::Preset::Custom,
+            install_command: install_command.into(),
+            commands: sm_updater::registry::CustomCommands {
+                build: vec![CommandSpec {
+                    name: "build".into(),
+                    program: r"C:\old-php\php.exe".into(),
+                    args: vec![r"C:\old-php\artisan".into()],
+                    shell: String::new(),
+                    ..CommandSpec::default()
+                }],
+                ..sm_updater::registry::CustomCommands::default()
+            },
+            ..AppConfig::default()
+        });
+        save_config(path, &config).unwrap();
+    }
+
+    #[test]
+    fn php_path_change_reports_references_and_is_absent_on_second_save() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        php_config(
+            &paths.projects_path(),
+            r#""C:\old-php\php.exe" artisan migrate"#,
+        );
+
+        let settings_file = settings_path_for(&paths.projects_path());
+        let mut old = Settings::default();
+        old.tools.php.path = r"C:\old-php\php.exe".into();
+        save_settings_at(&settings_file, old.clone()).unwrap();
+
+        let mut next = old.clone();
+        next.tools.php.path = r"C:\new-php\php.exe".into();
+        let result = save_settings_view_at(&paths, next).unwrap();
+        let change = result.php_path_change.expect("PHP path change preview");
+
+        assert_eq!(change.old_path, r"C:\old-php\php.exe");
+        assert_eq!(change.old_root, r"C:\old-php");
+        assert_eq!(change.new_path, r"C:\new-php\php.exe");
+        assert_eq!(change.new_root, r"C:\new-php");
+        assert_eq!(change.references.len(), 3);
+        assert!(change
+            .references
+            .iter()
+            .any(|reference| reference.field == "installCommand"));
+        assert!(change
+            .references
+            .iter()
+            .any(|reference| reference.field == "commands.build[0].program"));
+        assert!(change
+            .references
+            .iter()
+            .any(|reference| reference.field == "commands.build[0].args[0]"));
+
+        let second = save_settings_view_at(&paths, result.settings).unwrap();
+        assert!(second.php_path_change.is_none());
+    }
+
+    #[test]
+    fn php_change_without_references_is_absent() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        php_config(&paths.projects_path(), "composer install --no-dev");
+        let mut config = load_config(&paths.projects_path()).unwrap();
+        config.apps[0].commands = sm_updater::registry::CustomCommands::default();
+        sm_updater::registry::save_config(&paths.projects_path(), &config).unwrap();
+
+        let settings_file = settings_path_for(&paths.projects_path());
+        let mut old = Settings::default();
+        old.tools.php.path = r"C:\old-php\php.exe".into();
+        save_settings_at(&settings_file, old.clone()).unwrap();
+
+        let mut next = old.clone();
+        next.tools.php.path = r"C:\new-php\php.exe".into();
+        next.updater.log_retention_days = 14;
+        let result = save_settings_view_at(&paths, next).unwrap();
+
+        assert!(result.php_path_change.is_none());
     }
 }

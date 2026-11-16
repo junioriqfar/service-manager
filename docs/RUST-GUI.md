@@ -191,6 +191,35 @@ tanpa mengedit `projects.json` secara manual:
 - Warning parser (include wajib hilang, variabel tidak dikenal, batas traversal)
   ditampilkan di kartu. Deteksi tidak pernah mengubah file config atau registry.
 
+### PHP hardcoded references dan variabel command
+
+Saat **Save Settings** mengubah `tools.php.path`:
+
+- Backend membandingkan PHP path/root efektif lama dan baru. Jika masih ada
+  command app yang memuat path/root lama, hasil save membawa `phpPathChange`
+  berisi app, field, dan value terkait. `settings.json` tetap tersimpan.
+- Field yang dipindai: `installCommand`, `buildCommand`, `preUpdateCommand`,
+  `postUpdateCommand`, serta `commands.install/build/preUpdate/postUpdate`
+  (`program`, `args[]`, `cwd`, `shell`, dan value `env`). Field yang sudah memakai
+  `${PHP}`/`${PHP_HOME}` dilewati. Pencocokan Windows case-insensitive dan
+  menganggap `/` sama dengan `\`.
+- GUI menampilkan dialog **PHP references found** dengan old/new PHP path/root,
+  app/field/value, dan tombol:
+  - **Use ${PHP}** — memanggil `replace_php_references` mode `variable`, mengganti
+    path lama dengan `${PHP}` dan root lama dengan `${PHP_HOME}`;
+  - **Use new path** — memanggil command yang sama mode `new_path` dengan path/root
+    baru;
+  - **Leave** — menutup dialog tanpa mengubah `projects.json`.
+- Replace hanya menyentuh app yang direferensikan, membackup
+  `backup/projects-<timestamp>.json`, dan menyimpan `projects.json` atomik.
+  Tidak ada rewrite otomatis saat Save maupun saat scan.
+- Built-in variable yang tersedia untuk command: `${PHP}`, `${PHP_HOME}`,
+  `${GIT}`, `${COMPOSER}`, `${NPM}`, `${BUN}`, `${GO}`, `${APACHE}`,
+  `${APACHE_HOME}`, `${APACHE_CONFIG}`. Variabel admin dari
+  `settings.json.variables` juga tersedia; nama built-in menang.
+- Ekspansi rekursif maksimal 8 level. `${NAME}` yang tidak dikenal dibiarkan,
+  environment variable tidak diekspansi, dan tidak ada pembacaan file repo.
+
 ## Batch Async (Anti-Freeze)
 
 Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
@@ -214,6 +243,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, trigger migration, Scheduled Task) |
 | `crates/sm-gui/src/apache.rs` | Pending Apache change, matching service/app, apply/rollback/audit, command `apache_change_status`/`apply_apache_change` |
 | `crates/sm-gui/src/apache_config.rs` | Parser DocumentRoot/include/variabel, saran mapping, command `detect_apache_mappings`/`apply_apache_mappings` |
+| `crates/sm-gui/src/php_paths.rs` | Scan referensi PHP hardcoded, dialog payload `phpPathChange`, command `replace_php_references` (variable/new_path, backup, selected apps) |
 | `crates/sm-gui/src/state.rs` | State aplikasi, service rows, status SCM, batch lock |
 | `crates/sm-gui/src/batch.rs` | Scheduler batch async + test concurrency |
 | `crates/sm-gui/src/util.rs` | Log tail, export, open path, app log |
@@ -233,7 +263,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 333 test):
+Test GUI mencakup (total workspace 350 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
@@ -251,9 +281,13 @@ Test GUI mencakup (total workspace 333 test):
 - Apache DocumentRoot: `Define`/`${VAR}`, include wildcard + nested, relative
   path/ServerRoot, batas variabel, matching exact/descendant/ancestor, deduplikasi,
   already mapped, apply parsial + backup projects, dan penolakan service salah.
+- PHP references: ekspansi `${PHP}`/`${PHP_HOME}`/variabel lain, scan
+  install/build/pre/post serta `commands.*` (program/args/cwd/shell/env), skip
+  `${PHP}`, normalisasi case/slash, replace mode variable/new_path hanya untuk app
+  terpilih, backup `projects.json`, dan ada/tidaknya `phpPathChange` setelah save.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
-  tab Settings (termasuk kartu Trigger, Apache App Mapping, field web server, dan
-  panel Apache pending), serta ikon/tema.
+  tab Settings (termasuk kartu Trigger, Apache App Mapping, field web server,
+  panel Apache pending, dan dialog PHP references), serta ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 
@@ -271,7 +305,9 @@ Start-Process .\target\debug\sm-gui.exe
 - Rename service saat edit belum didukung (nama service dikunci).
 - Tab Settings: logon type `Password` belum didukung dari GUI (gunakan `Interactive`
   atau `S4U`), dan nama Scheduled Task tidak boleh memakai folder path.
-- Sprint 2.1–2.3 sudah menyediakan trigger efektif, migrasi trigger eksplisit,
+- Sprint 2.1–2.4 sudah menyediakan trigger efektif, migrasi trigger eksplisit,
   tampilan versi PHP/Apache per app, preview/apply Apache explicit dengan pending,
-  backup, rollback, dan audit, serta saran `webServerService` dari DocumentRoot
-  Apache. Scan path PHP hardcoded/`${PHP}` (Sprint 2.4) belum tersedia.
+  backup, rollback, dan audit, saran `webServerService` dari DocumentRoot Apache,
+  serta variabel `${PHP}`/`${PHP_HOME}` dan dialog replace referensi PHP hardcoded.
+  Replace tetap hanya berjalan setelah user memilih **Use ${PHP}** atau
+  **Use new path**.

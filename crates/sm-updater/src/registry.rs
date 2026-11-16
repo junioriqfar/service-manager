@@ -357,26 +357,114 @@ pub struct UpdaterSettings {
     pub log_dir: String,
     #[serde(default = "default_max_concurrent")]
     pub max_concurrent_updates: usize,
+    /// Built-in tool variables (`PHP`, `PHP_HOME`, `GIT`, ...) plus admin
+    /// variables from `settings.json.variables`. Used by command expansion.
+    #[serde(default)]
+    pub variables: BTreeMap<String, String>,
 }
 
 fn default_max_concurrent() -> usize {
     1
 }
 
+/// Parent folder of a tool executable. Empty path or bare file name yields
+/// an empty value rather than the current directory.
+pub fn tool_home(path: &str) -> String {
+    let path = path.trim();
+    if path.is_empty() {
+        return String::new();
+    }
+    Path::new(path)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(|parent| parent.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+/// Build the variable table shared by `settings.json`, the legacy fallback,
+/// and `UpdaterSettings::default()`.
+///
+/// Built-in names win over admin variables with the same name so `${PHP}`
+/// always points at the configured PHP executable.
+#[allow(clippy::too_many_arguments)]
+pub fn build_tool_variables(
+    git_path: &str,
+    php_path: &str,
+    composer_path: &str,
+    npm_path: &str,
+    bun_path: &str,
+    go_path: &str,
+    apache_path: &str,
+    apache_root: &str,
+    apache_config: &str,
+    custom: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut variables = custom.clone();
+    variables.insert("PHP".to_string(), php_path.trim().to_string());
+    variables.insert("PHP_HOME".to_string(), tool_home(php_path));
+    variables.insert("GIT".to_string(), git_path.trim().to_string());
+    variables.insert("COMPOSER".to_string(), composer_path.trim().to_string());
+    variables.insert("NPM".to_string(), npm_path.trim().to_string());
+    variables.insert("BUN".to_string(), bun_path.trim().to_string());
+    variables.insert("GO".to_string(), go_path.trim().to_string());
+    variables.insert("APACHE".to_string(), apache_path.trim().to_string());
+    variables.insert("APACHE_HOME".to_string(), apache_root.trim().to_string());
+    variables.insert(
+        "APACHE_CONFIG".to_string(),
+        apache_config.trim().to_string(),
+    );
+    variables
+}
+
+impl UpdaterSettings {
+    /// Recompute built-in variables after paths changed programmatically.
+    /// Admin variables are preserved.
+    pub fn refresh_variables(&mut self) {
+        let custom = self.variables.clone();
+        self.variables = build_tool_variables(
+            &self.git_path,
+            &self.php_path,
+            &self.composer_path,
+            &self.npm_path,
+            &self.bun_path,
+            &self.go_path,
+            "",
+            "",
+            "",
+            &custom,
+        );
+    }
+}
+
 impl Default for UpdaterSettings {
     fn default() -> Self {
         let base = ProjectsFile::default();
+        let bun_path = default_bun_path();
+        let go_path = default_go_path();
+        let variables = build_tool_variables(
+            &base.git_path,
+            &base.php_path,
+            &base.composer_path,
+            &base.npm_path,
+            &bun_path,
+            &go_path,
+            "",
+            "",
+            "",
+            &BTreeMap::new(),
+        );
         Self {
             git_path: base.git_path,
             php_path: base.php_path,
             composer_path: base.composer_path,
             npm_path: base.npm_path,
-            bun_path: default_bun_path(),
+            bun_path,
             pnpm_path: String::new(),
             yarn_path: String::new(),
-            go_path: default_go_path(),
+            go_path,
             log_dir: base.log_dir,
             max_concurrent_updates: 1,
+            variables,
         }
     }
 }
@@ -501,6 +589,7 @@ impl UpdaterConfig {
         if self.settings.max_concurrent_updates == 0 {
             self.settings.max_concurrent_updates = 1;
         }
+        self.settings.refresh_variables();
     }
 
     pub fn find(&self, id: &str) -> Option<&AppConfig> {
@@ -577,7 +666,7 @@ pub fn load_config(path: &Path) -> Result<UpdaterConfig, String> {
 }
 
 fn from_legacy(legacy: ProjectsFile) -> UpdaterConfig {
-    let settings = UpdaterSettings {
+    let mut settings = UpdaterSettings {
         git_path: legacy.git_path.clone(),
         php_path: legacy.php_path.clone(),
         composer_path: legacy.composer_path.clone(),
@@ -585,6 +674,7 @@ fn from_legacy(legacy: ProjectsFile) -> UpdaterConfig {
         log_dir: legacy.log_dir.clone(),
         ..UpdaterSettings::default()
     };
+    settings.refresh_variables();
     let apps = legacy
         .projects
         .iter()
@@ -728,6 +818,26 @@ mod tests {
         assert_eq!(loaded.version, 2);
         assert_eq!(loaded.apps[0].id, "demo");
         assert_eq!(loaded.apps[0].repo_url, "https://example.com/demo.git");
+    }
+
+    #[test]
+    fn refresh_variables_preserves_admin_variables_and_overrides_builtins() {
+        let mut settings = UpdaterSettings {
+            php_path: r"C:\custom\php.exe".into(),
+            ..UpdaterSettings::default()
+        };
+        settings
+            .variables
+            .insert("PROJECT_ROOT".into(), r"D:\Projects".into());
+        settings
+            .variables
+            .insert("PHP".into(), r"C:\bogus\php.exe".into());
+
+        settings.refresh_variables();
+
+        assert_eq!(settings.variables["PROJECT_ROOT"], r"D:\Projects");
+        assert_eq!(settings.variables["PHP"], r"C:\custom\php.exe");
+        assert_eq!(settings.variables["PHP_HOME"], r"C:\custom");
     }
 
     #[test]
