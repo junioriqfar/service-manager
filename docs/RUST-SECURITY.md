@@ -118,7 +118,7 @@ Aturan `.gitignore`:
 - `services.json`, `projects.json`, `services-export-*.json`;
 - `logs/`, `backup/`;
 - `.env`, token/key/pem/pfx, private key;
-- `service-manager-rs/target/`, `sm-gui/gen/`.
+- `service-manager-rs/target/`, `sm-gui/gen/`, `sm-gui/ui/node_modules/`, `sm-gui/ui/dist/`.
 
 ## Pengujian Keamanan
 

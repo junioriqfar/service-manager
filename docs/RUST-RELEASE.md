@@ -149,6 +149,7 @@ Config dibaca dari folder executable. Gunakan `SERVICE_MANAGER_HOME` untuk memak
 
 ## Migrasi Config
 
+- Aplikasi PowerShell lama sudah dihapus dari repositori; repositori ini hanya berisi implementasi Rust.
 - Format `services.json` dan `projects.json` tetap versi 1.
 - Backup config sebelum mengganti versi aplikasi.
 - Jangan menjalankan dua instance yang menulis config yang sama secara bersamaan.

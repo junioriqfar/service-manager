@@ -2,10 +2,12 @@
 
 Dokumen perencanaan lengkap untuk menulis ulang **Service Manager** (PowerShell + WinForms) menjadi aplikasi **Rust** yang setara fitur, aman, dan dapat dipelihara.
 
-- Status: **Draft / perencanaan**
-- Basis kode acuan: `ServiceManager.ps1` (3.225 baris), `ProjectUpdate.ps1` (574 baris), `Store-GitCredential.ps1`
+- Status: **Selesai diimplementasikan — dokumen historis**
+- Basis kode acuan: `ServiceManager.ps1` (3.225 baris), `ProjectUpdate.ps1` (574 baris), `Store-GitCredential.ps1` — **sudah dihapus dari repositori**
 - Target platform: Windows 10/11 dan Windows Server (x64)
 - Prinsip: **kompatibel config**, **perilaku setara**, **tanpa kredensial di disk/repo**
+
+> Catatan: aplikasi PowerShell lama sudah dihapus dari repositori. Dokumen ini dipertahankan sebagai catatan perencanaan dan pemetaan historis. Implementasi aktif ada di `README.md`, `docs/RUST-GUI.md`, `docs/RUST-SERVICES.md`, dan `service-manager-rs/README.md`.
 
 ---
 
@@ -29,7 +31,7 @@ Catatan rilis: instalasi MSI/NSIS belum ditandatangani dan belum dijalankan pada
 
 ## 1. Ringkasan Eksekutif
 
-Aplikasi saat ini adalah GUI WinForms yang membungkus tiga hal:
+Aplikasi lama (historis, sudah dihapus) adalah GUI WinForms yang membungkus tiga hal:
 
 1. Windows Service Control Manager (SCM) melalui `nssm.exe`, `httpd.exe -k`, dan `pg_ctl.exe`.
 2. Pembacaan/penulisan konfigurasi JSON (`services.json`, `projects.json`).
@@ -65,7 +67,7 @@ Seluruh inti fungsional tersebut dapat dipindahkan ke Rust. Yang berubah secara 
 
 ---
 
-## 3. Analisis Aplikasi Saat Ini
+## 3. Analisis Aplikasi Lama (Historis)
 
 | Komponen | Isi | Catatan migrasi |
 | --- | --- | --- |
@@ -276,7 +278,7 @@ pub struct ProjectOverride {
 
 ---
 
-## 7. Pemetaan PowerShell ke Rust
+## 7. Pemetaan PowerShell ke Rust (Historis)
 
 | Fungsi PowerShell | Modul Rust | Catatan |
 | --- | --- | --- |
@@ -678,7 +680,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 | Perbedaan perilaku SCM (pending/timeout) | Service gagal start/stop | Uji integration + timeout eksplisit + pesan diagnostik |
 | WebView2 tidak tersedia di server | GUI tidak tampil | Deteksi runtime; dokumentasikan kebutuhan; fallback build `Slint` (fase lanjutan) |
 | UAC/elevasi berbeda saat dijalankan via Task Scheduler | Operasi gagal | Deteksi token admin, pesan jelas, dukung `--elevated`/manifest |
-| Credential Manager tidak tersedia untuk akun service | Update gagal | Panduan `Store-GitCredential`, preflight sebelum pull |
+| Credential Manager tidak tersedia untuk akun service | Update gagal | Panduan `sm-updater credential store`, preflight sebelum pull |
 | Config lama tidak kompatibel | Kehilangan data | Golden test + backup otomatis + tidak mengubah format |
 | Antivirus/code signing | Binary diblokir | Code signing, checksum rilis, dokumentasi whitelist |
 | Scope creep (fitur baru) | Mundur dari jadwal | Patuhi non-tujuan fase awal |
@@ -693,7 +695,7 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 - [ ] Import service terpasang bekerja untuk ketiga tipe.
 - [ ] Delayed start, restart on crash, dan urutan dependensi berfungsi.
 - [ ] Log viewer menampilkan tail dan auto-refresh.
-- [ ] **Restart Semua / Start Semua / Stop Semua tidak membekukan UI**, menampilkan progress per service, dan dapat dibatalkan.
+- [ ] **Restart All / Start All / Stop All tidak membekukan UI**, menampilkan progress per service, dan dapat dibatalkan.
 - [ ] Batch menghormati dependensi: service dependent tidak start sebelum dependensinya `Running`.
 - [ ] Backup otomatis (maks. 20) dan restore config berfungsi.
 - [ ] `sm-updater` lulus seluruh matriks keputusan update dan memblokir migration.
@@ -709,15 +711,15 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 1. Apakah target minimum Windows 10 21H2 atau perlu Windows Server 2016? (menentukan WebView2/Tauri).
 2. Apakah aplikasi harus berjalan tanpa WebView2 (memaksa GUI native `Slint`/`egui`)?
 3. Apakah perlu code signing resmi dan siapa pemegang sertifikat?
-4. Apakah `Store-GitCredential` tetap script terpisah atau dijadikan subcommand Rust?
+4. ~~Apakah `Store-GitCredential` tetap script terpisah atau dijadikan subcommand Rust?~~ Sudah dijawab: subcommand `sm-updater credential store`.
 5. Apakah perlu dukungan multi-user/RDP concurrent (config per-user atau machine-wide)?
 6. Apakah updater perlu dijalankan sebagai Windows Service/Task Scheduler pada fase awal?
 
 ---
 
-## 19. Referensi Kode Acuan
+## 19. Referensi Kode Lama (Historis)
 
-| Topik | Lokasi saat ini |
+| Topik | Lokasi lama (historis) |
 | --- | --- |
 | Model & normalisasi service | `ServiceManager.ps1` fungsi `ConvertTo-ServiceConfig` |
 | Urutan dependensi | `ServiceManager.ps1` fungsi `Get-ManagedServicesInStartOrder` |
@@ -727,14 +729,14 @@ Exit code: `0` sukses, `1` gagal sebagian/semua, `2` argumen tidak valid.
 | Delayed start | `ServiceManager.ps1` kelas C# `ServiceDelayHelper` |
 | Updater Laravel | `ProjectUpdate.ps1` fungsi `Invoke-ProjectUpdate` |
 | Kredensial Git | `Store-GitCredential.ps1` |
-| Skema config | `docs/CONFIGURATION.md`, `docs/PROJECT-UPDATE.md` |
-| Keamanan | `docs/SECURITY.md` |
+| Skema config | `docs/CONFIGURATION.md`, `docs/RUST-UPDATER.md` |
+| Keamanan | `docs/RUST-SECURITY.md` |
 
 ---
 
-## 20. Langkah Berikutnya
+## 20. Catatan Penutup
 
-1. Setujui keputusan GUI (Tauri vs native) dan target Windows minimum.
-2. Buat workspace `service-manager-rs` + CI.
-3. Implementasi Fase 0-1 (config + SCM) dengan test.
-4. Review hasil sebelum masuk Fase 2 (NSSM/native).
+- Seluruh fase 0-6 telah diimplementasikan; aplikasi PowerShell lama sudah dihapus dari repositori.
+- Implementasi aktif: `sm-gui` (React + shadCN), `sm-updater`, dan `sm-diag`.
+- SCM write/install tetap membutuhkan Administrator dan diuji manual di server; CI menjalankan unit test, clippy, build frontend, dan release portable.
+- Installer NSIS dan code signing masih menjadi pekerjaan rilis lanjutan (lihat `docs/RUST-RELEASE.md`).

@@ -1,183 +1,170 @@
 # Service Manager
 
-Aplikasi GUI PowerShell untuk mengelola Windows Service di server Windows, khususnya service yang dijalankan lewat **NSSM**, serta service native **Apache (httpd)** dan **PostgreSQL (pg_ctl)**. Proyek ini juga menyertakan **Project Update** untuk memperbarui project Laravel dari Git secara aman.
+Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, PostgreSQL native) dan **updater project Laravel**. Dibangun dengan **Rust + Tauri 2** dan frontend **React + TypeScript + Vite + Tailwind CSS + shadCN UI**. Aplikasi PowerShell lama sudah dihapus dari repositori.
 
-> Dijalankan sebagai **Administrator** pada Windows dengan PowerShell 5.1.
+> Jalankan GUI sebagai **Administrator** untuk install/start/stop/restart service Windows.
 
 ## Fitur
 
-### Service Manager (`ServiceManager.ps1`)
+- Daftar service dengan status live dari Windows SCM.
+- Tambah, edit, hapus, install, start, stop, dan restart service.
+- Dukungan `nssm`, `apache` (`httpd -k`), dan `postgresql` (`pg_ctl register`).
+- Import service NSSM/Apache/PostgreSQL yang sudah terpasang.
+- Start All / Stop All / Restart All berjalan async di background, dengan progress per service dan tombol Cancel.
+- Startup `auto`, `delayed`, `manual`; restart on crash + delay.
+- Log viewer (stdout/stderr, auto-refresh), backup/restore config.
+- UI Bahasa Inggris, tema **light/dark/system**, icon Lucide, file/folder picker, dan context menu klik kanan.
+- Updater Laravel `sm-updater`: cek/update Git, blokir migration, composer/npm/build/artisan, credential helper.
+- Diagnosa headless `sm-diag`.
 
-- Daftar service dalam tabel: status, nama, display name, jenis, executable, startup, dan restart.
-- Tambah, edit, hapus, install, start, stop, dan restart service dari satu jendela.
-- Dukungan tiga jenis service:
-  - `nssm` - proses aplikasi apa pun yang dibungkus NSSM.
-  - `apache` - service native Apache melalui `httpd.exe -k install`.
-  - `postgresql` - service native PostgreSQL melalui `pg_ctl register`.
-- Import otomatis service yang sudah terpasang di Windows (NSSM, Apache, PostgreSQL).
-- Start/Stop/Restart semua service dengan urutan dependensi (topological sort).
-- Startup mode: `auto`, `delayed` (Automatic Delayed Start), dan `manual`.
-- Restart otomatis saat crash dengan jeda yang dapat diatur (khusus NSSM).
-- Log viewer bawaan (auto refresh 2 detik) dan tombol buka file log.
-- Backup otomatis `services.json` sebelum perubahan (maksimal 20 file) serta backup/restore config ke JSON.
-- Deteksi NSSM di `..\nssm\nssm.exe` atau fallback `C:\tools\nssm\nssm.exe`.
+## Komponen
 
-### Project Update (`ProjectUpdate.ps1`)
-
-- Memindai folder project Laravel di `scanRoots`.
-- Mode `Menu`, `List`, `Check` (dry-run), dan `Auto` (pull + composer + build).
-- Preflight akses remote sebelum mengubah file.
-- Menolak update otomatis bila ada perubahan `database/migrations/*` (harus manual).
-- Hanya melanjutkan bila working tree bersih dan branch sesuai konfigurasi.
-- `composer install`, `npm ci`/`npm install`, `npm run build`, `php artisan optimize:clear`, dan `queue:restart` dijalankan secara kondisional.
-- Log per-project disimpan di `storage/logs` project dan folder `logs` aplikasi.
-- Mendukung `postUpdateCommand` dan rollback code (`git reset --hard <sha>`).
+| Binary | Fungsi |
+| --- | --- |
+| `sm-gui.exe` | GUI Tauri (release tanpa console, window center) |
+| `sm-updater.exe` | Updater Laravel + credential helper (console) |
+| `sm-diag.exe` | Diagnosa config, NSSM, admin, dan status service (console) |
 
 ## Kebutuhan
 
 | Komponen | Keterangan |
 | --- | --- |
-| Windows | Windows 10/11 atau Windows Server |
-| PowerShell | Windows PowerShell 5.1 (bawaan Windows) |
-| Hak akses | Administrator (aplikasi akan mencoba elevasi otomatis) |
-| NSSM | Untuk service bertipe `nssm` (opsional bila hanya memakai service native) |
-| Git | Untuk fitur Project Update dan penyimpanan kredensial |
-| PHP / Composer / npm | Untuk Project Update project Laravel (path dapat dikonfigurasi) |
+| Windows | Windows 10/11 atau Windows Server x64 |
+| WebView2 Runtime | Untuk GUI Tauri |
+| NSSM | `C:\tools\nssm\nssm.exe` atau `..\nssm\nssm.exe` |
+| Hak akses | Administrator untuk operasi service |
+| Node.js 22+ | Hanya untuk build frontend |
+| Rust stable + MSVC | Hanya untuk build dari source |
+| Git/PHP/Composer/npm | Untuk fitur updater Laravel |
 
 ## Struktur Folder
 
-```
+```text
 ServiceManager/
-├─ ServiceManager.ps1        # Aplikasi GUI utama
-├─ ServiceManager.cmd        # Launcher (menjalankan PowerShell tersembunyi)
-├─ ProjectUpdate.ps1         # Updater project Laravel
-├─ Store-GitCredential.ps1   # Helper penyimpanan kredensial Git (DPAPI)
-├─ services.example.json     # Contoh konfigurasi service
-├─ projects.example.json     # Contoh konfigurasi project updater
-├─ service-manager-rs/       # Implementasi Rust (bertahap)
-├─ services.json             # Konfigurasi runtime (tidak di-commit)
-├─ projects.json             # Konfigurasi runtime (tidak di-commit)
-├─ backup/                   # Backup config otomatis (tidak di-commit)
-└─ logs/                     # Log aplikasi & updater (tidak di-commit)
+├─ service-manager-rs/          # workspace Rust
+│  ├─ crates/sm-core/           # model, validasi, ordering, update plan
+│  ├─ crates/sm-config/         # services.json, projects.json, backup
+│  ├─ crates/sm-win/            # SCM, NSSM/native, discovery, DPAPI
+│  ├─ crates/sm-gui/            # Tauri + React/shadCN UI
+│  └─ crates/sm-updater/        # updater Laravel + credential helper
+├─ docs/                        # dokumentasi
+├─ services.example.json        # contoh services.json
+├─ projects.example.json        # contoh projects.json
+├─ services.json                # config runtime (tidak di-commit)
+├─ projects.json                # config runtime (tidak di-commit)
+├─ backup/                      # backup config (tidak di-commit)
+└─ logs/                        # log aplikasi (tidak di-commit)
 ```
 
 ## Mulai Cepat
 
-1. Clone repositori:
+1. Gunakan ZIP portable:
    ```powershell
-   git clone https://github.com/junioriqfar/service-manager.git C:\tools\ServiceManager
+   cd service-manager-rs
+   .\Build-Release.ps1
+   # hasil: dist\ServiceManager-RS-<versi>.zip
    ```
-2. Salin file contoh konfigurasi:
+2. Ekstrak, lalu salin contoh config:
    ```powershell
-   Copy-Item .\services.example.json .\services.json
-   Copy-Item .\projects.example.json .\projects.json
+   Copy-Item services.example.json services.json
+   Copy-Item projects.example.json projects.json
    ```
-3. Sesuaikan path di `services.json` dan `projects.json` dengan server Anda.
-4. Jalankan `ServiceManager.cmd` (klik dua kali) atau:
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ServiceManager.ps1
-   ```
-5. Mode diagnosa (tanpa membuka GUI):
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ServiceManager.ps1 -Diagnose
-   ```
+3. Sesuaikan path service/project.
+4. Jalankan `sm-gui.exe` sebagai Administrator.
+
+Config dibaca dari folder `sm-gui.exe`. Untuk memakai folder lain:
+
+```powershell
+$env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
+.\sm-gui.exe
+```
+
+## Build dari Source
+
+```powershell
+cd service-manager-rs
+
+# Frontend wajib dibangun sebelum cargo build/test GUI
+Push-Location crates/sm-gui/ui
+npm ci
+npm run build
+Pop-Location
+
+cargo build --release -p sm-gui -p sm-updater
+```
+
+Atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`, `npm run build`, cargo build, dan membuat ZIP.
 
 ## Konfigurasi
 
-Detail skema konfigurasi, tipe service, dan contoh lengkap tersedia di [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+- Skema `services.json`: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+- Pola scheduler global dan queue per project: [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md)
+- Config runtime (`services.json`, `projects.json`, `logs/`, `backup/`) **tidak di-commit** karena berisi path/internal server.
 
-Ringkasan `services.json`:
+## Service Global dan Queue
 
-```json
-{
-  "version": 1,
-  "services": [
-    {
-      "name": "my-app",
-      "displayName": "My App",
-      "serviceType": "nssm",
-      "executable": "C:\\Program Files\\nodejs\\node.exe",
-      "arguments": "index.js",
-      "workingDirectory": "C:\\apps\\my-app",
-      "startup": "auto",
-      "restartOnCrash": true,
-      "restartDelaySec": 5,
-      "dependencies": ["Tcpip"]
-    }
-  ]
-}
-```
+- **Cronical** dapat melayani beberapa project dalam satu service. Satu job per project di `cronical.dat`, masing-masing dengan `Home`.
+- **Queue Laravel** memakai satu worker per project (Opsi A): `KasirinQueue`, `OpenPoQueue`, dan seterusnya, karena `queue:work` terikat pada codebase/database project.
+- Supervisor multi-project dalam satu service (Opsi B) belum diimplementasikan.
 
-## Project Update
+Detail dan contoh config: [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md).
 
-Panduan PowerShell ada di [docs/PROJECT-UPDATE.md](docs/PROJECT-UPDATE.md). Implementasi Rust tersedia di [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md).
+## Updater Laravel
 
 ```powershell
-# PowerShell
-.\ProjectUpdate.ps1
-.\ProjectUpdate.ps1 -Mode List
-.\ProjectUpdate.ps1 -Mode Check -Project kasirin
-.\ProjectUpdate.ps1 -Mode Auto -All
-
-# Rust (dari folder service-manager-rs)
-cargo run -p sm-updater -- list
-cargo run -p sm-updater -- check --project kasirin
-cargo run -p sm-updater -- update --project kasirin
+sm-updater list
+sm-updater check --project kasirin
+sm-updater update --project kasirin
+sm-updater update                    # semua project enabled
+sm-updater credential store --help
 ```
+
+Panduan lengkap: [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md).
 
 ## Keamanan
 
-- **Jangan pernah commit token, password, PAT, atau private key.**
-- `services.json`, `projects.json`, `logs/`, dan `backup/` dikecualikan melalui `.gitignore` karena berisi path/informasi spesifik server.
-- Kredensial Git disimpan di Windows Credential Manager melalui Git Credential Manager dengan `GCM_CREDENTIAL_STORE=dpapi`, **bukan** di dalam repositori.
-- Gunakan Personal Access Token (PAT) dengan scope minimal (`read_repository` atau `repo` bila perlu push) dan rotasi secara berkala.
-- `Store-GitCredential.ps1` membaca token sebagai `SecureString` dan meneruskannya ke `git credential approve` tanpa menulis token ke disk/script.
-- Versi Rust memakai `sm-updater credential store` (DPAPI/GCM), redaksi log, dan rotasi `app.log`. Lihat [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md).
+- Kredensial Git disimpan lewat Git Credential Manager + DPAPI; token dibaca tanpa echo.
+- DPAPI tersedia di `sm-win::dpapi`.
+- Log aplikasi/updater di-redaksi dari pola token/password dan `app.log` dirotasi pada 5 MB.
+- Config runtime dan kredensial tidak disimpan di repositori.
+- Detail: [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md).
 
-Lihat [docs/SECURITY.md](docs/SECURITY.md) untuk detail.
+## Testing
+
+```powershell
+cd service-manager-rs
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+Saat ini **178 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+
+## Dokumentasi
+
+| Dokumen | Isi |
+| --- | --- |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Skema `services.json`, tipe service, startup, backup |
+| [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI, tema, batch async, build frontend |
+| [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md) | Cronical multi-project, queue per project |
+| [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Updater Laravel |
+| [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log |
+| [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md) | Build, installer, CI, deployment |
+| [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md) | Catatan historis migrasi ke Rust |
+| [service-manager-rs/README.md](service-manager-rs/README.md) | Struktur crate dan status implementasi |
 
 ## Troubleshooting
 
 | Masalah | Solusi |
 | --- | --- |
-| Aplikasi tidak muncul / minta Administrator | Jalankan `ServiceManager.cmd`, atau buka PowerShell sebagai Administrator lalu jalankan script. |
-| NSSM tidak ditemukan | Letakkan `nssm.exe` di `C:\tools\nssm\nssm.exe` atau satu level di atas folder aplikasi (`..\nssm\nssm.exe`). Service native tetap bisa dikelola. |
-| `Unexpected status SERVICE_START_PENDING` | Proses service lambat start. Cek log service, naikkan waktu tunggu, dan pastikan executable/argumen benar. |
-| Config rusak | File lama otomatis dicadangkan ke `backup/services-broken-*.json`. Perbaiki JSON lalu jalankan ulang. |
-| `Akses remote gagal` pada Project Update | Simpan kredensial Git lewat `Store-GitCredential.ps1` atau login sekali via RDP/console. Browser tidak bisa muncul via SSH. |
-| Update diblokir karena migration | Jalankan migration secara manual, lalu ulangi update. |
-
-## Implementasi Rust
-
-Versi Rust tersedia di folder [`service-manager-rs/`](service-manager-rs/README.md). Status: **Phase 0-6 selesai** — workspace, model domain, kompatibilitas `services.json`/`projects.json`, backup, SCM core, wrapper NSSM/Apache/PostgreSQL, import discovery, GUI Tauri, batch async anti-freeze, updater CLI, security hardening, release & CI, dan unit test.
-
-```powershell
-cd service-manager-rs
-cargo run -p sm-gui
-cargo run -p sm-gui --bin sm-diag
-cargo run -p sm-updater -- check --project kasirin
-```
-
-Panduan: [docs/RUST-GUI.md](docs/RUST-GUI.md), [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md), [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md), [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md). Build frontend membutuhkan Node.js 22+ dan npm.
-
-GUI Rust menggunakan React + shadCN UI Bahasa Inggris dengan dark/light mode, tombol **Browse…** untuk Application/Working Directory, dan context menu klik kanan pada daftar service (Edit/Install/Start/Stop/Restart/Open Log/Delete).
-
-Build portable:
-
-```powershell
-cd service-manager-rs
-.\Build-Release.ps1
-# hasil: dist\ServiceManager-RS-<versi>.zip
-```
-
-```powershell
-cd service-manager-rs
-cargo test --workspace
-```
-
-## Roadmap
-
-Rencana migrasi ke Rust (arsitektur, pemetaan fitur, fase, estimasi, dan risiko) tersedia di [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md). Status implementasi diperbarui di [service-manager-rs/README.md](service-manager-rs/README.md).
+| Service gagal install/start | Jalankan GUI sebagai Administrator dan cek banner elevasi. |
+| NSSM tidak ditemukan | Letakkan `nssm.exe` di `C:\tools\nssm\nssm.exe` atau `..\nssm\nssm.exe`. |
+| Config rusak | File lama dicadangkan ke `backup/services-broken-*.json`; perbaiki JSON lalu buka ulang. |
+| `OpenPoQueue`/service baru stopped | Service harus dibuat/diterapkan sebagai Administrator; gunakan **Edit → Save** lalu **Start**. |
+| Cloudflared log error ke `127.0.0.1` | Itu error origin aplikasi (mis. queue/API), bukan config Service Manager; cek service/port origin. |
+| Updater gagal akses remote | Simpan kredensial dengan `sm-updater credential store`; cek PAT/akun. |
+| Update diblokir migration | Jalankan migration manual, lalu ulangi update. |
+| GUI tidak muncul | Pastikan WebView2 Runtime terpasang dan jalankan sebagai Administrator. |
 
 ## Lisensi
 
