@@ -4,6 +4,7 @@ import {
   FileText,
   FolderOpen,
   Info,
+  PackageOpen,
   Play,
   RotateCcw,
   ServerCog,
@@ -22,6 +23,7 @@ import { ServiceFormDialog } from "@/components/service-form-dialog";
 import { ServiceTable } from "@/components/service-table";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UpdaterView } from "@/components/updater-view";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Toaster } from "@/components/ui/sonner";
@@ -52,6 +54,7 @@ function App() {
 }
 
 function ServiceManager() {
+  const [view, setView] = useState<"services" | "updater">("services");
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [admin, setAdmin] = useState<boolean | null>(null);
@@ -236,10 +239,12 @@ function ServiceManager() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (!batchRunning && document.visibilityState === "visible") void refresh();
+      if (view === "services" && !batchRunning && document.visibilityState === "visible") {
+        void refresh();
+      }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [batchRunning, refresh]);
+  }, [batchRunning, refresh, view]);
 
   useEffect(() => {
     if (!selectedName) {
@@ -568,109 +573,148 @@ function ServiceManager() {
             </div>
           </div>
 
+          <div className="flex items-center gap-1 rounded-md border bg-background/60 p-1" role="tablist">
+            <Button
+              type="button"
+              size="sm"
+              variant={view === "services" ? "secondary" : "ghost"}
+              onClick={() => setView("services")}
+              role="tab"
+              aria-selected={view === "services"}
+            >
+              <ServerCog />
+              Services
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={view === "updater" ? "secondary" : "ghost"}
+              onClick={() => setView("updater")}
+              role="tab"
+              aria-selected={view === "updater"}
+            >
+              <PackageOpen />
+              Updater
+            </Button>
+          </div>
+
           <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-2">
-            <div className="flex items-center gap-1.5" role="group" aria-label="Batch actions">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void runBatch("start")}
-                disabled={!hasInstalled || batchRunning}
-              >
-                <Play className="text-emerald-600 dark:text-emerald-400" />
-                Start All
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void runBatch("stop")}
-                disabled={!hasInstalled || batchRunning}
-              >
-                <Square className="fill-current text-red-600 dark:text-red-400" />
-                Stop All
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void runBatch("restart")}
-                disabled={!hasInstalled || batchRunning}
-              >
-                <RotateCcw className="text-blue-600 dark:text-blue-400" />
-                Restart All
-              </Button>
-            </div>
+            {view === "services" && (
+              <>
+                <div className="flex items-center gap-1.5" role="group" aria-label="Batch actions">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBatch("start")}
+                    disabled={!hasInstalled || batchRunning}
+                  >
+                    <Play className="text-emerald-600 dark:text-emerald-400" />
+                    Start All
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBatch("stop")}
+                    disabled={!hasInstalled || batchRunning}
+                  >
+                    <Square className="fill-current text-red-600 dark:text-red-400" />
+                    Stop All
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBatch("restart")}
+                    disabled={!hasInstalled || batchRunning}
+                  >
+                    <RotateCcw className="text-blue-600 dark:text-blue-400" />
+                    Restart All
+                  </Button>
+                </div>
 
-            <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
+                <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
 
-            <div className="flex items-center gap-1.5" role="group" aria-label="Global actions">
-              <Button type="button" variant="outline" size="sm" onClick={() => void backupConfig()}>
-                <Download />
-                Backup
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => restoreInputRef.current?.click()}
-              >
-                <Upload />
-                Restore
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={handleOpenFolder}>
-                <FolderOpen />
-                Folder
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={handleOpenAppLog}>
-                <FileText />
-                App Log
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => void openAbout()}>
-                <Info />
-                About
-              </Button>
-            </div>
+                <div className="flex items-center gap-1.5" role="group" aria-label="Global actions">
+                  <Button type="button" variant="outline" size="sm" onClick={() => void backupConfig()}>
+                    <Download />
+                    Backup
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => restoreInputRef.current?.click()}
+                  >
+                    <Upload />
+                    Restore
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={handleOpenFolder}>
+                    <FolderOpen />
+                    Folder
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={handleOpenAppLog}>
+                    <FileText />
+                    App Log
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void openAbout()}>
+                    <Info />
+                    About
+                  </Button>
+                </div>
 
-            <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
+                <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
+              </>
+            )}
             <ThemeToggle />
           </div>
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-          <ServiceTable
-            services={services}
-            selectedName={selectedName}
-            batchRunning={batchRunning}
-            pendingService={pendingService}
-            refreshing={refreshing}
-            importing={importLoading}
-            onSelect={setSelectedName}
-            onAdd={handleAdd}
-            onImport={() => void openImport()}
-            onRefresh={() => void refresh(true)}
-            onEdit={handleEdit}
-            onAction={handleRowAction}
-          />
+          {view === "updater" ? (
+            <UpdaterView />
+          ) : (
+            <>
+              <ServiceTable
+                services={services}
+                selectedName={selectedName}
+                batchRunning={batchRunning}
+                pendingService={pendingService}
+                refreshing={refreshing}
+                importing={importLoading}
+                onSelect={setSelectedName}
+                onAdd={handleAdd}
+                onImport={() => void openImport()}
+                onRefresh={() => void refresh(true)}
+                onEdit={handleEdit}
+                onAction={handleRowAction}
+              />
 
-          <LogPanel
-            serviceName={selectedName}
-            logView={logView}
-            autoRefresh={logAutoRefresh}
-            onAutoRefreshChange={setLogAutoRefresh}
-            onReload={() => {
-              if (selectedName) void loadLog(selectedName, true);
-            }}
-            onOpenFile={() => {
-              if (selectedService) void handleOpenLog(selectedService);
-            }}
-            outputRef={logOutputRef}
-          />
+              <LogPanel
+                serviceName={selectedName}
+                logView={logView}
+                autoRefresh={logAutoRefresh}
+                onAutoRefreshChange={setLogAutoRefresh}
+                onReload={() => {
+                  if (selectedName) void loadLog(selectedName, true);
+                }}
+                onOpenFile={() => {
+                  if (selectedService) void handleOpenLog(selectedService);
+                }}
+                outputRef={logOutputRef}
+              />
+            </>
+          )}
         </main>
 
         <footer className="flex items-center justify-between gap-4 border-t bg-card px-4 py-1.5 text-xs">
-          <span>{statusText}</span>
-          <span className="truncate text-muted-foreground">{counts}</span>
+          <span>{view === "updater" ? "Updater ready" : statusText}</span>
+          <span className="truncate text-muted-foreground">
+            {view === "updater"
+              ? "Manual trigger only — GUI or sm-trigger over SSH"
+              : counts}
+          </span>
         </footer>
       </div>
 

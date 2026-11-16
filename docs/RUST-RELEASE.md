@@ -25,7 +25,12 @@ Output:
 dist\ServiceManager-RS-0.1.0\
 ├─ sm-gui.exe
 ├─ sm-updater.exe
+├─ sm-trigger.exe
 ├─ sm-diag.exe
+├─ scripts\
+│  ├─ Invoke-UpdaterTask.ps1
+│  ├─ Run-UpdaterTaskAction.ps1
+│  └─ Install-UpdaterTask.ps1
 ├─ data\
 │  ├─ services.example.json
 │  └─ projects.example.json
@@ -46,7 +51,7 @@ cd crates\sm-gui\ui
 npm ci
 npm run build
 cd ..\..\..
-cargo build --release -p sm-gui -p sm-updater
+cargo build --release -p sm-gui -p sm-updater -p sm-trigger
 ```
 
 Binary ada di `target\release\`.
@@ -166,7 +171,8 @@ Config dibaca dari `<folder exe>\data`. Gunakan `SERVICE_MANAGER_HOME` untuk mem
 - [ ] `cargo test --workspace` (semua test hijau)
 - [ ] `Build-Release.ps1` menghasilkan ZIP dan isinya lengkap
 - [ ] `sm-gui.exe` terbuka, memuat service, dan batch Start/Stop/Restart menampilkan progress
-- [ ] `sm-updater.exe list/check` berjalan
+- [ ] `sm-updater.exe app list/run --all --check` berjalan
+- [ ] `sm-trigger.exe --help` dan `--dry-run` berjalan
 - [ ] `sm-diag.exe` menampilkan path, status admin, NSSM, dan service
 - [ ] Credential helper menyimpan PAT dan `ls-remote` berhasil
 - [ ] Log tidak memuat token/password

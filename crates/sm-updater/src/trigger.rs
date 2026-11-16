@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use std::net::IpAddr;
+
 use crate::app_update::update_app;
 use crate::ip::{app_allowed_for_ip, client_ip_from_env};
 use crate::lock::UpdateLock;
@@ -14,6 +16,8 @@ use crate::update::UpdateOptions;
 pub struct RunOptions {
     pub check_only: bool,
     pub app: Option<String>,
+    /// Diisi oleh wrapper setelah validasi IP; jika kosong dibaca dari env SSH.
+    pub client_ip: Option<IpAddr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,7 +68,7 @@ pub fn run_registry_with(
     options: RunOptions,
 ) -> Result<Vec<RunOutcome>, String> {
     let _lock = UpdateLock::acquire(&lock_path(config_path), Duration::from_secs(30 * 60))?;
-    let client_ip = client_ip_from_env();
+    let client_ip = options.client_ip.or_else(client_ip_from_env);
     let mut state = load_state(config_path);
     let mut outcomes = Vec::new();
 

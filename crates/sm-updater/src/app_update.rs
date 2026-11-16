@@ -1,11 +1,14 @@
 use std::cell::RefCell;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::log::UpdateLogger;
 use crate::registry::{AppConfig, CommandSpec, UpdaterSettings};
 use crate::runner::Runner;
 use crate::services::{Lifecycle, ServiceControl};
-use crate::sync::{run_command_with_env, shell_command, sync_project, SyncResult};
+use crate::sync::{
+    run_command_owned, run_command_with_env, shell_command, sync_project, SyncResult,
+};
 use crate::toolchain::{self, PlannedCommand, ToolchainPlan};
 use crate::update::{UpdateOptions, UpdateOutcome, UpdateStatus};
 
@@ -35,6 +38,8 @@ pub fn update_app(
         }
     };
 
+    notify(app, runner, &logger, status, &message);
+
     if status == UpdateStatus::Updated {
         logger.log("DEPLOY SELESAI");
     } else if status == UpdateStatus::Degraded {
@@ -58,14 +63,14 @@ fn execute_app(
     options: UpdateOptions,
 ) -> Result<(UpdateStatus, String), String> {
     let project = Path::new(&app.local_path);
-    if !project.is_dir() {
-        return Err(format!(
-            "Folder project tidak ditemukan: {}",
-            project.display()
-        ));
-    }
     if app.branch.trim().is_empty() {
         return Err(format!("Branch app '{}' belum diisi.", app.id));
+    }
+    if project.exists() && !project.is_dir() {
+        return Err(format!("Local path bukan folder: {}", project.display()));
+    }
+    if !project.is_dir() {
+        ensure_project(app, settings, runner, logger)?;
     }
 
     let lifecycle = Lifecycle::new(services, app.services.wait_timeout_seconds);
@@ -184,11 +189,202 @@ fn execute_app(
         ));
     }
 
+    if let Err(error) = run_health_check(app, runner, logger) {
+        return Ok((
+            UpdateStatus::Degraded,
+            format!("Update diterapkan tetapi health check gagal: {error}"),
+        ));
+    }
+
     logger.log(&format!(
         "Rollback kode: git reset --hard {}",
         outcome.before
     ));
     Ok((UpdateStatus::Updated, "Update berhasil.".to_string()))
+}
+
+fn ensure_project(
+    app: &AppConfig,
+    settings: &UpdaterSettings,
+    runner: &dyn Runner,
+    logger: &UpdateLogger,
+) -> Result<(), String> {
+    let project = Path::new(&app.local_path);
+    if !app.clone_on_first_run {
+        return Err(format!(
+            "Folder project tidak ditemukan: {} (cloneOnFirstRun=false)",
+            project.display()
+        ));
+    }
+    if app.repo_url.trim().is_empty() {
+        return Err(format!(
+            "cloneOnFirstRun=true tetapi repoUrl app '{}' kosong.",
+            app.id
+        ));
+    }
+    let git_path = Path::new(settings.git_path.trim());
+    if !git_path.is_file() {
+        return Err(format!("Git tidak ditemukan: {}", git_path.display()));
+    }
+    let parent = project.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    logger.log(&format!(
+        "Clone pertama kali: {} -> {}",
+        app.repo_url, app.local_path
+    ));
+    let output = run_command_owned(
+        runner,
+        git_path,
+        &[
+            "clone",
+            "--branch",
+            app.branch.trim(),
+            "--single-branch",
+            app.repo_url.trim(),
+            app.local_path.trim(),
+        ],
+        parent,
+        Duration::from_secs(600),
+        logger,
+    )?;
+    if !output.success() {
+        return Err(format!("git clone gagal: {}", output.combined()));
+    }
+    if !project.is_dir() {
+        return Err(format!(
+            "git clone selesai tetapi folder tidak ditemukan: {}",
+            project.display()
+        ));
+    }
+    Ok(())
+}
+
+fn run_health_check(
+    app: &AppConfig,
+    runner: &dyn Runner,
+    logger: &UpdateLogger,
+) -> Result<(), String> {
+    if !app.health_check.enabled {
+        return Ok(());
+    }
+    let url = app.health_check.url.trim();
+    if url.is_empty() {
+        return Err("healthCheck.enabled=true tetapi url kosong.".to_string());
+    }
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(format!("Health check URL tidak valid: {url}"));
+    }
+    let curl = curl_path().ok_or_else(|| {
+        "curl.exe tidak ditemukan untuk health check. Install curl atau nonaktifkan healthCheck."
+            .to_string()
+    })?;
+    let timeout = app.health_check.timeout_seconds.max(1);
+    logger.log(&format!("Health check: {url}"));
+    let args = vec![
+        "-fsS".to_string(),
+        "--max-time".to_string(),
+        timeout.to_string(),
+        url.to_string(),
+    ];
+    let output = run_command_with_env(
+        runner,
+        &curl,
+        &args,
+        Path::new(&app.local_path),
+        Duration::from_secs(timeout.saturating_add(5)),
+        &Default::default(),
+        logger,
+    )?;
+    if !output.success() {
+        return Err(format!(
+            "HTTP health check gagal (exit {}): {}",
+            output.exit_code,
+            output.combined()
+        ));
+    }
+    Ok(())
+}
+
+fn notify(
+    app: &AppConfig,
+    runner: &dyn Runner,
+    logger: &UpdateLogger,
+    status: UpdateStatus,
+    message: &str,
+) {
+    let url = app.notify.webhook_url.trim();
+    if url.is_empty() {
+        return;
+    }
+    let status_text = status.as_str();
+    if !app
+        .notify
+        .on
+        .iter()
+        .any(|value| value.trim().eq_ignore_ascii_case(status_text))
+    {
+        return;
+    }
+    let Some(curl) = curl_path() else {
+        logger.log("WARNING notify: curl.exe tidak ditemukan.");
+        return;
+    };
+    let payload = serde_json::json!({
+        "app": app.id,
+        "status": status_text,
+        "message": message,
+        "time": chrono::Local::now().to_rfc3339(),
+    })
+    .to_string();
+    let args = vec![
+        "-fsS".to_string(),
+        "--max-time".to_string(),
+        "15".to_string(),
+        "-X".to_string(),
+        "POST".to_string(),
+        "-H".to_string(),
+        "Content-Type: application/json".to_string(),
+        "-d".to_string(),
+        payload,
+        url.to_string(),
+    ];
+    let cwd = Path::new(&app.local_path);
+    let result = runner.run(
+        &curl,
+        &args,
+        if cwd.is_dir() { cwd } else { Path::new(".") },
+        Duration::from_secs(20),
+    );
+    match result {
+        Ok(output) if output.success() => logger.log("Notify webhook: OK"),
+        Ok(output) => logger.log(&format!(
+            "WARNING notify webhook gagal (exit {}): {}",
+            output.exit_code,
+            output.combined()
+        )),
+        Err(error) => logger.log(&format!("WARNING notify webhook: {error}")),
+    }
+}
+
+fn curl_path() -> Option<PathBuf> {
+    let system = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
+        .join("System32")
+        .join("curl.exe");
+    if system.is_file() {
+        return Some(system);
+    }
+    let path = std::env::var_os("PATH")?;
+    for directory in std::env::split_paths(&path) {
+        for name in ["curl.exe", "curl"] {
+            let candidate = directory.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn execute_plan(
@@ -772,5 +968,124 @@ mod tests {
 
         assert_eq!(outcome.status, UpdateStatus::UpToDate);
         assert!(services.calls().is_empty());
+    }
+
+    #[test]
+    fn clone_on_first_run_clones_missing_project() {
+        let mut fixture = fixture();
+        let target = fixture._temp.path().join("cloned-app");
+        fixture.app.local_path = target.to_string_lossy().to_string();
+        fixture.app.clone_on_first_run = true;
+        fixture.app.repo_url = "https://example.com/demo.git".into();
+        fixture.app.preset = Preset::Static;
+        fixture.app.composer = sm_core::ToggleMode::Never;
+        fixture.app.package_manager = crate::registry::PackageManager::None;
+        fixture.app.package_install = sm_core::ToggleMode::Never;
+        fixture.app.build = sm_core::ToggleMode::Never;
+        fixture.app.services = ServicePlan::default();
+        let clone_target = target.clone();
+        let inner = standard_handler("abc1234 fix\n", "index.html\n", "index.html\n");
+        let runner = FakeRunner::new(move |program, args| {
+            if args.first().map(String::as_str) == Some("clone") {
+                std::fs::create_dir_all(&clone_target).unwrap();
+                return ok("");
+            }
+            inner(program, args)
+        });
+        let services = FakeServices::default();
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
+        assert!(runner.has_call("clone"));
+        assert!(target.is_dir());
+    }
+
+    #[test]
+    fn health_check_failure_marks_degraded() {
+        let mut fixture = fixture();
+        fixture.app.health_check.enabled = true;
+        fixture.app.health_check.url = "http://127.0.0.1:9999/health".into();
+        fixture.app.health_check.timeout_seconds = 5;
+        let services = FakeServices::new(&["api"], &["api"]);
+        let inner = standard_handler("abc1234 fix\n", "src/app.ts\n", "src/app.ts\n");
+        let runner = FakeRunner::new(move |program, args| {
+            if program.to_ascii_lowercase().contains("curl")
+                && args.iter().any(|arg| arg.contains("/health"))
+            {
+                return fail("connection refused");
+            }
+            inner(program, args)
+        });
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Degraded);
+        assert!(outcome.message.contains("health check"));
+        assert_eq!(services.calls(), ["stop:api", "start:api"]);
+    }
+
+    #[test]
+    fn health_check_success_keeps_updated() {
+        let mut fixture = fixture();
+        fixture.app.health_check.enabled = true;
+        fixture.app.health_check.url = "http://127.0.0.1:9999/health".into();
+        let services = FakeServices::new(&["api"], &["api"]);
+        let runner = FakeRunner::new(standard_handler(
+            "abc1234 fix\n",
+            "src/app.ts\n",
+            "src/app.ts\n",
+        ));
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
+        assert!(runner.has_call("/health"));
+    }
+
+    #[test]
+    fn webhook_is_called_for_selected_status() {
+        let mut fixture = fixture();
+        fixture.app.notify.webhook_url = "https://hooks.example.test/updater".into();
+        fixture.app.notify.on = vec!["updated".into()];
+        let services = FakeServices::new(&["api"], &["api"]);
+        let runner = FakeRunner::new(standard_handler(
+            "abc1234 fix\n",
+            "src/app.ts\n",
+            "src/app.ts\n",
+        ));
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
+        assert!(runner.has_call("hooks.example.test"));
     }
 }

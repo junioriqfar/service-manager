@@ -15,6 +15,9 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Log viewer (stdout/stderr, auto-refresh), backup/restore config.
 - UI Bahasa Inggris, tema **light/dark/system**, icon Lucide, file/folder picker, dan context menu klik kanan.
 - Updater `sm-updater`: registry app, trigger SSH dengan allowlist IP/CIDR, cek/update Git, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, service lifecycle, credential helper.
+- Client `sm-trigger` cross-platform (Windows/macOS/Linux) untuk memicu update via SSH tanpa polling.
+- GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, dan log.
+- Wrapper elevated `scripts/Invoke-UpdaterTask.ps1` + Scheduled Task `ServiceManager-Updater`.
 - Diagnosa headless `sm-diag`.
 
 ## Komponen
@@ -23,6 +26,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 | --- | --- |
 | `sm-gui.exe` | GUI Tauri (release tanpa console, window center) |
 | `sm-updater.exe` | Updater registry + trigger + credential helper (console) |
+| `sm-trigger.exe` | Client SSH cross-platform untuk memicu updater |
 | `sm-diag.exe` | Diagnosa config, NSSM, admin, dan status service (console) |
 
 ## Kebutuhan
@@ -36,6 +40,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 | Node.js 22+ | Hanya untuk build frontend |
 | Rust stable + MSVC | Hanya untuk build dari source |
 | Git/PHP/Composer/npm/Bun/Go | Untuk fitur updater multi-toolchain (sesuai app yang didaftarkan) |
+| OpenSSH client | Untuk `sm-trigger` di sisi client |
 
 ## Struktur Folder
 
@@ -48,8 +53,10 @@ ServiceManager/
 │  ├─ sm-core/                  # model, validasi, ordering, update plan
 │  ├─ sm-config/                # services.json, projects.json, backup
 │  ├─ sm-win/                   # SCM, NSSM/native, discovery, DPAPI
-│  ├─ sm-gui/                   # Tauri + React/shadCN UI
+│  ├─ sm-gui/                   # Tauri + React/shadCN UI (tab Services/Updater)
+│  ├─ sm-trigger/               # client SSH cross-platform
 │  └─ sm-updater/               # registry updater + trigger + credential helper
+├─ scripts/                     # wrapper Scheduled Task elevated
 ├─ data/
 │  ├─ services.json             # config runtime (tidak di-commit)
 │  └─ projects.json             # config runtime (tidak di-commit)
@@ -93,7 +100,7 @@ npm ci
 npm run build
 Pop-Location
 
-cargo build --release -p sm-gui -p sm-updater
+cargo build --release -p sm-gui -p sm-updater -p sm-trigger
 ```
 
 Atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`, `npm run build`, cargo build, dan membuat ZIP.
@@ -137,6 +144,11 @@ sm-updater run --app kasirin
 sm-updater status
 sm-updater logs kasirin
 
+# Trigger dari client lain (Windows/macOS/Linux)
+sm-trigger --host 10.255.240.160 --user EGOV22 --all --check
+sm-trigger --host 10.255.240.160 --user EGOV22 --all `
+  --wrapper "C:\tools\ServiceManager\scripts\Invoke-UpdaterTask.ps1"
+
 # Mode lama tetap tersedia
 sm-updater list
 sm-updater check --project kasirin
@@ -163,7 +175,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **221 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **240 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 
@@ -175,6 +187,7 @@ Saat ini **221 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm 
 | [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Panduan updater registry, toolchain, service lifecycle, trigger |
 | [docs/RUST-UPDATER-PLAN.md](docs/RUST-UPDATER-PLAN.md) | Inventaris fitur, backlog, dan roadmap updater |
 | [docs/RUST-UPDATER-REGISTRY-PLAN.md](docs/RUST-UPDATER-REGISTRY-PLAN.md) | Registry, toolchain, service lifecycle, SSH trigger, IP whitelist |
+| [docs/RUST-TRIGGER.md](docs/RUST-TRIGGER.md) | Client SSH cross-platform dan wrapper Scheduled Task |
 | [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log |
 | [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md) | Build, installer, CI, deployment |
 | [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md) | Catatan historis migrasi ke Rust |

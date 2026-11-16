@@ -27,7 +27,7 @@ Build debug menghasilkan `target\debug\sm-gui.exe`. Build release (frontend haru
 cargo build --release -p sm-gui
 ```
 
-Paket portable (GUI + updater + contoh config + docs):
+Paket portable (GUI + updater + trigger client + contoh config + docs):
 
 ```powershell
 .\Build-Release.ps1
@@ -61,6 +61,24 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 - Status bar: jumlah terdaftar/terpasang/berjalan.
 - Pola service global Cronical dan queue per project dijelaskan di [RUST-SERVICES.md](RUST-SERVICES.md).
 
+## Tab Updater
+
+Header memiliki dua tab: **Services** dan **Updater**.
+
+- Tabel app registry: nama/ID, branch, toolchain, service lifecycle, status, last update.
+- Tombol **Refresh**, **Add App**, **Check All**, **Update All**.
+- Aksi per app: Run, Check, Test, Log, Edit, Delete.
+- Form registrasi/edit: repo URL, local path (Browse…), branch, preset, package manager,
+  composer/artisan/package-install/build, install/build command, queue restart,
+  allowlist IP per app, service lifecycle, clone-on-first-run, health check, dan webhook.
+- **Test** menjalankan `git rev-parse` + `git ls-remote`, lalu menampilkan preset dan
+  package manager hasil deteksi.
+- **Check All/Update All** berjalan di `spawn_blocking`, jadi UI tidak freeze.
+- Dialog hasil menampilkan status per app; log terbaru tampil di panel bawah.
+- Tidak ada polling/auto-update. Aksi hanya dipicu tombol atau `sm-trigger` via SSH.
+- Service lifecycle membutuhkan GUI/task elevated; tanpa Administrator, update dengan
+  service akan gagal sebelum file diubah.
+
 ## Batch Async (Anti-Freeze)
 
 Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
@@ -79,6 +97,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | --- | --- |
 | `crates/sm-gui/src/main.rs` | Entry point Tauri, registrasi command |
 | `crates/sm-gui/src/commands.rs` | Command IPC (CRUD, install, start/stop, import, backup/restore, batch) |
+| `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log) |
 | `crates/sm-gui/src/state.rs` | State aplikasi, service rows, status SCM, batch lock |
 | `crates/sm-gui/src/batch.rs` | Scheduler batch async + test concurrency |
 | `crates/sm-gui/src/util.rs` | Log tail, export, open path, app log |
@@ -98,7 +117,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 221 test):
+Test GUI mencakup (total workspace 240 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

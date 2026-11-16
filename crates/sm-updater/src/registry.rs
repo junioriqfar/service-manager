@@ -302,6 +302,9 @@ impl AppConfig {
         self.package_manager = self.package_manager.normalized();
         self.services.normalize();
         self.commands.normalize();
+        if self.health_check.timeout_seconds == 0 {
+            self.health_check.timeout_seconds = default_wait_timeout();
+        }
     }
 
     pub fn to_project_override(&self) -> ProjectOverride {

@@ -6,7 +6,7 @@ Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur y
 
 - Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain)
 - Lokasi: `crates/sm-updater`
-- Test: **78 unit test** untuk crate ini; total workspace **221 test**. Config default ada di `data/projects.json`.
+- Test: **82 unit test** untuk crate ini; total workspace **240 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
@@ -148,7 +148,7 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 
 ### 3.9 Pengujian
 
-- **78 unit test** crate `sm-updater`:
+- **82 unit test** crate `sm-updater`:
   - parsing CLI, registry, dan credential,
   - scan project/override,
   - runner nyata (exit code/timeout/timeout+env),
@@ -156,6 +156,7 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
   - migrasi v1→v2, allowlist IP/CIDR, lock, state,
   - deteksi toolchain dan command plan (termasuk lockfile ambigu),
   - service lifecycle dan pemulihan saat build gagal,
+  - clone-on-first-run, health check, dan webhook notifikasi,
   - matriks update: up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional.
 - **E2E lokal** dengan repository Git bare:
   - `list` mendeteksi project,
@@ -189,10 +190,10 @@ Prioritas: **P0** = penting untuk operasi aman, **P1** = peningkatan, **P2** = n
 | **Configurable timeouts** | Menyesuaikan project besar/lambat | `timeouts.preflight/fetch/tool` di `projects.json` |
 | **Configurable remote** | Remote selain `origin` | `remote: origin` per project |
 | **Parallel updates** | Mempercepat banyak project | Batas concurrency, default 1-2 |
-| **Notifications** | Info hasil ke admin | Webhook/email/Telegram opsional |
-| **Health check** | Pastikan aplikasi hidup setelah deploy | HTTP check/`php artisan about` opsional |
+| **Notifications** | Info hasil ke admin | Webhook opsional (Selesai) |
+| **Health check** | Pastikan aplikasi hidup setelah deploy | HTTP check via curl (Selesai) |
 | **Per-project env** | Build/deploy variabel khusus | `env` map per project |
-| **Pre-update hook** | Maintenance mode/cache warmup | `preUpdateCommand` |
+| **Pre-update hook** | Maintenance mode/cache warmup | `preUpdateCommand`/`commands.preUpdate` (Selesai) |
 | **Log detail level** | Debugging | `verbose`/`logLevel` |
 
 ### P2 — Lanjutan
@@ -200,7 +201,7 @@ Prioritas: **P0** = penting untuk operasi aman, **P1** = peningkatan, **P2** = n
 | Fitur | Manfaat |
 | --- | --- |
 | **Built-in scheduler/service mode** | Tidak perlu Task Scheduler eksternal |
-| **UI integration** | Tombol update di `sm-gui` dengan progress |
+| **UI integration** | Selesai: tab Updater di `sm-gui` |
 | **Git submodule/LFS handling** | Project yang memakai submodule/LFS |
 | **Multi-remote/SSH docs** | Dukungan remote selain HTTPS/GCM |
 | **Backup snapshot sebelum deploy** | Rollback file non-Git (mis. storage) |
@@ -235,18 +236,18 @@ Fitur berikut sengaja **tidak** dilakukan otomatis:
 
 ### Iterasi 2 — Deploy Control (P1)
 
-1. Rollback command.
-2. Configurable timeouts/remote.
-3. Parallel update dengan batas concurrency.
-4. Notifications.
-5. Health check.
-6. Pre-update hook dan per-project env.
+1. Rollback command (belum).
+2. Configurable timeouts/remote (belum).
+3. Parallel update dengan batas concurrency (belum; saat ini serial).
+4. Notifications (selesai).
+5. Health check (selesai).
+6. Pre-update hook dan per-project env (pre-update selesai; env belum).
 
 ### Iterasi 3 — Scale (P2)
 
-1. UI integration di `sm-gui`.
-2. Scheduler bawaan.
-3. Dukungan submodule/LFS.
+1. UI integration di `sm-gui` (selesai).
+2. Scheduler bawaan (tidak dipakai; trigger manual).
+3. Dukungan submodule/LFS (belum).
 4. Backup snapshot dan retry policy.
 
 ---

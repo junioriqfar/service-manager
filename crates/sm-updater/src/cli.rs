@@ -6,6 +6,7 @@ use sm_config::{load_projects, ConfigPaths, ProjectsFile};
 use sm_core::ToggleMode;
 
 use crate::credential::{store_credential, verify_remote, CredentialRequest, GitCredentialSink};
+use crate::ip::{app_allowed_for_ip, client_ip_from_env, ip_allowed};
 use crate::registry::{load_config, save_config, AppConfig, PackageManager, Preset};
 use crate::runner::{Runner, SystemRunner};
 use crate::scan::{discover_projects, ProjectInfo};
@@ -83,6 +84,7 @@ pub fn run(values: &[String]) -> i32 {
         Some("app") => return run_app(&values[1..]),
         Some("run") => return run_trigger(&values[1..]),
         Some("status") => return run_status(&values[1..]),
+        Some("authorize") => return run_authorize(&values[1..]),
         Some("logs") => return run_logs(&values[1..]),
         Some("credential") => return run_credential(&values[1..]),
         _ => {}
@@ -1083,6 +1085,7 @@ fn app_test(values: &[String]) -> i32 {
 fn run_trigger(values: &[String]) -> i32 {
     let mut config_path = default_config_path();
     let mut app = None;
+    let mut client_ip = None;
     let mut check_only = false;
     let mut index = 0usize;
     while index < values.len() {
@@ -1096,6 +1099,17 @@ fn run_trigger(values: &[String]) -> i32 {
             },
             "--app" => match take_value(values, &mut index, "--app") {
                 Ok(value) => app = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--client-ip" => match take_value(values, &mut index, "--client-ip").and_then(|value| {
+                value
+                    .parse()
+                    .map_err(|_| format!("IP tidak valid: {value}"))
+            }) {
+                Ok(value) => client_ip = Some(value),
                 Err(error) => {
                     eprintln!("{error}");
                     return 2;
@@ -1126,6 +1140,7 @@ fn run_trigger(values: &[String]) -> i32 {
         RunOptions {
             check_only,
             app: app.clone(),
+            client_ip,
         },
     ) {
         Ok(outcomes) => outcomes,
@@ -1154,6 +1169,78 @@ fn run_trigger(values: &[String]) -> i32 {
         3
     } else {
         0
+    }
+}
+
+fn run_authorize(values: &[String]) -> i32 {
+    let mut config_path = default_config_path();
+    let mut app = None;
+    let mut index = 0usize;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--config" => match take_value(values, &mut index, "--config") {
+                Ok(value) => config_path = PathBuf::from(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--app" => match take_value(values, &mut index, "--app") {
+                Ok(value) => app = Some(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            other => {
+                eprintln!("Argumen authorize tidak dikenal: {other}");
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let config = match load_config(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let client_ip = client_ip_from_env();
+
+    let (allowed, label) = if let Some(id) = app {
+        let Some(app) = config.find(&id) else {
+            eprintln!("App '{id}' tidak ditemukan.");
+            return 1;
+        };
+        (
+            app_allowed_for_ip(&config, app, client_ip),
+            format!("app '{id}'"),
+        )
+    } else {
+        let allowed = match client_ip {
+            Some(ip) => {
+                config.trigger.allowed_client_ips.is_empty()
+                    || ip_allowed(ip, &config.trigger.allowed_client_ips)
+            }
+            None => config.trigger.allow_local,
+        };
+        (allowed, "trigger global".to_string())
+    };
+
+    if allowed {
+        match client_ip {
+            Some(ip) => println!("Trigger diizinkan untuk {label} dari {ip}."),
+            None => println!("Trigger lokal diizinkan untuk {label}."),
+        }
+        0
+    } else {
+        match client_ip {
+            Some(ip) => eprintln!("Trigger ditolak untuk {label}: IP {ip} tidak ada di allowlist."),
+            None => eprintln!("Trigger ditolak untuk {label}: trigger lokal dinonaktifkan."),
+        }
+        3
     }
 }
 
@@ -1704,6 +1791,7 @@ Registry:
 Trigger:
   sm-updater run --all [--check]      Proses semua app aktif
   sm-updater run --app ID [--check]   Proses satu app
+  sm-updater authorize [--app ID]     Validasi IP client (wrapper)
   sm-updater status                   Status update terakhir
   sm-updater logs [ID] [--tail N]     Log updater/project
 

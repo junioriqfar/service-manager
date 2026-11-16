@@ -3,6 +3,7 @@
 mod batch;
 mod commands;
 mod state;
+mod updater;
 mod util;
 
 fn main() {
@@ -40,6 +41,12 @@ fn main() {
             commands::import_services,
             commands::export_config,
             commands::restore_config,
+            updater::list_updater_apps,
+            updater::save_updater_app,
+            updater::delete_updater_app,
+            updater::test_updater_app,
+            updater::run_updater,
+            updater::read_updater_log,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Service Manager");
@@ -59,10 +66,12 @@ mod ui_tests {
     const ADMIN_BANNER: &str = include_str!("../ui/src/components/admin-banner.tsx");
     const THEME_TOGGLE: &str = include_str!("../ui/src/components/theme-toggle.tsx");
     const THEME_PROVIDER: &str = include_str!("../ui/src/components/theme-provider.tsx");
+    const UPDATER_VIEW: &str = include_str!("../ui/src/components/updater-view.tsx");
+    const UPDATER_FORM: &str = include_str!("../ui/src/components/updater-form-dialog.tsx");
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}"
         )
     }
 
@@ -94,6 +103,9 @@ mod ui_tests {
             "Service log: (none selected)",
             "Auto refresh",
             "About Service Manager",
+            "Updater Apps",
+            "Add Updater App",
+            "Manual SSH/GUI trigger only. No background polling.",
         ] {
             assert!(sources.contains(label), "missing English label: {label}");
         }
@@ -167,5 +179,60 @@ mod ui_tests {
         for source in [APP, SERVICE_TABLE, SERVICE_FORM] {
             assert!(source.contains("lucide-react"));
         }
+    }
+
+    #[test]
+    fn updater_ui_has_registry_actions() {
+        for label in [
+            "Updater Apps",
+            "Add App",
+            "Check All",
+            "Update All",
+            "Refresh",
+            "Reload",
+            "Status",
+            "Toolchain",
+            "Services",
+        ] {
+            assert!(
+                UPDATER_VIEW.contains(label),
+                "missing updater view label: {label}"
+            );
+        }
+        for command in [
+            "list_updater_apps",
+            "run_updater",
+            "test_updater_app",
+            "delete_updater_app",
+            "read_updater_log",
+            "save_updater_app",
+        ] {
+            assert!(
+                UPDATER_VIEW.contains(command) || UPDATER_FORM.contains(command),
+                "missing updater command: {command}"
+            );
+        }
+        for field in [
+            "stopBeforePull",
+            "stopBeforeBuild",
+            "restartAfter",
+            "startAfter",
+            "waitTimeoutSeconds",
+            "buildCommand",
+            "installCommand",
+            "allowedClientIPs",
+            "cloneOnFirstRun",
+            "healthCheck",
+            "notify",
+        ] {
+            assert!(
+                UPDATER_FORM.contains(field),
+                "missing updater form field: {field}"
+            );
+        }
+        assert!(UPDATER_FORM.contains("pick_directory"));
+        assert!(UPDATER_FORM.contains("Browse…"));
+        assert!(UPDATER_VIEW.contains("lucide-react"));
+        assert!(UPDATER_FORM.contains("lucide-react"));
     }
 }

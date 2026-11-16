@@ -48,6 +48,7 @@ sm-updater run --all
 sm-updater run --all --check      # dry-run, tidak stop/restart service
 sm-updater run --app kasirin
 sm-updater run --app kasirin --check
+sm-updater authorize               # validasi IP client (dipakai wrapper SSH)
 sm-updater status
 sm-updater logs kasirin --tail 100
 ```
@@ -69,6 +70,38 @@ Exit code:
 
 `run` memakai lock `data/updater.lock`; proses kedua akan ditolak sampai lock stale
 (30 menit) atau proses pertama selesai. State terakhir disimpan di `data/updater-state.json`.
+
+### Wrapper Elevated (Scheduled Task)
+
+Jika app memakai service lifecycle, jalankan updater melalui wrapper:
+
+```powershell
+.\scripts\Install-UpdaterTask.ps1 -UserId "$env:USERDOMAIN\$env:USERNAME"  # Administrator
+```
+
+Dari client lain:
+
+```powershell
+sm-trigger --host 10.255.240.160 --user EGOV22 --all `
+  --wrapper "C:\tools\ServiceManager\scripts\Invoke-UpdaterTask.ps1"
+```
+
+Wrapper memvalidasi IP lewat `sm-updater authorize`, lalu menjalankan Scheduled Task
+`ServiceManager-Updater` dengan **Run with highest privileges**. Task meneruskan client
+IP ke `run --client-ip` agar allowlist per-app tetap berlaku. Lihat
+[docs/RUST-TRIGGER.md](RUST-TRIGGER.md).
+
+### GUI
+
+Tab **Updater** di `sm-gui` menyediakan:
+
+- daftar app + status terakhir;
+- Add/Edit/Remove/Test app;
+- Check All / Update All dan run per app;
+- form toolchain, service lifecycle, allowlist per app;
+- log updater terbaru.
+
+Tidak ada polling; semua aksi dipicu tombol.
 
 ## Registry v2 (`data/projects.json`)
 
@@ -132,6 +165,9 @@ Field v1 yang tersedia: `scanRoots`, `allowedClientIPs`, `gitPath`, `phpPath`,
 | `build` | `auto`, `always`, `never` | Build command |
 | `installCommand` / `buildCommand` | string | Override perintah install/build (PowerShell) |
 | `commands.preUpdate` / `postUpdate` | array command | Program + args, dijalankan sebelum/sesudah merge |
+| `cloneOnFirstRun` | bool | Clone repo jika `localPath` belum ada |
+| `healthCheck` | object | HTTP check setelah service restart |
+| `notify` | object | Webhook best-effort untuk status terpilih |
 | `migrationPolicy` | `block` | Migration tidak pernah dijalankan otomatis |
 
 ## Deteksi Toolchain
@@ -222,9 +258,31 @@ Aturan:
   start dan menandai update `failed`.
 - Jika service gagal dipulihkan setelah update sukses, status `degraded`.
 
+## Health Check dan Notifikasi
+
+```json
+"cloneOnFirstRun": false,
+"healthCheck": {
+  "enabled": true,
+  "url": "http://127.0.0.1:8100/health",
+  "timeoutSeconds": 10
+},
+"notify": {
+  "webhookUrl": "https://hooks.example.com/updater",
+  "on": ["failed", "degraded", "updated"]
+}
+```
+
+- `cloneOnFirstRun: true` menjalankan `git clone --branch <branch> --single-branch`
+  jika `localPath` belum ada.
+- Health check memakai `curl.exe` (`-fsS --max-time N`) setelah service restart.
+  Gagal health check → status `degraded` (file sudah ter-update).
+- Webhook hanya dikirim jika status ada di `notify.on`, payload JSON
+  `{app,status,message,time}`. Kegagalan webhook hanya warning, tidak membatalkan update.
+
 ## Alur Update
 
-1. Validasi app, folder, branch, dan service (termasuk hak akses).
+1. Validasi app, branch, service (termasuk hak akses); clone jika `cloneOnFirstRun`.
 2. Cek working tree bersih (`git status --porcelain`). Dirty → `dirty`.
 3. Validasi branch aktif.
 4. Preflight `git ls-remote --heads origin`.
@@ -236,7 +294,8 @@ Aturan:
 10. `git merge --ff-only origin/<branch>`.
 11. `stopBeforeBuild`, install, build, artisan, `commands.postUpdate`.
 12. Restart/start service sesuai plan.
-13. Tulis log + rollback hint (`git reset --hard <sha-sebelum>`).
+13. Health check (jika aktif) dan webhook notifikasi.
+14. Tulis log + rollback hint (`git reset --hard <sha-sebelum>`).
 
 Migration tidak pernah dijalankan otomatis.
 
@@ -255,6 +314,17 @@ tanpa SSH diizinkan bila `trigger.allowLocal=true`.
 
 `up-to-date`, `check`, `updated`, `dirty`, `blocked-migration`, `degraded`, `failed`,
 `forbidden`.
+
+## Trigger Client
+
+`sm-trigger` (Windows/macOS/Linux) memicu updater lewat SSH tanpa polling:
+
+```bash
+cargo build --release -p sm-trigger
+sm-trigger --host 10.255.240.160 --user EGOV22 --all --check
+```
+
+Panduan lengkap: [docs/RUST-TRIGGER.md](RUST-TRIGGER.md).
 
 ## Log
 

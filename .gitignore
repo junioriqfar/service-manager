@@ -11,6 +11,8 @@ data/services-export-*.json
 data/*.bak-*
 data/updater-state.json
 data/updater.lock
+data/updater-request.json
+data/updater-result.json
 
 # Runtime artifacts
 logs/

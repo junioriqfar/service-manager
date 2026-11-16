@@ -2,8 +2,8 @@
 
 Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + update yang dipicu dari PC 143**. Fokusnya bukan polling setiap menit, tetapi satu trigger aman dari komputer Anda ke server 160.
 
-- Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle); client `sm-trigger`, GUI Updater, dan wrapper Scheduled Task belum.
-- Basis: `sm-updater` (221 test workspace, termasuk 78 test updater)
+- Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle, clone-on-first-run, health check, webhook), **Phase B selesai** (`sm-trigger`, GUI Updater, wrapper Scheduled Task). Sisa backlog: update paralel (`maxConcurrentUpdates`) dan scheduler opsional.
+- Basis: `sm-updater` + `sm-trigger` + GUI Updater (240 test workspace)
 - Prinsip: trigger eksplisit, aman, idempoten, tanpa polling default
 - Config target: `data/projects.json` versi 2 (kompatibel versi 1)
 - **Server tetap Windows**; trigger client direncanakan cross-platform (Windows, macOS, Linux).
@@ -19,13 +19,13 @@ Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** 
 | Deteksi toolchain | Selesai | Composer, npm/pnpm/yarn/bun, Go, static, custom |
 | Service lifecycle | Selesai | Stop/start/restart via SCM, preflight elevated |
 | Custom commands | Selesai | Program + args, `shell` hanya admin |
-| Health check / notify | Belum | Schema sudah ada, belum dieksekusi |
-| `cloneOnFirstRun` | Belum | Schema sudah ada |
+| Health check / notify | Selesai | HTTP via curl; webhook best-effort |
+| `cloneOnFirstRun` | Selesai | `git clone --branch ... --single-branch` |
 | `maxConcurrentUpdates` | Belum | Saat ini serial |
 | Scheduler/polling | Tidak dipakai | Default `false` |
-| `sm-trigger` cross-platform | Belum | Fase berikutnya |
-| GUI tab Updater | Belum | Fase berikutnya |
-| Wrapper Scheduled Task elevated | Belum | Task dibuat manual, lihat dokumentasi |
+| `sm-trigger` cross-platform | Selesai | Windows/macOS/Linux, shell ke `ssh` |
+| GUI tab Updater | Selesai | Registry CRUD, test, run/check, log |
+| Wrapper Scheduled Task elevated | Selesai | `scripts/Invoke-UpdaterTask.ps1` + action/installer |
 
 Catatan implementasi:
 

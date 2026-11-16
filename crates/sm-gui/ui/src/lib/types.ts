@@ -93,3 +93,86 @@ export interface BatchView {
 export type ServiceAction = "install" | "start" | "stop" | "restart" | "log" | "delete";
 
 export type BatchActionName = "start" | "stop" | "restart";
+
+export interface UpdaterServicePlan {
+  stopBeforePull: string[];
+  stopBeforeBuild: string[];
+  restartAfter: string[];
+  startAfter: string[];
+  waitTimeoutSeconds: number;
+}
+
+export interface UpdaterHealthCheck {
+  enabled: boolean;
+  url: string;
+  timeoutSeconds: number;
+}
+
+export interface UpdaterNotify {
+  webhookUrl: string;
+  on: string[];
+}
+
+export interface UpdaterApp {
+  id: string;
+  name: string;
+  enabled: boolean;
+  repoUrl: string;
+  localPath: string;
+  branch: string;
+  preset: string;
+  packageManager: string;
+  composer: string;
+  artisan: string;
+  packageInstall: string;
+  build: string;
+  installCommand: string;
+  buildCommand: string;
+  queueRestart: boolean;
+  cloneOnFirstRun: boolean;
+  allowedClientIPs: string[];
+  services: UpdaterServicePlan;
+  healthCheck: UpdaterHealthCheck;
+  notify: UpdaterNotify;
+  status: string;
+  lastCheckedAt: string;
+  lastUpdatedAt: string;
+  lastCommit: string;
+  lastError: string;
+}
+
+export interface UpdaterAppInput {
+  id: string;
+  name: string;
+  enabled: boolean;
+  repoUrl: string;
+  localPath: string;
+  branch: string;
+  preset: string;
+  packageManager: string;
+  composer: string;
+  artisan: string;
+  packageInstall: string;
+  build: string;
+  installCommand: string;
+  buildCommand: string;
+  queueRestart: boolean;
+  cloneOnFirstRun: boolean;
+  allowedClientIPs: string[];
+  services: UpdaterServicePlan;
+  healthCheck: UpdaterHealthCheck;
+  notify: UpdaterNotify;
+}
+
+export interface UpdaterRunOutcome {
+  appId: string;
+  status: string;
+  message: string;
+  forbidden: boolean;
+}
+
+export interface UpdaterLogView {
+  path: string;
+  text: string;
+}
+

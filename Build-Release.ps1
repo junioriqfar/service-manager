@@ -50,7 +50,7 @@ try {
     }
 
     Write-Host "Build release $name..."
-    & cargo build --release -p sm-gui -p sm-updater
+    & cargo build --release -p sm-gui -p sm-updater -p sm-trigger
     if ($LASTEXITCODE -ne 0) { throw 'cargo build gagal.' }
 
     $stage = Join-Path $dist $name
@@ -65,6 +65,7 @@ try {
 
     Copy-Item -LiteralPath (Join-Path $root 'target\release\sm-gui.exe') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $root 'target\release\sm-updater.exe') -Destination $stage
+    Copy-Item -LiteralPath (Join-Path $root 'target\release\sm-trigger.exe') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $root 'target\release\sm-diag.exe') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $repoRoot 'services.example.json') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $repoRoot 'projects.example.json') -Destination $stage
@@ -75,10 +76,16 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $stage 'backup') -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $stage 'logs') -Force | Out-Null
 
+    $scriptsStage = Join-Path $stage 'scripts'
+    New-Item -ItemType Directory -Path $scriptsStage -Force | Out-Null
+    foreach ($script in @('Invoke-UpdaterTask.ps1', 'Run-UpdaterTaskAction.ps1', 'Install-UpdaterTask.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $root (Join-Path 'scripts' $script)) -Destination $scriptsStage
+    }
+
     Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination (Join-Path $stage 'README.md')
     $docs = Join-Path $stage 'docs'
     New-Item -ItemType Directory -Path $docs -Force | Out-Null
-    foreach ($doc in @('RUST-README.md', 'RUST-GUI.md', 'RUST-SERVICES.md', 'RUST-UPDATER.md', 'RUST-UPDATER-PLAN.md', 'RUST-SECURITY.md', 'RUST-RELEASE.md')) {
+    foreach ($doc in @('RUST-README.md', 'RUST-GUI.md', 'RUST-SERVICES.md', 'RUST-UPDATER.md', 'RUST-UPDATER-PLAN.md', 'RUST-UPDATER-REGISTRY-PLAN.md', 'RUST-TRIGGER.md', 'RUST-SECURITY.md', 'RUST-RELEASE.md')) {
         $path = Join-Path $repoRoot (Join-Path 'docs' $doc)
         if (Test-Path -LiteralPath $path) {
             Copy-Item -LiteralPath $path -Destination $docs
@@ -93,10 +100,12 @@ Service Manager RS $version - Portable
 2. Salin data\projects.example.json menjadi data\projects.json bila memakai updater.
 3. Letakkan nssm.exe di C:\tools\nssm\nssm.exe (atau ..\nssm\nssm.exe).
 4. Jalankan sm-gui.exe sebagai Administrator.
-5. Updater: sm-updater.exe list / check / update.
-6. Simpan kredensial Git: sm-updater.exe credential store --help
-7. Diagnosa: sm-diag.exe
-8. Backup config tersimpan di folder backup; log aplikasi di folder logs.
+5. Updater registry: sm-updater.exe app list / run --all / run --all --check.
+6. Trigger SSH dari client lain: sm-trigger.exe --host HOST --user USER --all.
+7. Elevated trigger: daftarkan Scheduled Task dengan scripts\Install-UpdaterTask.ps1 (Administrator).
+8. Simpan kredensial Git: sm-updater.exe credential store --help
+9. Diagnosa: sm-diag.exe
+10. Backup config tersimpan di folder backup; log aplikasi di folder logs.
 
 Config dibaca dari <folder exe>\data. Set SERVICE_MANAGER_HOME untuk folder lain.
 Dokumentasi ada di folder docs.
