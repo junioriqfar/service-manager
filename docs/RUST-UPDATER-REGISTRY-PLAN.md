@@ -12,7 +12,7 @@ Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** 
 
 ## 1. Koreksi Alur Lama
 
-Alur lama **bukan polling** dan bukan Task Scheduler. Yang terjadi:
+Alur lama **bukan polling** (dan bukan trigger otomatis terjadwal). Yang terjadi:
 
 1. Anda menjalankan trigger dari PC 143.
 2. Trigger masuk ke server 160 melalui **SSH**.
@@ -343,6 +343,20 @@ Stop/start/restart service membutuhkan **Administrator**. Trigger updater harus 
 
 Jika tidak elevated, updater harus gagal **sebelum** mengubah file, bukan setelah build.
 
+#### Rekomendasi Elevation untuk Trigger SSH
+
+User SSH (`EGOV22`) belum tentu mendapat token Administrator. Karena itu service lifecycle sebaiknya dipisahkan:
+
+1. SSH dari client menjalankan wrapper kecil sebagai `EGOV22`.
+2. Wrapper membaca `SSH_CONNECTION`/`SSH_CLIENT`, memvalidasi IP/CIDR.
+3. Jika valid, wrapper memicu **Windows Scheduled Task** `ServiceManager-Updater` yang dikonfigurasi **Run with highest privileges** sebagai `EGOV22`.
+4. Task menjalankan `sm-updater run --all` dengan token elevated; DPAPI/GCM milik `EGOV22` tetap tersedia.
+5. Firewall tetap membatasi port SSH hanya dari IP allowlist.
+
+Alternatif: Windows Service `GlobalUpdater` berjalan sebagai akun privileged + SSH deploy key untuk Git. Ini lebih kompleks dan tidak perlu untuk fase awal.
+
+Dengan pola Task Scheduler ini, IP whitelist tetap dicek di wrapper sebelum task elevated dijalankan.
+
 ## 6. Fitur yang Akan Dibuat
 
 ### 6.1 Registrasi Aplikasi
@@ -592,6 +606,7 @@ Trigger client (Windows / macOS / Linux)
 - [ ] `stopBeforeBuild` menghentikan service sebelum build dan `restartAfter` menyalakannya kembali.
 - [ ] Jika build gagal setelah service dihentikan, service dicoba dinyalakan kembali.
 - [ ] Service stop/restart gagal jika updater tidak elevated, sebelum file diubah.
+- [ ] Trigger SSH memvalidasi IP lalu memicu task elevated (Task Scheduler) atau mekanisme privileged yang setara.
 - [ ] Working tree kotor/branch salah/migration baru tidak diupdate otomatis.
 - [ ] Satu trigger memproses semua app enabled dengan lock.
 - [ ] State/log per app tersedia di CLI dan GUI.
