@@ -238,7 +238,12 @@ fn validate_service_names(path: &Path, services: &[String]) -> Result<(), String
     if services.is_empty() {
         return Ok(());
     }
-    let result = sm_config::load_services_lenient(path, &path.with_file_name("backup"));
+    let backup_dir = path
+        .parent()
+        .and_then(|parent| parent.parent())
+        .unwrap_or_else(|| Path::new("."))
+        .join("backup");
+    let result = sm_config::load_services_lenient(path, &backup_dir);
     let known: Vec<String> = result
         .services
         .iter()
