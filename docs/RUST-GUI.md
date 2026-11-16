@@ -163,8 +163,33 @@ Saat **Save Settings** mengubah `tools.apache.path`, `root`, `config`, atau `ver
 - Setelah sukses, pending dihapus dan hasil apply menampilkan service serta path
   audit `logs/apache-apply.log`. Reload memanggil `apache_change_status` untuk
   menampilkan banner pending yang belum di-apply.
-- Affected apps hanya berasal dari `apps[].webServerService`; DocumentRoot parser
-  belum ada (Sprint 2.3).
+- Affected apps pada preview perubahan Apache tetap hanya berasal dari
+  `apps[].webServerService`. Saran otomatis dari DocumentRoot tersedia terpisah di
+  kartu **Apache App Mapping** dan tidak pernah ditulis tanpa konfirmasi.
+
+### Apache App Mapping
+
+Kartu **Apache App Mapping** di tab Settings menghubungkan app ke service Apache
+tanpa mengedit `projects.json` secara manual:
+
+- **Detect Apps** menjalankan `detect_apache_mappings`. Bila ada beberapa service
+  `serviceType=apache`, pilih service lebih dulu; konfigurasi yang dipakai adalah
+  `apacheRoot` + `apacheConfig` service tersebut (fallback ke settings Apache).
+- Parser membaca config secara read-only: `DocumentRoot`, `ServerRoot`, `Define`,
+  `${VAR}`, `Include`/`IncludeOptional`, wildcard (mis. `sites-enabled/*.conf`),
+  dan include bersarang. Batas kedalaman 12, 200 file, serta visited set.
+- Suggestion menampilkan app, `localPath` → `documentRoot`, file config sumber,
+  jenis match (`exact`, `descendant`, `ancestor`), dan confidence (`high`/`medium`).
+  Exact/descendant bernilai high; app yang localPath-nya berada di bawah
+  DocumentRoot bernilai medium.
+- App yang sudah memiliki `webServerService` muncul di bagian **Already mapped**
+  dengan checkbox disabled dan nama service lama. Mapping lama tidak ditimpa.
+- Pilih checkbox app yang diinginkan lalu klik **Apply Mappings**
+  (`apply_apache_mappings`). Command memvalidasi service Apache, membackup
+  `backup/projects-<timestamp>.json`, lalu hanya menulis `webServerService` untuk
+  app terpilih dan menyimpan `projects.json` secara atomik.
+- Warning parser (include wajib hilang, variabel tidak dikenal, batas traversal)
+  ditampilkan di kartu. Deteksi tidak pernah mengubah file config atau registry.
 
 ## Batch Async (Anti-Freeze)
 
@@ -188,6 +213,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
 | `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, trigger migration, Scheduled Task) |
 | `crates/sm-gui/src/apache.rs` | Pending Apache change, matching service/app, apply/rollback/audit, command `apache_change_status`/`apply_apache_change` |
+| `crates/sm-gui/src/apache_config.rs` | Parser DocumentRoot/include/variabel, saran mapping, command `detect_apache_mappings`/`apply_apache_mappings` |
 | `crates/sm-gui/src/state.rs` | State aplikasi, service rows, status SCM, batch lock |
 | `crates/sm-gui/src/batch.rs` | Scheduler batch async + test concurrency |
 | `crates/sm-gui/src/util.rs` | Log tail, export, open path, app log |
@@ -207,7 +233,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 320 test):
+Test GUI mencakup (total workspace 333 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
@@ -222,9 +248,12 @@ Test GUI mencakup (total workspace 320 test):
   semua service Apache, filter app via `webServerService`, pending
   save/load/clear/validation, update hanya service terdampak, backup services,
   audit log, dan penolakan apply tanpa elevation.
+- Apache DocumentRoot: `Define`/`${VAR}`, include wildcard + nested, relative
+  path/ServerRoot, batas variabel, matching exact/descendant/ancestor, deduplikasi,
+  already mapped, apply parsial + backup projects, dan penolakan service salah.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
-  tab Settings (termasuk kartu Trigger, field web server, dan panel Apache pending),
-  serta ikon/tema.
+  tab Settings (termasuk kartu Trigger, Apache App Mapping, field web server, dan
+  panel Apache pending), serta ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 
@@ -242,7 +271,7 @@ Start-Process .\target\debug\sm-gui.exe
 - Rename service saat edit belum didukung (nama service dikunci).
 - Tab Settings: logon type `Password` belum didukung dari GUI (gunakan `Interactive`
   atau `S4U`), dan nama Scheduled Task tidak boleh memakai folder path.
-- Sprint 2.1–2.2 sudah menyediakan trigger efektif, migrasi trigger eksplisit,
-  tampilan versi PHP/Apache per app, serta preview/apply Apache explicit dengan
-  pending, backup, rollback, dan audit. Parser DocumentRoot (2.3) dan scan path PHP
-  hardcoded/`${PHP}` (2.4) belum tersedia.
+- Sprint 2.1–2.3 sudah menyediakan trigger efektif, migrasi trigger eksplisit,
+  tampilan versi PHP/Apache per app, preview/apply Apache explicit dengan pending,
+  backup, rollback, dan audit, serta saran `webServerService` dari DocumentRoot
+  Apache. Scan path PHP hardcoded/`${PHP}` (Sprint 2.4) belum tersedia.

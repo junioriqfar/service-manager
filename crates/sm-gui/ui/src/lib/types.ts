@@ -324,6 +324,34 @@ export interface ApacheApplyResult {
   auditPath: string;
 }
 
+export interface ApacheServiceOption {
+  name: string;
+  displayName: string;
+  executable: string;
+  root: string;
+  config: string;
+}
+
+export interface ApacheMappingSuggestion {
+  appId: string;
+  appName: string;
+  localPath: string;
+  documentRoot: string;
+  configFile: string;
+  matchKind: "exact" | "descendant" | "ancestor" | "";
+  confidence: "high" | "medium" | "";
+  existingService: string;
+}
+
+export interface ApacheMappingScanView {
+  serviceName: string;
+  services: ApacheServiceOption[];
+  suggestions: ApacheMappingSuggestion[];
+  alreadyMapped: ApacheMappingSuggestion[];
+  warnings: string[];
+  error: string | null;
+}
+
 export interface SettingsSaveResult {
   settings: Settings;
   apachePending: ApacheChangeView | null;

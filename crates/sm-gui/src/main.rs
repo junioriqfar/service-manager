@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod apache;
+mod apache_config;
 mod batch;
 mod commands;
 mod remote;
@@ -60,6 +61,8 @@ fn main() {
             settings::migrate_trigger_to_settings,
             apache::apache_change_status,
             apache::apply_apache_change,
+            apache_config::detect_apache_mappings,
+            apache_config::apply_apache_mappings,
             settings::detect_tool,
             settings::test_tool,
             settings::task_status,
@@ -372,6 +375,12 @@ mod ui_tests {
             "Review",
             "Audit log",
             "Administrator required",
+            "Apache App Mapping",
+            "Detect Apps",
+            "Apply Mappings",
+            "Already mapped",
+            "Suggestions",
+            "Parser warnings",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(label),
@@ -390,6 +399,9 @@ mod ui_tests {
             "test_task",
             "apache_change_status",
             "apply_apache_change",
+            "detect_apache_mappings",
+            "apply_apache_mappings",
+            "list_services",
             "pick_executable",
             "pick_directory",
         ] {
@@ -419,6 +431,11 @@ mod ui_tests {
             "oldExecutable",
             "newExecutable",
             "webServerService",
+            "documentRoot",
+            "matchKind",
+            "confidence",
+            "existingService",
+            "alreadyMapped",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(field),

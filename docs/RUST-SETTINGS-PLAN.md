@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1–2.2 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation). Sprint 2.3–2.4 belum.
+Status: **Phase 1 selesai; Sprint 2.1–2.3 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions). Sprint 2.4 belum.
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -23,6 +23,7 @@ Dokumen ini menjawab revisi pengguna:
 | Updater defaults | Selesai |
 | Privileged Execution: status/install/repair/remove/test Scheduled Task | Selesai |
 | Propagasi Apache + affected apps/services | Selesai (Sprint 2.2: preview, pending, apply, backup, rollback, audit) |
+| Saran DocumentRoot → `webServerService` | Selesai (Sprint 2.3: parser config/includes/variabel, konfirmasi user) |
 | Propagasi PHP hardcoded/`${PHP}` | Belum (Sprint 2.4) |
 | Migrasi trigger global ke settings.json | Selesai (Sprint 2.1, eksplisit) |
 | `webServerService` per app | Selesai (Sprint 2.1) |
@@ -422,6 +423,7 @@ Tab **Settings**:
   (Sprint 2.2).
 - [x] `webServerService` opsional pada app.
 - [x] Effective PHP/Apache version tampil di daftar app.
+- [x] Saran DocumentRoot → `webServerService` dengan konfirmasi user (Sprint 2.3).
 
 ---
 
@@ -492,9 +494,26 @@ Status: **Selesai**.
 
 ### Sprint 2.3 — DocumentRoot auto-detect
 
-- Parser `httpd.conf` + `Include`/`IncludeOptional` (batas kedalaman).
-- Suggest mapping DocumentRoot → app.localPath.
-- User confirm sebelum menulis `webServerService`.
+Status: **Selesai**.
+
+- Parser read-only `httpd.conf` + `Include`/`IncludeOptional`, termasuk wildcard
+  (`sites-enabled/*.conf`), `ServerRoot`, `Define`, dan ekspansi `${VAR}` rekursif.
+- Batas traversal: kedalaman 12, 200 file, visited set, ukuran file 4 MB; tidak ada
+  eksekusi Apache/command dan tidak ada network.
+- Saran mapping `DocumentRoot` → `apps[].localPath` dengan exact/descendant bernilai
+  high dan ancestor bernilai medium. App yang sudah punya `webServerService`
+  dikembalikan sebagai `alreadyMapped` dan tidak ditimpa.
+- Tab Settings memiliki kartu **Apache App Mapping** dengan pemilihan service
+  (jika ada beberapa service Apache), **Detect Apps**, daftar checkbox saran,
+  warnings, dan **Apply Mappings**.
+- Apply hanya menulis `webServerService` untuk app yang dipilih, membackup
+  `backup/projects-<timestamp>.json` lebih dulu, lalu menyimpan `projects.json`
+  secara atomik. Tidak ada auto-write saat deteksi.
+- Tests: `Define`/`${VAR}`, wildcard + nested include, relative path/ServerRoot,
+  exact/descendant/ancestor, deduplikasi, already mapped, apply parsial + backup,
+  penolakan service salah/hilang, dan UI source labels/commands.
+- Batasan: parser tidak mengevaluasi `<IfModule>` atau blok kondisional lain; semua
+  `DocumentRoot` yang terlihat dibaca. `${PHP}`/scan path PHP hardcoded tetap Sprint 2.4.
 
 ### Sprint 2.4 — PHP hardcoded path + `${PHP}`
 

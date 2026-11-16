@@ -17,6 +17,7 @@ Trigger.
 | Lock updater | `<folder config>\data\updater.lock` |
 | Override folder | Environment variable `SERVICE_MANAGER_HOME` |
 | Backup otomatis | `<folder config>\backup\services-*.json` |
+| Backup apply mapping | `<folder config>\backup\projects-*.json` |
 | Export backup | `<folder config>\backup\services-export-*.json` |
 | Log aplikasi | `<folder config>\logs\app.log` |
 | Audit apply Apache | `<folder config>\logs\apache-apply.log` |
@@ -251,8 +252,9 @@ Service Apache dianggap terdampak jika `serviceType=apache` dan salah satu benar
 - `apacheRoot` sama dengan `root` lama;
 - path Apache lama kosong (konfigurasi pertama), yang memilih **semua** service Apache.
 
-App hanya dianggap terdampak jika `apps[].webServerService` menunjuk nama service
-tersebut. Tidak ada pembacaan DocumentRoot.
+Preview propagasi perubahan Apache hanya memakai `apps[].webServerService` eksplisit.
+Deteksi DocumentRoot berjalan terpisah sebagai saran dan tidak otomatis mengubah
+`webServerService`.
 
 **Apply Now** membutuhkan Administrator dan:
 
@@ -272,6 +274,53 @@ tersebut. Tidak ada pembacaan DocumentRoot.
 Tanpa Administrator, settings dan pending tetap tersimpan, tetapi apply ditolak.
 Mengosongkan path Apache tidak mengubah executable service; propagation memerlukan
 path baru. File pending dan log audit tidak di-commit.
+
+### Deteksi DocumentRoot dan saran `webServerService`
+
+Kartu **Apache App Mapping** di tab Settings memakai command
+`detect_apache_mappings` untuk membaca config Apache dan
+`apply_apache_mappings` untuk menulis mapping setelah user memilih app.
+
+Sumber config:
+
+1. `services.json` service dengan `serviceType=apache`. `apacheRoot` dan
+   `apacheConfig` service yang dipilih dipakai lebih dulu.
+2. Jika `apacheRoot`/`apacheConfig` service kosong, fallback ke
+   `settings.json.tools.apache.root`/`config`.
+3. Config path relatif di-resolve terhadap `apacheRoot`; path absolut dipakai
+   apa adanya. Path kosong berarti `conf/httpd.conf`.
+
+Yang diproses parser (read-only, tanpa menjalankan `httpd.exe`):
+
+- baris komentar `#` dan baris kosong diabaikan; quote `"..."`/`'...'` didukung;
+- `Define NAME value` menyimpan variabel (nama variabel tidak case-sensitive);
+- `${VAR}` di-expand rekursif dengan batas kedalaman; variabel tidak dikenal
+  menghasilkan warning dan directive terkait dilewati;
+- `ServerRoot` dipakai untuk me-resolve `DocumentRoot` relatif dan include relatif;
+- `Include`/`IncludeOptional` relatif dicoba terhadap `ServerRoot`, root Apache,
+  lalu folder file config saat ini; wildcard seperti `conf/sites-enabled/*.conf`
+  memakai enumerasi direktori;
+- include bersarang didukung, dengan batas kedalaman 12, maksimal 200 file,
+  visited set untuk mencegah loop, dan batas ukuran file 4 MB;
+- `Include` wajib yang hilang menjadi warning; `IncludeOptional` yang hilang
+  diabaikan; variabel/quote/argumen rusak menghasilkan warning.
+
+Pencocokan dengan `apps[].localPath` bersifat case-insensitive untuk path Windows:
+
+| Hubungan | `matchKind` | Confidence |
+| --- | --- | --- |
+| Path sama | `exact` | high |
+| DocumentRoot berada di bawah localPath (mis. `app/public`) | `descendant` | high |
+| localPath berada di bawah DocumentRoot | `ancestor` | medium |
+
+Satu app hanya menghasilkan satu saran; exact/descendant dipilih sebelum ancestor.
+App yang sudah memiliki `webServerService` dikembalikan sebagai `alreadyMapped`
+dan tidak disarankan untuk ditimpa. Deteksi tidak menulis file apa pun.
+
+**Apply Mappings** memvalidasi service target (`serviceType=apache`) dan semua app
+id, membackup `backup/projects-<timestamp>.json`, lalu menulis
+`webServerService` hanya pada app yang dipilih. `projects.json` disimpan atomik;
+field app lain tidak diubah. Tidak ada apply otomatis dari hasil deteksi.
 
 ## Project Registry (`projects.json` v2)
 

@@ -251,7 +251,7 @@ fn view(app: &AppConfig, state: Option<&AppState>, settings: &Settings) -> Updat
     }
 }
 
-fn load_views_at(path: &Path) -> Result<Vec<UpdaterAppView>, String> {
+pub(crate) fn load_views_at(path: &Path) -> Result<Vec<UpdaterAppView>, String> {
     let config = load_config(path)?;
     let state = load_state(path);
     let settings = effective_settings(&settings_path_for(path), &config.settings, &config.trigger)

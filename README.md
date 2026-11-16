@@ -20,6 +20,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Run, Check, Test, Log, Edit, Delete.
 - GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, log, serta tampilan versi PHP/Apache efektif dan `webServerService`.
 - GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, trigger allowlist + Migrate Trigger, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
+- Kartu **Apache App Mapping** mem-parsing DocumentRoot/Include/variabel config Apache dan menyarankan `webServerService`; mapping hanya ditulis setelah app dipilih dan **Apply Mappings** diklik (dengan backup `projects.json`).
 - Perubahan path/root/config Apache menampilkan preview service/app terdampak, disimpan sebagai pending, lalu di-apply eksplisit (Administrator) ke `services.json` + Windows SCM dengan backup, rollback, dan audit.
 - Wrapper elevated `scripts/Invoke-UpdaterTask.ps1` + Scheduled Task `ServiceManager-Updater`.
 - Diagnosa headless `sm-diag`.
@@ -184,7 +185,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **320 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **333 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 

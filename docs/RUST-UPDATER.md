@@ -104,6 +104,8 @@ Tab **Updater** di `sm-gui` menyediakan:
 - Check All / Update All dan run per app;
 - form toolchain, service lifecycle, allowlist per app, clone-on-first-run,
   health check, dan webhook;
+- saran `webServerService` dari DocumentRoot Apache di tab Settings, dengan
+  konfirmasi sebelum menulis;
 - log updater terbaru.
 
 Tab **Remote** menyediakan trigger SSH dari mesin client Windows:
@@ -237,8 +239,27 @@ Saat path/root/config/version Apache diubah di tab **Settings**:
   [CONFIGURATION.md](CONFIGURATION.md#perubahan-apache-dan-servicesjson).
 
 Field ini tidak mengubah lifecycle updater app (stop/restart/start service tetap
-memakai `services.*`). DocumentRoot parser dan saran otomatis `webServerService`
-belum tersedia (Sprint 2.3).
+memakai `services.*`).
+
+### Deteksi `webServerService` dari DocumentRoot
+
+GUI tab Settings menyediakan **Apache App Mapping** (Sprint 2.3):
+
+- `detect_apache_mappings` membaca config Apache read-only, termasuk
+  `ServerRoot`, `Define`/`${VAR}`, `Include`/`IncludeOptional`, wildcard, dan
+  include bersarang dengan batas kedalaman/file;
+- `DocumentRoot` dibandingkan dengan `apps[].localPath` secara case-insensitive:
+  path sama (`exact`) dan DocumentRoot di bawah localPath (`descendant`) bernilai
+  high, sedangkan localPath di bawah DocumentRoot (`ancestor`) bernilai medium;
+- app dengan `webServerService` yang sudah terisi dikembalikan sebagai
+  `alreadyMapped` dan tidak disarankan untuk ditimpa;
+- `apply_apache_mappings` hanya menulis `webServerService` untuk app yang dipilih
+  setelah konfirmasi, setelah membackup `backup/projects-<timestamp>.json`;
+- tidak ada perubahan otomatis pada `projects.json` dari hasil deteksi.
+
+Parser tidak mengevaluasi `<IfModule>` atau kondisi runtime Apache; semua
+`DocumentRoot` yang terlihat di config/include akan dianalisis. Scan path PHP
+hardcoded/`${PHP}` tetap Sprint 2.4.
 
 ## Deteksi Toolchain
 

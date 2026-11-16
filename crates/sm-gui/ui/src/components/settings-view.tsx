@@ -26,6 +26,7 @@ import { Hint } from "@/components/hint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,7 +41,9 @@ import { errorMessage, invoke } from "@/lib/tauri";
 import type {
   ApacheApplyResult,
   ApacheChangeView,
+  ApacheMappingScanView,
   ApacheToolPath,
+  ServiceRow,
   Settings,
   SettingsDiagnostics,
   SettingsSaveResult,
@@ -52,6 +55,7 @@ import type {
   ToolDetection,
   ToolPath,
   ToolTest,
+  UpdaterApp,
   UpdateTimeouts,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -773,6 +777,13 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const [apacheApplyResult, setApacheApplyResult] = useState<ApacheApplyResult | null>(null);
   const [apacheApplyError, setApacheApplyError] = useState<string | null>(null);
   const [applyingApache, setApplyingApache] = useState(false);
+  const [apacheScan, setApacheScan] = useState<ApacheMappingScanView | null>(null);
+  const [apacheDetecting, setApacheDetecting] = useState(false);
+  const [apacheMappingApplying, setApacheMappingApplying] = useState(false);
+  const [apacheMappingError, setApacheMappingError] = useState<string | null>(null);
+  const [apacheSelectedService, setApacheSelectedService] = useState("");
+  const [apacheSelectedApps, setApacheSelectedApps] = useState<Set<string>>(new Set());
+  const [apacheServiceRows, setApacheServiceRows] = useState<ServiceRow[]>([]);
   const [busyTools, setBusyTools] = useState<Partial<Record<ToolKey, ToolBusy>>>({});
   const [toolMessages, setToolMessages] = useState<
     Partial<Record<ToolKey, ToolMessage>>
@@ -794,6 +805,27 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
     } catch (error) {
       setTaskStatus(null);
       setTaskStatusError(errorMessage(error));
+    }
+  }, []);
+
+  const loadApacheServices = useCallback(async () => {
+    try {
+      const rows = await invoke<ServiceRow[]>("list_services");
+      const apacheRows = (Array.isArray(rows) ? rows : []).filter(
+        (row) => row.serviceType === "apache",
+      );
+      setApacheServiceRows(apacheRows);
+      setApacheSelectedService((previous) => {
+        if (
+          previous &&
+          apacheRows.some((row) => row.name.toLowerCase() === previous.toLowerCase())
+        ) {
+          return previous;
+        }
+        return apacheRows.length === 1 ? apacheRows[0].name : "";
+      });
+    } catch (error) {
+      toast.error(errorMessage(error));
     }
   }, []);
 
@@ -826,6 +858,10 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   useEffect(() => {
     void load(false);
   }, [load]);
+
+  useEffect(() => {
+    void loadApacheServices();
+  }, [loadApacheServices]);
 
   function setToolBusy(key: ToolKey, busy: ToolBusy) {
     setBusyTools((previous) => ({ ...previous, [key]: busy }));
@@ -1012,6 +1048,110 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       if (selected) updateUpdater({ logDir: selected });
     } catch (error) {
       toast.error(errorMessage(error));
+    }
+  }
+
+  function toggleApacheApp(appId: string, checked: boolean) {
+    setApacheSelectedApps((previous) => {
+      const next = new Set(previous);
+      if (checked) {
+        next.add(appId);
+      } else {
+        next.delete(appId);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllApacheApps() {
+    if (!apacheScan) return;
+    const allSelected =
+      apacheScan.suggestions.length > 0 &&
+      apacheScan.suggestions.every((suggestion) =>
+        apacheSelectedApps.has(suggestion.appId),
+      );
+    setApacheSelectedApps(
+      allSelected
+        ? new Set()
+        : new Set(apacheScan.suggestions.map((suggestion) => suggestion.appId)),
+    );
+  }
+
+  async function detectApacheMappings() {
+    if (apacheDetecting) return;
+    setApacheDetecting(true);
+    setApacheMappingError(null);
+    try {
+      const result = await invoke<ApacheMappingScanView>("detect_apache_mappings", {
+        serviceName: apacheSelectedService.trim() || null,
+      });
+      setApacheScan(result);
+      if (result.serviceName) setApacheSelectedService(result.serviceName);
+      setApacheSelectedApps(new Set(result.suggestions.map((item) => item.appId)));
+      if (result.error) {
+        toast.error(result.error, { duration: 10000 });
+      } else if (result.suggestions.length === 0) {
+        toast.warning("No new Apache app mappings were suggested.");
+      } else {
+        toast.success(
+          `Found ${result.suggestions.length} Apache mapping suggestion${
+            result.suggestions.length === 1 ? "" : "s"
+          }.`,
+        );
+      }
+    } catch (error) {
+      const message = errorMessage(error);
+      setApacheMappingError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setApacheDetecting(false);
+    }
+  }
+
+  async function applyApacheMappings() {
+    if (apacheMappingApplying) return;
+    const serviceName = (apacheScan?.serviceName || apacheSelectedService).trim();
+    const appIds = Array.from(apacheSelectedApps);
+    if (!serviceName) {
+      toast.error("Select an Apache service before applying mappings.");
+      return;
+    }
+    if (appIds.length === 0) {
+      toast.error("Select at least one suggested app to map.");
+      return;
+    }
+
+    setApacheMappingApplying(true);
+    setApacheMappingError(null);
+    try {
+      const views = await invoke<UpdaterApp[]>("apply_apache_mappings", {
+        appIds,
+        serviceName,
+      });
+      const wanted = new Set(appIds.map((id) => id.toLowerCase()));
+      const updated = views.filter((view) => wanted.has(view.id.toLowerCase())).length;
+      toast.success(
+        `Mapped ${updated} app${updated === 1 ? "" : "s"} to ${serviceName}. projects.json was backed up first.`,
+      );
+      try {
+        const result = await invoke<ApacheMappingScanView>("detect_apache_mappings", {
+          serviceName,
+        });
+        setApacheScan(result);
+        setApacheSelectedService(result.serviceName || serviceName);
+        setApacheSelectedApps(new Set(result.suggestions.map((item) => item.appId)));
+      } catch (refreshError) {
+        toast.error(
+          `Mappings were saved, but the rescan failed: ${errorMessage(refreshError)}`,
+          { duration: 10000 },
+        );
+      }
+    } catch (error) {
+      const message = errorMessage(error);
+      setApacheMappingError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setApacheMappingApplying(false);
     }
   }
 
@@ -1203,6 +1343,29 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       : admin === false
         ? "Not Administrator"
         : "Checking Administrator";
+  const apacheServiceChoices =
+    apacheServiceRows.length > 0
+      ? apacheServiceRows.map((row) => ({
+          name: row.name,
+          label: row.displayName || row.name,
+        }))
+      : (apacheScan?.services ?? []).map((service) => ({
+          name: service.name,
+          label: service.displayName || service.name,
+        }));
+  const apacheMappingTarget = apacheScan?.serviceName || apacheSelectedService;
+  const allApacheSuggestionsSelected =
+    (apacheScan?.suggestions.length ?? 0) > 0 &&
+    (apacheScan?.suggestions ?? []).every((suggestion) =>
+      apacheSelectedApps.has(suggestion.appId),
+    );
+  const canApplyApacheMappings =
+    apacheMappingTarget.trim().length > 0 &&
+    apacheSelectedApps.size > 0 &&
+    !apacheMappingApplying &&
+    !apacheDetecting;
+  const canDetectApacheMappings =
+    apacheServiceChoices.length <= 1 || apacheSelectedService.trim().length > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -1290,6 +1453,239 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   onTest={() => void testTool(definition.key)}
                 />
               ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Server className="h-4 w-4" />
+              Apache App Mapping
+            </CardTitle>
+            <CardDescription>
+              Read the configured Apache config, includes, ServerRoot, and Define variables to
+              suggest which apps each DocumentRoot serves. Nothing is written until you select
+              apps and click Apply Mappings.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4 pt-0">
+            <div className="flex flex-wrap items-end gap-2">
+              {apacheServiceChoices.length > 1 ? (
+                <div className="min-w-56 space-y-1">
+                  <Label className="text-xs">Apache service</Label>
+                  <Select
+                    value={apacheSelectedService || undefined}
+                    onValueChange={(value) => {
+                      setApacheSelectedService(value);
+                      setApacheScan(null);
+                      setApacheSelectedApps(new Set());
+                      setApacheMappingError(null);
+                    }}
+                  >
+                    <SelectTrigger
+                      className="h-8"
+                      title="Choose which Apache service config to scan. Multiple Apache services use different ServerRoot/Include trees."
+                    >
+                      <SelectValue placeholder="Select Apache service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {apacheServiceChoices.map((service) => (
+                        <SelectItem key={service.name} value={service.name}>
+                          {service.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <Badge
+                  variant="outline"
+                  title="Apache services come from data/services.json"
+                >
+                  {apacheServiceChoices.length === 1
+                    ? `Service: ${apacheServiceChoices[0].name}`
+                    : "No Apache service"}
+                </Badge>
+              )}
+              <Hint label="Parse the selected Apache config, ServerRoot, Include/IncludeOptional files, and Define variables to suggest app mappings">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void detectApacheMappings()}
+                  disabled={
+                    apacheDetecting ||
+                    apacheMappingApplying ||
+                    !canDetectApacheMappings
+                  }
+                >
+                  {apacheDetecting ? <Loader2 className="animate-spin" /> : <Search />}
+                  Detect Apps
+                </Button>
+              </Hint>
+            </div>
+
+            {(apacheMappingError || apacheScan?.error) && (
+              <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>{apacheMappingError || apacheScan?.error}</div>
+              </div>
+            )}
+
+            {apacheScan && apacheScan.warnings.length > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <div className="font-medium">Parser warnings</div>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {apacheScan.warnings.map((warning, index) => (
+                      <li key={`${index}-${warning}`} className="break-words">
+                        {warning}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {!apacheScan && !apacheMappingError && (
+              <p className="text-xs text-muted-foreground">
+                Click Detect Apps to scan the selected Apache config for DocumentRoot entries and
+                compare them with app localPath values.
+              </p>
+            )}
+
+            {apacheScan !== null && apacheScan.suggestions.length === 0 && !apacheScan.error && (
+              <p className="text-xs text-muted-foreground">
+                No new app mappings are suggested. Existing mappings are shown below and are never
+                overwritten automatically.
+              </p>
+            )}
+
+            {apacheScan && apacheScan.suggestions.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-medium">
+                    Suggestions ({apacheScan.suggestions.length})
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleAllApacheApps}
+                    disabled={apacheMappingApplying}
+                  >
+                    {allApacheSuggestionsSelected ? "Clear all" : "Select all"}
+                  </Button>
+                </div>
+                <div className="space-y-1">
+                  {apacheScan.suggestions.map((suggestion) => {
+                    const checkboxId = `apache-map-${suggestion.appId}`;
+                    return (
+                      <div
+                        key={suggestion.appId}
+                        className="flex items-start gap-3 rounded-md border bg-background/40 px-2 py-2"
+                      >
+                        <Checkbox
+                          id={checkboxId}
+                          checked={apacheSelectedApps.has(suggestion.appId)}
+                          onCheckedChange={(checked) =>
+                            toggleApacheApp(suggestion.appId, checked === true)
+                          }
+                          disabled={apacheMappingApplying}
+                          className="mt-0.5"
+                        />
+                        <label
+                          htmlFor={checkboxId}
+                          className="min-w-0 flex-1 cursor-pointer text-xs leading-snug"
+                        >
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-sm font-medium">
+                              {suggestion.appName || suggestion.appId}
+                            </span>
+                            <Badge variant="outline">{suggestion.appId}</Badge>
+                            <Badge
+                              variant={
+                                suggestion.confidence === "high" ? "success" : "warning"
+                              }
+                              title={`${suggestion.matchKind} match`}
+                            >
+                              {suggestion.confidence} confidence
+                            </Badge>
+                            <Badge variant="outline" title="How localPath relates to DocumentRoot">
+                              {suggestion.matchKind}
+                            </Badge>
+                          </span>
+                          <span className="mt-1 block break-all font-mono text-muted-foreground">
+                            {suggestion.localPath} → {suggestion.documentRoot}
+                          </span>
+                          <span className="block break-all text-muted-foreground">
+                            Config: {suggestion.configFile || "—"}
+                          </span>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {apacheScan && apacheScan.alreadyMapped.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-medium">Already mapped</div>
+                <div className="space-y-1">
+                  {apacheScan.alreadyMapped.map((item) => (
+                    <div
+                      key={`mapped-${item.appId}`}
+                      className="flex items-start gap-3 rounded-md border bg-muted/30 px-2 py-2 text-xs opacity-80"
+                    >
+                      <Checkbox
+                        checked
+                        disabled
+                        className="mt-0.5"
+                        title={`${item.appName || item.appId} is already mapped to ${item.existingService}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-medium">
+                            {item.appName || item.appId}
+                          </span>
+                          <Badge variant="outline">{item.existingService}</Badge>
+                          <Badge variant="success">Already mapped</Badge>
+                        </div>
+                        <div className="mt-1 break-all font-mono text-muted-foreground">
+                          {item.localPath}
+                          {item.documentRoot ? ` → ${item.documentRoot}` : ""}
+                        </div>
+                        <p className="text-muted-foreground">
+                          Existing webServerService is kept; change it from the Updater app form if
+                          needed.
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+              <div className="text-xs text-muted-foreground">
+                {apacheMappingTarget
+                  ? `Target service: ${apacheMappingTarget} · ${apacheSelectedApps.size} selected`
+                  : "Select an Apache service first."}
+              </div>
+              <Hint label="Write webServerService for the selected apps to data/projects.json. projects.json is backed up to backup/projects-<timestamp>.json first; no other app fields change.">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void applyApacheMappings()}
+                  disabled={!canApplyApacheMappings}
+                >
+                  {apacheMappingApplying ? <Loader2 className="animate-spin" /> : <Play />}
+                  Apply Mappings
+                </Button>
+              </Hint>
             </div>
           </CardContent>
         </Card>
