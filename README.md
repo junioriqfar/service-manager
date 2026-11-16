@@ -41,38 +41,43 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 
 ```text
 ServiceManager/
-├─ service-manager-rs/          # workspace Rust
-│  ├─ crates/sm-core/           # model, validasi, ordering, update plan
-│  ├─ crates/sm-config/         # services.json, projects.json, backup
-│  ├─ crates/sm-win/            # SCM, NSSM/native, discovery, DPAPI
-│  ├─ crates/sm-gui/            # Tauri + React/shadCN UI
-│  └─ crates/sm-updater/        # updater Laravel + credential helper
+├─ Cargo.toml                   # workspace Rust
+├─ Cargo.lock
+├─ Build-Release.ps1
+├─ crates/
+│  ├─ sm-core/                  # model, validasi, ordering, update plan
+│  ├─ sm-config/                # services.json, projects.json, backup
+│  ├─ sm-win/                   # SCM, NSSM/native, discovery, DPAPI
+│  ├─ sm-gui/                   # Tauri + React/shadCN UI
+│  └─ sm-updater/               # updater Laravel + credential helper
+├─ data/
+│  ├─ services.json             # config runtime (tidak di-commit)
+│  └─ projects.json             # config runtime (tidak di-commit)
+├─ backup/                      # backup config (tidak di-commit)
+├─ logs/                        # log aplikasi (tidak di-commit)
+├─ dist/                        # hasil build portable (tidak di-commit)
 ├─ docs/                        # dokumentasi
 ├─ services.example.json        # contoh services.json
-├─ projects.example.json        # contoh projects.json
-├─ services.json                # config runtime (tidak di-commit)
-├─ projects.json                # config runtime (tidak di-commit)
-├─ backup/                      # backup config (tidak di-commit)
-└─ logs/                        # log aplikasi (tidak di-commit)
+└─ projects.example.json        # contoh projects.json
 ```
 
 ## Mulai Cepat
 
 1. Gunakan ZIP portable:
    ```powershell
-   cd service-manager-rs
    .\Build-Release.ps1
    # hasil: dist\ServiceManager-RS-<versi>.zip
    ```
-2. Ekstrak, lalu salin contoh config:
+2. Ekstrak, lalu salin contoh config ke folder `data`:
    ```powershell
-   Copy-Item services.example.json services.json
-   Copy-Item projects.example.json projects.json
+   New-Item -ItemType Directory -Force .\data | Out-Null
+   Copy-Item .\services.example.json .\data\services.json
+   Copy-Item .\projects.example.json .\data\projects.json
    ```
 3. Sesuaikan path service/project.
 4. Jalankan `sm-gui.exe` sebagai Administrator.
 
-Config dibaca dari folder `sm-gui.exe`. Untuk memakai folder lain:
+Config dibaca dari `<folder exe>\data`. Untuk memakai folder lain:
 
 ```powershell
 $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
@@ -82,8 +87,6 @@ $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
 ## Build dari Source
 
 ```powershell
-cd service-manager-rs
-
 # Frontend wajib dibangun sebelum cargo build/test GUI
 Push-Location crates/sm-gui/ui
 npm ci
@@ -99,11 +102,14 @@ Atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`, `npm run build`, car
 
 - Skema `services.json`: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 - Pola scheduler global dan queue per project: [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md)
-- Config runtime (`services.json`, `projects.json`, `logs/`, `backup/`) **tidak di-commit** karena berisi path/internal server.
+- Config runtime (`data/services.json`, `data/projects.json`, `logs/`, `backup/`) **tidak di-commit** karena berisi path/internal server.
+- Backup otomatis dan export manual semuanya disimpan di `backup/`.
 
 ## Service Global dan Queue
 
 - **Cronical** dapat melayani beberapa project dalam satu service. Satu job per project di `cronical.dat`, masing-masing dengan `Home`.
+- Service scheduler di config bernama **`GlobalCron`**; log stdout/stderr ada di `C:\laragon\bin\cronical\logs\cronical-service.log`.
+- Service lama `KasirinCron` perlu dihentikan dan dihapus setelah `GlobalCron` terpasang (butuh Administrator).
 - **Queue Laravel** memakai satu worker per project (Opsi A): `KasirinQueue`, `OpenPoQueue`, dan seterusnya, karena `queue:work` terikat pada codebase/database project.
 - Supervisor multi-project dalam satu service (Opsi B) belum diimplementasikan.
 
@@ -132,13 +138,12 @@ Panduan lengkap: [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md).
 ## Testing
 
 ```powershell
-cd service-manager-rs
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **178 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **180 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 
@@ -152,7 +157,7 @@ Saat ini **178 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm 
 | [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log |
 | [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md) | Build, installer, CI, deployment |
 | [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md) | Catatan historis migrasi ke Rust |
-| [service-manager-rs/README.md](service-manager-rs/README.md) | Struktur crate dan status implementasi |
+| [docs/RUST-README.md](docs/RUST-README.md) | Struktur crate dan status implementasi |
 
 ## Troubleshooting
 
@@ -162,6 +167,7 @@ Saat ini **178 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm 
 | NSSM tidak ditemukan | Letakkan `nssm.exe` di `C:\tools\nssm\nssm.exe` atau `..\nssm\nssm.exe`. |
 | Config rusak | File lama dicadangkan ke `backup/services-broken-*.json`; perbaiki JSON lalu buka ulang. |
 | `OpenPoQueue`/service baru stopped | Service harus dibuat/diterapkan sebagai Administrator; gunakan **Edit → Save** lalu **Start**. |
+| `GlobalCron` Not Installed | Jalankan app sebagai Administrator, Install `GlobalCron`, Start, lalu hapus service lama `KasirinCron`. |
 | Cloudflared log error ke `127.0.0.1` | Itu error origin aplikasi (mis. queue/API), bukan config Service Manager; cek service/port origin. |
 | Updater gagal akses remote | Simpan kredensial dengan `sm-updater credential store`; cek PAT/akun. |
 | Update diblokir migration | Jalankan migration manual, lalu ulangi update. |

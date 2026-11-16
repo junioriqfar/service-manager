@@ -7,7 +7,6 @@ CLI updater Laravel berbasis Rust. Binary mandiri, kompatibel dengan `projects.j
 ## Build
 
 ```powershell
-cd service-manager-rs
 cargo build --release -p sm-updater
 # hasil: target\release\sm-updater.exe
 ```
@@ -24,6 +23,8 @@ sm-updater update --project kasirin # update satu project
 sm-updater --config C:\path\projects.json
 sm-updater --help
 ```
+
+Config default berada di `<folder exe>\data\projects.json`. Jika dijalankan dari `target/release`, aplikasi mencari ancestor `Cargo.toml` + `data/` sehingga memakai `data/projects.json` di root repo.
 
 Exit code:
 
@@ -119,8 +120,8 @@ Verifikasi end-to-end dengan repository Git lokal:
 ## Task Scheduler
 
 ```
-Program : C:\tools\ServiceManager\service-manager-rs\target\release\sm-updater.exe
-Argument: update --config C:\tools\ServiceManager\projects.json
+Program : C:\tools\ServiceManager\target\release\sm-updater.exe
+Argument: update --config C:\tools\ServiceManager\data\projects.json
 ```
 
 Jalankan sebagai akun yang memiliki kredensial Git tersimpan (mis. `EGOV22`) agar DPAPI dapat mengaksesnya.

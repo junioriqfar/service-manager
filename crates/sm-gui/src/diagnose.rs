@@ -114,6 +114,7 @@ mod tests {
     fn renders_service_entries() {
         let temp = tempfile::tempdir().unwrap();
         let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
         std::fs::write(
             paths.services_path(),
             r#"{"version":1,"services":[{"name":"demo","executable":"C:\\demo.exe","serviceType":"nssm"}]}"#,

@@ -3,8 +3,8 @@
 Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur yang sudah ada, serta fitur yang direncanakan berikut prioritasnya.
 
 - Status implementasi: **Phase 4 selesai** (fitur inti berjalan dan teruji)
-- Lokasi: `service-manager-rs/crates/sm-updater`
-- Test: **37 unit test** untuk crate ini; total workspace **178 test**
+- Lokasi: `crates/sm-updater`
+- Test: **37 unit test** untuk crate ini; total workspace **180 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block)
 
 ---
@@ -273,7 +273,7 @@ Fitur berikut sengaja **tidak** dilakukan otomatis:
 
 ## 9. Referensi
 
-- Implementasi: `service-manager-rs/crates/sm-updater/src/`
+- Implementasi: `crates/sm-updater/src/`
 - Panduan penggunaan: [RUST-UPDATER.md](RUST-UPDATER.md)
 - Config contoh: `projects.example.json`
 - Service integration: [RUST-SERVICES.md](RUST-SERVICES.md)

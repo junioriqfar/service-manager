@@ -2,19 +2,25 @@
 
 Implementasi Service Manager dalam Rust. Status: **Phase 0-6 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, updater CLI, security hardening, release & CI, test).
 
-Rencana lengkap: [../docs/RUST-REWRITE-PLAN.md](../docs/RUST-REWRITE-PLAN.md).
+Rencana lengkap: [RUST-REWRITE-PLAN.md](RUST-REWRITE-PLAN.md).
 
 ## Struktur
 
 ```
-service-manager-rs/
+ServiceManager/
 ├─ Cargo.toml
-└─ crates/
-   ├─ sm-core/     # model, validasi, ordering, aturan update
-   ├─ sm-config/   # services.json & projects.json, backup, atomic write
-   ├─ sm-win/      # SCM, NSSM/native, discover/import, elevation, DPAPI
-   ├─ sm-gui/      # Tauri GUI + batch async scheduler + sm-diag
-   └─ sm-updater/  # CLI updater Laravel + credential helper
+├─ Cargo.lock
+├─ Build-Release.ps1
+├─ crates/
+│  ├─ sm-core/     # model, validasi, ordering, aturan update
+│  ├─ sm-config/   # services.json & projects.json, data, backup, atomic write
+│  ├─ sm-win/      # SCM, NSSM/native, discover/import, elevation, DPAPI
+│  ├─ sm-gui/      # Tauri GUI + batch async scheduler + sm-diag
+│  └─ sm-updater/  # CLI updater Laravel + credential helper
+├─ data/           # services.json & projects.json runtime
+├─ backup/         # semua backup config
+├─ logs/           # log aplikasi/updater
+└─ dist/           # hasil build portable
 ```
 
 Binary:
@@ -28,8 +34,6 @@ Binary:
 ## Build dan Test
 
 ```powershell
-cd service-manager-rs
-
 # Frontend React (wajib sebelum cargo build/test GUI)
 Push-Location crates/sm-gui/ui
 npm ci
@@ -42,7 +46,7 @@ cargo fmt --all -- --check
 
 # GUI
 cargo run -p sm-gui
-# dari target/debug, arahkan config ke folder aplikasi:
+# config runtime ada di data/; opsional override:
 $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
 
 # Updater CLI
@@ -62,7 +66,7 @@ cargo install tauri-cli --version "^2"
 .\Build-Release.ps1 -Bundle
 ```
 
-Panduan lengkap: [docs/RUST-RELEASE.md](../docs/RUST-RELEASE.md). CI: `.github/workflows/rust.yml` dan `release.yml`.
+Panduan lengkap: [RUST-RELEASE.md](RUST-RELEASE.md). CI: `.github/workflows/rust.yml` dan `release.yml`.
 
 Test default berjalan tanpa Administrator. Test yang mengubah service (start/stop/install/restart) membutuhkan Administrator dan dijalankan manual di server uji:
 
@@ -74,8 +78,8 @@ Test read-only memakai service bawaan `EventLog` untuk memverifikasi query statu
 
 ## Kompatibilitas Config
 
-- `services.json` versi 1: object `{ version, services: [...] }` atau array legacy.
-- `projects.json` versi 1.
+- `services.json` versi 1: object `{ version, services: [...] }` atau array legacy; disimpan di `data/services.json`.
+- `projects.json` versi 1; disimpan di `data/projects.json`.
 - Field tidak dikenal diabaikan; nilai enum tidak dikenal dinormalisasi (tipe → NSSM, startup → Auto).
 - Config rusak dicadangkan ke `backup/services-broken-<timestamp>.json`.
 - Backup otomatis maksimal 20 file, pola `services-<timestamp>.json`.
@@ -84,7 +88,7 @@ Test read-only memakai service bawaan `EventLog` untuk memverifikasi query statu
 
 | Variabel | Fungsi |
 | --- | --- |
-| `SERVICE_MANAGER_HOME` | Folder config/log/backup. Default: folder executable. |
+| `SERVICE_MANAGER_HOME` | Folder config/log/backup. Default: folder executable (config di `data/`). |
 
 ## SCM Core (Phase 1)
 
@@ -109,13 +113,13 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 
 ## GUI Tauri (Phase 3)
 
-`sm-gui` menyediakan UI React + shadCN setara WinForms: tabel service, form tambah/edit, import, backup/restore, log viewer, dark/light theme, dan banner elevasi. Detail ada di [docs/RUST-GUI.md](../docs/RUST-GUI.md).
+`sm-gui` menyediakan UI React + shadCN setara WinForms: tabel service, form tambah/edit, import, backup/restore, log viewer, dark/light theme, dan banner elevasi. Detail ada di [RUST-GUI.md](RUST-GUI.md).
 
 - UI sepenuhnya Bahasa Inggris.
 - Tombol **Browse…** membuka file picker (Application) dan folder picker (Working Directory).
 - Toolbar atas hanya aksi global; Add/Import/Refresh ada di header Service List.
 - Klik kanan baris service menampilkan context menu Edit/Install/Start/Stop/Restart/Open Log/Delete.
-- Pola Cronical global dan queue per project ada di [docs/RUST-SERVICES.md](../docs/RUST-SERVICES.md).
+- Pola Cronical global dan queue per project ada di [RUST-SERVICES.md](RUST-SERVICES.md).
 
 Batch Start/Stop/Restart berjalan di background:
 
@@ -138,7 +142,7 @@ sm-updater update --project kasirin
 sm-updater update            # semua project enabled
 ```
 
-Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir migration, composer/npm/build/artisan kondisional, `postUpdateCommand`, log ganda (aplikasi + `storage/logs`), timeout, dan exit code. Panduan: [docs/RUST-UPDATER.md](../docs/RUST-UPDATER.md). Roadmap: [docs/RUST-UPDATER-PLAN.md](../docs/RUST-UPDATER-PLAN.md).
+Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir migration, composer/npm/build/artisan kondisional, `postUpdateCommand`, log ganda (aplikasi + `storage/logs`), timeout, dan exit code. Panduan: [RUST-UPDATER.md](RUST-UPDATER.md). Roadmap: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md).
 
 ## Security Hardening (Phase 5)
 
@@ -147,7 +151,7 @@ Fitur: scan project Laravel, preflight remote, fetch, fast-forward merge, blokir
 - Log aplikasi GUI di-redaksi dan dirotasi otomatis pada 5 MB (`app.log.1`).
 - `sm-updater credential store` — simpan PAT lewat Git Credential Manager (DPAPI), token dibaca tanpa echo dan tidak pernah ditulis ke log/file.
 - Elevasi UAC via banner GUI dan `ShellExecuteW runas`.
-- Detail: [docs/RUST-SECURITY.md](../docs/RUST-SECURITY.md).
+- Detail: [RUST-SECURITY.md](RUST-SECURITY.md).
 
 ## Status Fase
 

@@ -5,6 +5,10 @@ services-export-*.json
 services-broken-*.json
 services.json.bak-*
 projects.json.bak-*
+data/services.json
+data/projects.json
+data/services-export-*.json
+data/*.bak-*
 
 # Runtime artifacts
 logs/
@@ -24,18 +28,18 @@ credentials.json
 secrets.json
 
 # Rust build artifacts
-service-manager-rs/target/
+/target/
 **/*.rs.bk
 
 # Tauri generated schemas
-service-manager-rs/crates/sm-gui/gen/
+/crates/sm-gui/gen/
 
 # Frontend dependencies and build output
-service-manager-rs/crates/sm-gui/ui/node_modules/
-service-manager-rs/crates/sm-gui/ui/dist/
+/crates/sm-gui/ui/node_modules/
+/crates/sm-gui/ui/dist/
 
 # Release artifacts
-service-manager-rs/dist/
+/dist/
 
 # OS / editor
 Thumbs.db

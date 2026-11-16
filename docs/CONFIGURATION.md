@@ -1,18 +1,20 @@
 # Konfigurasi Service Manager
 
-Dokumen ini menjelaskan format `services.json` yang dipakai aplikasi Rust (`sm-gui`).
+Dokumen ini menjelaskan format `data/services.json` yang dipakai aplikasi Rust (`sm-gui`).
 
 ## Lokasi File
 
 | Item | Path |
 | --- | --- |
-| Config utama | `<folder exe>\services.json` |
+| Config service | `<folder config>\data\services.json` |
+| Config project | `<folder config>\data\projects.json` |
 | Override folder | Environment variable `SERVICE_MANAGER_HOME` |
 | Backup otomatis | `<folder config>\backup\services-*.json` |
+| Export backup | `<folder config>\backup\services-export-*.json` |
 | Log aplikasi | `<folder config>\logs\app.log` |
 | NSSM | `..\nssm\nssm.exe` atau `C:\tools\nssm\nssm.exe` |
 
-Jika `services.json` tidak ada, aplikasi dimulai dengan daftar kosong. Jika JSON tidak valid, file lama dicadangkan ke `backup/services-broken-<timestamp>.json` dan aplikasi tetap berjalan dengan daftar kosong.
+Jika `data/services.json` tidak ada, aplikasi dimulai dengan daftar kosong. Jika JSON tidak valid, file lama dicadangkan ke `backup/services-broken-<timestamp>.json` dan aplikasi tetap berjalan dengan daftar kosong.
 
 ## Struktur
 
@@ -145,7 +147,7 @@ Saat **Start All**, service diurutkan secara topologi berdasarkan `dependencies`
 ## Backup dan Restore
 
 - Setiap penyimpanan config membuat backup otomatis di `backup/` (maksimal 20 file terbaru).
-- Tombol **Backup** menyimpan salinan JSON ke `services-export-<timestamp>.json`.
+- Tombol **Backup** menyimpan salinan JSON ke `backup/services-export-<timestamp>.json`.
 - Tombol **Restore** memulihkan dari file JSON.
 - Tombol **Import** memindai service Windows yang sudah terpasang (NSSM/Apache/PostgreSQL) dan menambahkannya ke config.
 

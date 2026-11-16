@@ -102,7 +102,7 @@ Log service aplikasi tidak di-redaksi karena merupakan output aplikasi pengguna;
 - Proses dijalankan dengan array argumen; tidak ada `cmd.exe /c` kecuali untuk `.bat`/`.cmd` (composer/npm) dengan path eksplisit.
 - Nama service divalidasi: huruf, angka, titik, garis bawah, tanda hubung (1-256 karakter).
 - Executable dan native path divalidasi keberadaannya sebelum install/save.
-- `postUpdateCommand` adalah satu-satunya perintah yang dijalankan sebagai string PowerShell, dan hanya berasal dari `projects.json` yang dikontrol admin.
+- `postUpdateCommand` adalah satu-satunya perintah yang dijalankan sebagai string PowerShell, dan hanya berasal dari `data/projects.json` yang dikontrol admin.
 - Log menampilkan perintah dengan quoting, tetapi nilai sensitif tetap di-redaksi.
 
 ## Audit Sebelum Commit
@@ -115,10 +115,10 @@ git diff --cached
 
 Aturan `.gitignore`:
 
-- `services.json`, `projects.json`, `services-export-*.json`;
+- `data/services.json`, `data/projects.json`, `data/services-export-*.json`;
 - `logs/`, `backup/`;
 - `.env`, token/key/pem/pfx, private key;
-- `service-manager-rs/target/`, `sm-gui/gen/`, `sm-gui/ui/node_modules/`, `sm-gui/ui/dist/`.
+- `/target/`, `/crates/sm-gui/gen/`, `/crates/sm-gui/ui/node_modules/`, `/crates/sm-gui/ui/dist/`.
 
 ## Pengujian Keamanan
 

@@ -7,7 +7,6 @@ Dokumen ini menjelaskan GUI utama Service Manager (Rust + Tauri + React/shadCN),
 Frontend React perlu dibangun terlebih dahulu karena Tauri menyematkan `ui/dist`:
 
 ```powershell
-cd service-manager-rs
 Push-Location crates/sm-gui/ui
 npm ci
 npm run build
@@ -15,14 +14,14 @@ Pop-Location
 cargo run -p sm-gui
 ```
 
-Secara default aplikasi membaca config dari folder executable. Untuk pengembangan dari `target/debug`, arahkan ke folder aplikasi:
+Secara default config berada di `<folder exe>\data`. Saat dijalankan dari `target/debug`, aplikasi mencari ancestor yang berisi `Cargo.toml` + `data/`, sehingga memakai folder `data/` di root repo. Untuk folder lain, gunakan environment variable:
 
 ```powershell
 $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
 cargo run -p sm-gui
 ```
 
-Build debug menghasilkan `service-manager-rs\target\debug\sm-gui.exe`. Build release (frontend harus sudah dibangun, atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`/`npm run build` otomatis):
+Build debug menghasilkan `target\debug\sm-gui.exe`. Build release (frontend harus sudah dibangun, atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`/`npm run build` otomatis):
 
 ```powershell
 cargo build --release -p sm-gui
@@ -31,7 +30,6 @@ cargo build --release -p sm-gui
 Paket portable (GUI + updater + contoh config + docs):
 
 ```powershell
-cd service-manager-rs
 .\Build-Release.ps1
 ```
 
@@ -100,7 +98,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 178 test):
+Test GUI mencakup (total workspace 180 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

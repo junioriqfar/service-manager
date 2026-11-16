@@ -87,9 +87,11 @@ pub fn build_log_view(config: &ServiceConfig) -> String {
 }
 
 pub fn export_services(paths: &ConfigPaths, services: &[ServiceConfig]) -> Result<PathBuf, String> {
-    fs::create_dir_all(paths.home()).map_err(|error| error.to_string())?;
+    fs::create_dir_all(paths.backup_dir()).map_err(|error| error.to_string())?;
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
-    let destination = paths.home().join(format!("services-export-{stamp}.json"));
+    let destination = paths
+        .backup_dir()
+        .join(format!("services-export-{stamp}.json"));
     let payload = serde_json::json!({
         "version": 1,
         "services": services,
@@ -220,6 +222,7 @@ mod tests {
             ..ServiceConfig::default()
         };
         let exported = export_services(&paths, &[service]).unwrap();
+        assert_eq!(exported.parent(), Some(paths.backup_dir().as_path()));
         let content = fs::read_to_string(exported).unwrap();
         let value: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(value["version"], 1);

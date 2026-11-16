@@ -1,6 +1,6 @@
 # Build dan Rilis Rust
 
-Panduan build, packaging, CI, dan deployment untuk `service-manager-rs`.
+Panduan build, packaging, CI, dan deployment untuk workspace Rust di root repositori.
 
 ## Prasyarat
 
@@ -16,29 +16,33 @@ Panduan build, packaging, CI, dan deployment untuk `service-manager-rs`.
 ## Portable ZIP
 
 ```powershell
-cd service-manager-rs
 .\Build-Release.ps1
 ```
 
 Output:
 
 ```
-service-manager-rs\dist\ServiceManager-RS-0.1.0\
+dist\ServiceManager-RS-0.1.0\
 ├─ sm-gui.exe
 ├─ sm-updater.exe
 ├─ sm-diag.exe
+├─ data\
+│  ├─ services.example.json
+│  └─ projects.example.json
 ├─ services.example.json
 ├─ projects.example.json
+├─ backup\
+├─ logs\
 ├─ RUN.txt
 ├─ README.md
 └─ docs\*.md
-service-manager-rs\dist\ServiceManager-RS-0.1.0.zip
+dist\ServiceManager-RS-0.1.0.zip
 ```
 
 Langkah manual yang sama:
 
 ```powershell
-cd service-manager-rs\crates\sm-gui\ui
+cd crates\sm-gui\ui
 npm ci
 npm run build
 cd ..\..\..
@@ -53,21 +57,20 @@ Dengan Tauri CLI:
 
 ```powershell
 cargo install tauri-cli --version "^2"
-cd service-manager-rs
 .\Build-Release.ps1 -Bundle
 ```
 
 Atau langsung (frontend `ui/dist` harus sudah dibangun dengan `npm run build`):
 
 ```powershell
-cd service-manager-rs\crates\sm-gui
+cd crates\sm-gui
 cargo tauri build
 ```
 
 Output installer berada di:
 
 ```
-service-manager-rs\target\release\bundle\nsis\
+target\release\bundle\nsis\
 ```
 
 Konfigurasi bundle ada di `crates/sm-gui/tauri.conf.json`:
@@ -108,7 +111,7 @@ Tauri mendukung konfigurasi signing melalui environment variable saat `tauri bui
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
 - `Build-Release.ps1` (portable ZIP)
-- Upload artifact `service-manager-rs-portable`
+- Upload artifact `service-manager-portable`
 
 ### `release.yml` (tag `v*`)
 
@@ -128,8 +131,9 @@ git push origin v0.1.0
 1. Ekstrak ZIP ke folder aplikasi, misalnya `C:\tools\ServiceManager-RS`.
 2. Salin contoh config:
    ```powershell
-   Copy-Item services.example.json services.json
-   Copy-Item projects.example.json projects.json
+   New-Item -ItemType Directory -Force data | Out-Null
+   Copy-Item services.example.json data\services.json
+   Copy-Item projects.example.json data\projects.json
    ```
 3. Sesuaikan path NSSM/PHP/Composer/npm/project.
 4. Letakkan `nssm.exe` di `C:\tools\nssm\nssm.exe` atau `..\nssm\nssm.exe`.
@@ -145,12 +149,12 @@ git push origin v0.1.0
    .\sm-diag.exe
    ```
 
-Config dibaca dari folder executable. Gunakan `SERVICE_MANAGER_HOME` untuk memakai folder config lain (misalnya saat development).
+Config dibaca dari `<folder exe>\data`. Gunakan `SERVICE_MANAGER_HOME` untuk memakai folder config lain (misalnya saat development).
 
 ## Migrasi Config
 
 - Aplikasi PowerShell lama sudah dihapus dari repositori; repositori ini hanya berisi implementasi Rust.
-- Format `services.json` dan `projects.json` tetap versi 1.
+- Format `data/services.json` dan `data/projects.json` tetap versi 1.
 - Backup config sebelum mengganti versi aplikasi.
 - Jangan menjalankan dua instance yang menulis config yang sama secara bersamaan.
 - Rollback: pulihkan config dari backup dan gunakan binary release Rust sebelumnya.

@@ -7,7 +7,7 @@ Dokumen perencanaan lengkap untuk menulis ulang **Service Manager** (PowerShell 
 - Target platform: Windows 10/11 dan Windows Server (x64)
 - Prinsip: **kompatibel config**, **perilaku setara**, **tanpa kredensial di disk/repo**
 
-> Catatan: aplikasi PowerShell lama sudah dihapus dari repositori. Dokumen ini dipertahankan sebagai catatan perencanaan dan pemetaan historis. Implementasi aktif ada di `README.md`, `docs/RUST-GUI.md`, `docs/RUST-SERVICES.md`, dan `service-manager-rs/README.md`.
+> Catatan: aplikasi PowerShell lama sudah dihapus dari repositori. Dokumen ini dipertahankan sebagai catatan perencanaan dan pemetaan historis. Implementasi aktif ada di `README.md`, `docs/RUST-GUI.md`, `docs/RUST-SERVICES.md`, dan `docs/RUST-README.md`.
 
 ---
 
@@ -15,15 +15,15 @@ Dokumen perencanaan lengkap untuk menulis ulang **Service Manager** (PowerShell 
 
 | Fase | Status | Lokasi |
 | --- | --- | --- |
-| 0. Fondasi | **Selesai** | `service-manager-rs/crates/sm-core`, `sm-config` |
-| 1. Core SCM | **Selesai** | `service-manager-rs/crates/sm-win` |
-| 2. NSSM & native | **Selesai** | `service-manager-rs/crates/sm-win` |
-| 3. GUI | **Selesai** | `service-manager-rs/crates/sm-gui` |
-| 4. Updater | **Selesai** | `service-manager-rs/crates/sm-updater` |
+| 0. Fondasi | **Selesai** | `crates/sm-core`, `sm-config` |
+| 1. Core SCM | **Selesai** | `crates/sm-win` |
+| 2. NSSM & native | **Selesai** | `crates/sm-win` |
+| 3. GUI | **Selesai** | `crates/sm-gui` |
+| 4. Updater | **Selesai** | `crates/sm-updater` |
 | 5. Security & hardening | **Selesai** | `sm-win/dpapi.rs`, `sm-core/security.rs`, credential helper |
 | 6. Rilis | **Selesai** | `Build-Release.ps1`, `.github/workflows`, `docs/RUST-RELEASE.md` |
 
-Test Phase 0-6: 178 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation, argumen NSSM/native, discovery parsing, mock process runner, batch scheduler async, state GUI, log tail/export/rotation, CLI parsing, scan project, runner timeout, seluruh matriks update, redaksi log, DPAPI round-trip, dan credential helper). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator. GUI React + shadCN (dark/light) telah diverifikasi runtime memuat `services.json` (11 service), context menu, browse picker, dan theme toggle melalui WebView2 remote debugging. Updater telah diverifikasi end-to-end dengan repository Git lokal: list, check, update fast-forward, dan blokir migration. Portable release dibuat oleh `Build-Release.ps1`; installer NSIS didokumentasikan dan membutuhkan Tauri CLI.
+Test Phase 0-6: 180 unit test (model, ordering, update decision, validasi, config round-trip, backup, projects, SCM state/wait/elevation, argumen NSSM/native, discovery parsing, mock process runner, batch scheduler async, state GUI, log tail/export/rotation, CLI parsing, scan project, runner timeout, seluruh matriks update, redaksi log, DPAPI round-trip, dan credential helper). Test SCM read-only memakai service `EventLog`; test yang mengubah service dijalankan manual sebagai Administrator. GUI React + shadCN (dark/light) telah diverifikasi runtime memuat `data/services.json` (11 service), context menu, browse picker, dan theme toggle melalui WebView2 remote debugging. Updater telah diverifikasi end-to-end dengan repository Git lokal: list, check, update fast-forward, dan blokir migration. Portable release dibuat oleh `Build-Release.ps1`; installer NSIS didokumentasikan dan membutuhkan Tauri CLI.
 
 Catatan rilis: instalasi MSI/NSIS belum ditandatangani dan belum dijalankan pada pipeline ini; artefak utama yang diverifikasi adalah binary release + ZIP portable.
 
@@ -138,7 +138,7 @@ Seluruh inti fungsional tersebut dapat dipindahkan ke Rust. Yang berubah secara 
 ### 5.1 Struktur Workspace
 
 ```
-service-manager-rs/
+ServiceManager/
 ├─ Cargo.toml                  # workspace
 ├─ crates/
 │  ├─ sm-core/                 # domain model, aturan bisnis, dependency sort
