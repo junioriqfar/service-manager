@@ -7,7 +7,7 @@ use sm_core::ToggleMode;
 
 use crate::credential::{store_credential, verify_remote, CredentialRequest, GitCredentialSink};
 use crate::ip::{app_allowed_for_ip, client_ip_from_env, ip_allowed};
-use crate::registry::{load_config, save_config, AppConfig, PackageManager, Preset};
+use crate::registry::{load_config, save_config, AppConfig, PackageManager, Preset, UpdaterConfig};
 use crate::runner::{Runner, SystemRunner};
 use crate::scan::{discover_projects, ProjectInfo};
 use crate::state::load_state;
@@ -131,6 +131,18 @@ pub fn run(values: &[String]) -> i32 {
 
 fn default_config_path() -> PathBuf {
     ConfigPaths::detect().projects_path()
+}
+
+/// Terapkan `settings.json` (jika ada) ke config registry. `settings.json`
+/// authoritative; field `settings` di `projects.json` hanya fallback.
+fn apply_settings(config_path: &Path, config: &mut UpdaterConfig) -> Result<(), String> {
+    let path = crate::settings::settings_path_for(config_path);
+    if let Some(settings) =
+        crate::settings::load_settings(&path).map_err(|error| error.to_string())?
+    {
+        config.settings = settings.to_updater_settings();
+    }
+    Ok(())
 }
 
 fn take_value(values: &[String], index: &mut usize, flag: &str) -> Result<String, String> {
@@ -444,6 +456,10 @@ fn app_add(values: &[String]) -> i32 {
             return 1;
         }
     };
+    if let Err(error) = apply_settings(&config_path, &mut config) {
+        eprintln!("{error}");
+        return 1;
+    }
     if config.settings.log_dir.trim().is_empty() {
         config.settings.log_dir = crate::trigger::default_log_dir(&config_path)
             .to_string_lossy()
@@ -985,13 +1001,17 @@ fn app_test(values: &[String]) -> i32 {
         }
         index += 1;
     }
-    let config = match load_config(&config_path) {
+    let mut config = match load_config(&config_path) {
         Ok(config) => config,
         Err(error) => {
             eprintln!("{error}");
             return 1;
         }
     };
+    if let Err(error) = apply_settings(&config_path, &mut config) {
+        eprintln!("{error}");
+        return 1;
+    }
     let Some(app) = config.find(&id) else {
         eprintln!("App '{id}' tidak ditemukan.");
         return 1;
@@ -1311,13 +1331,17 @@ fn run_logs(values: &[String]) -> i32 {
         index += 1;
     }
 
-    let config = match load_config(&config_path) {
+    let mut config = match load_config(&config_path) {
         Ok(config) => config,
         Err(error) => {
             eprintln!("{error}");
             return 1;
         }
     };
+    if let Err(error) = apply_settings(&config_path, &mut config) {
+        eprintln!("{error}");
+        return 1;
+    }
 
     if id.is_empty() {
         let log_dir = if config.settings.log_dir.trim().is_empty() {
@@ -1918,5 +1942,44 @@ mod tests {
         let settings = ProjectsFile::default();
         let dir = log_dir(&settings, std::path::Path::new(r"C:\app\projects.json"));
         assert_eq!(dir, PathBuf::from(r"C:\app\logs"));
+    }
+
+    #[test]
+    fn apply_settings_overrides_legacy_paths_and_log_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let mut config = UpdaterConfig::default();
+        let settings_path = crate::settings::settings_path_for(&config_path);
+
+        let mut settings = crate::settings::Settings {
+            tools: crate::settings::Tools {
+                git: crate::settings::ToolPath::new(r"C:\settings\git.exe"),
+                ..crate::settings::Tools::default()
+            },
+            ..crate::settings::Settings::default()
+        };
+        settings.updater.log_dir = r"C:\settings\logs".into();
+        crate::settings::save_settings(&settings_path, &settings).unwrap();
+
+        apply_settings(&config_path, &mut config).unwrap();
+        assert_eq!(config.settings.git_path, r"C:\settings\git.exe");
+        assert_eq!(config.settings.log_dir, r"C:\settings\logs");
+    }
+
+    #[test]
+    fn apply_settings_keeps_legacy_values_when_file_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let mut config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: r"C:\legacy\git.exe".into(),
+                ..crate::registry::UpdaterSettings::default()
+            },
+            ..UpdaterConfig::default()
+        };
+
+        apply_settings(&config_path, &mut config).unwrap();
+        assert_eq!(config.settings.git_path, r"C:\legacy\git.exe");
+        assert!(!crate::settings::settings_path_for(&config_path).exists());
     }
 }

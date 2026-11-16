@@ -202,3 +202,122 @@ export interface RemoteTriggerResult {
   output: string;
 }
 
+export interface ToolPath {
+  path: string;
+  version: string;
+  detectedAt: string;
+}
+
+export interface ApacheToolPath extends ToolPath {
+  root: string;
+  config: string;
+}
+
+export interface SettingsTools {
+  git: ToolPath;
+  php: ToolPath;
+  composer: ToolPath;
+  node: ToolPath;
+  npm: ToolPath;
+  pnpm: ToolPath;
+  yarn: ToolPath;
+  bun: ToolPath;
+  go: ToolPath;
+  apache: ApacheToolPath;
+  nssm: ToolPath;
+}
+
+export interface UpdateTimeouts {
+  preflightSeconds: number;
+  fetchSeconds: number;
+  toolSeconds: number;
+  cloneSeconds: number;
+}
+
+export interface UpdaterDefaults {
+  logDir: string;
+  maxConcurrentUpdates: number;
+  timeouts: UpdateTimeouts;
+  logRetentionDays: number;
+}
+
+export interface SettingsTrigger {
+  allowedClientIPs: string[];
+  allowLocal: boolean;
+}
+
+export interface PrivilegedExecution {
+  mode: string;
+  taskName: string;
+  userId: string;
+  logonType: string;
+}
+
+export interface Settings {
+  version: number;
+  tools: SettingsTools;
+  updater: UpdaterDefaults;
+  trigger: SettingsTrigger;
+  privilegedExecution: PrivilegedExecution;
+  variables: Record<string, string>;
+}
+
+export interface ToolPathIssue {
+  tool: string;
+  path: string;
+  message: string;
+}
+
+export interface SettingsDiagnostics {
+  missingRequiredTools: string[];
+  invalidPaths: ToolPathIssue[];
+  taskInstalled: boolean;
+  taskMessage: string;
+  taskError: string | null;
+  legacyFallback: boolean;
+}
+
+export interface SettingsView {
+  settings: Settings;
+  legacyFallback: boolean;
+  diagnostics: SettingsDiagnostics;
+}
+
+export interface ToolDetection {
+  tool: string;
+  found: boolean;
+  success: boolean;
+  path: string;
+  version: string;
+  root: string;
+  config: string;
+  message: string;
+}
+
+export interface ToolTest {
+  tool: string;
+  path: string;
+  version: string;
+  success: boolean;
+  output: string;
+  error: string | null;
+}
+
+export interface TaskStatus {
+  taskName: string;
+  installed: boolean;
+  state: string;
+  runLevel: string;
+  user: string;
+  logonType: string;
+  lastRun: string;
+  lastResult: number;
+  error: string | null;
+}
+
+export interface TaskOperation {
+  success: boolean;
+  exitCode: number;
+  output: string;
+}
+

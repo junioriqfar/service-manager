@@ -19,6 +19,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - GUI tab **Remote** di `sm-gui` untuk trigger via SSH dengan output live (Windows client), mendukung SSH key/agent atau password (DPAPI).
 - Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Run, Check, Test, Log, Edit, Delete.
 - GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, dan log.
+- GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
 - Wrapper elevated `scripts/Invoke-UpdaterTask.ps1` + Scheduled Task `ServiceManager-Updater`.
 - Diagnosa headless `sm-diag`.
 
@@ -55,19 +56,21 @@ ServiceManager/
 │  ├─ sm-core/                  # model, validasi, ordering, update plan
 │  ├─ sm-config/                # services.json, projects.json, backup
 │  ├─ sm-win/                   # SCM, NSSM/native, discovery, DPAPI
-│  ├─ sm-gui/                   # Tauri + React/shadCN UI (Services/Updater/Remote)
+│  ├─ sm-gui/                   # Tauri + React/shadCN UI (Services/Updater/Remote/Settings)
 │  ├─ sm-trigger/               # client SSH cross-platform
 │  └─ sm-updater/               # registry updater + trigger + credential helper
 ├─ scripts/                     # wrapper Scheduled Task elevated
 ├─ data/
 │  ├─ services.json             # config runtime (tidak di-commit)
-│  └─ projects.json             # config runtime (tidak di-commit)
+│  ├─ projects.json             # config runtime (tidak di-commit)
+│  └─ settings.json             # settings runtime (tidak di-commit)
 ├─ backup/                      # backup config (tidak di-commit)
 ├─ logs/                        # log aplikasi (tidak di-commit)
 ├─ dist/                        # hasil build portable (tidak di-commit)
 ├─ docs/                        # dokumentasi
 ├─ services.example.json        # contoh services.json
-└─ projects.example.json        # contoh projects.json
+├─ projects.example.json        # contoh projects.json
+└─ settings.example.json        # contoh settings.json
 ```
 
 ## Mulai Cepat
@@ -113,7 +116,7 @@ Atau gunakan `Build-Release.ps1` yang menjalankan `npm ci`, `npm run build`, car
 
 - Skema `services.json`: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 - Pola scheduler global dan queue per project: [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md)
-- Config runtime (`data/services.json`, `data/projects.json`, `logs/`, `backup/`) **tidak di-commit** karena berisi path/internal server.
+- Config runtime (`data/services.json`, `data/projects.json`, `data/settings.json`, `logs/`, `backup/`) **tidak di-commit** karena berisi path/internal server.
 - Backup otomatis dan export manual semuanya disimpan di `backup/`.
 
 ## Service Global dan Queue
@@ -179,19 +182,20 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **254 unit test** lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **284 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 
 | Dokumen | Isi |
 | --- | --- |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Skema `services.json`, `projects.json`, `trigger-client.json`, backup |
-| [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI Services/Updater/Remote, tema, batch async, build frontend |
+| [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI Services/Updater/Remote/Settings, tema, batch async, build frontend |
 | [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md) | Cronical multi-project, queue per project |
 | [docs/RUST-UPDATER.md](docs/RUST-UPDATER.md) | Panduan updater registry, toolchain, service lifecycle, trigger |
 | [docs/RUST-UPDATER-PLAN.md](docs/RUST-UPDATER-PLAN.md) | Inventaris fitur, backlog, dan roadmap updater |
 | [docs/RUST-UPDATER-REGISTRY-PLAN.md](docs/RUST-UPDATER-REGISTRY-PLAN.md) | Registry, toolchain, service lifecycle, SSH trigger, IP whitelist |
 | [docs/RUST-TRIGGER.md](docs/RUST-TRIGGER.md) | Client SSH cross-platform dan wrapper Scheduled Task |
+| [docs/RUST-SETTINGS-PLAN.md](docs/RUST-SETTINGS-PLAN.md) | Rencana settings.json, tool paths, propagasi PHP/Apache, privileged task |
 | [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log, SSH trigger, allowlist IP |
 | [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md) | Build, installer, CI, deployment |
 | [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md) | Catatan historis migrasi ke Rust |

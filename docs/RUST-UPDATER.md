@@ -115,6 +115,27 @@ Beberapa tombol utama memiliki tooltip.
 
 Tidak ada polling; semua aksi dipicu tombol.
 
+## Global Settings (`data/settings.json`)
+
+Path toolchain dan default updater dibaca dari `data/settings.json` bila file ada.
+Template: [settings.example.json](../settings.example.json); file runtime
+`data/settings.json` tidak di-commit.
+
+- `tools` menyimpan path Git, PHP, Composer, Node, npm, pnpm, yarn, Bun, Go,
+  Apache (`root`/`config`), dan NSSM. `version`/`detectedAt` diisi deteksi tool.
+- `updater` menyimpan `logDir`, `maxConcurrentUpdates`, timeout, dan retensi log.
+- `privilegedExecution` menyimpan `mode`, `taskName`, `userId`, dan `logonType` untuk
+  Scheduled Task di tab Settings. `trigger` dan `variables` disiapkan untuk fase berikutnya.
+- Path wajib: Git, PHP, Composer, npm. Tool lain opsional.
+- Password/token plaintext ditolak saat load/save.
+- Tab **Settings** di GUI dapat mengisi path tool, menjalankan Auto-detect/Test,
+  mengatur default updater, serta Install/Repair/Remove/Test Scheduled Task.
+
+Jika `settings.json` belum ada, `sm-updater` memakai `settings`/`trigger` lama di
+`projects.json` sebagai fallback **tanpa menulis** file baru. Begitu `settings.json`
+ada, file itu authoritative untuk path toolchain dan `logDir`; migrasi eksplisit
+dilakukan pada fase berikutnya.
+
 ## Registry v2 (`data/projects.json`)
 
 ```json

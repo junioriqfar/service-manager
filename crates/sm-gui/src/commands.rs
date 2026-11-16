@@ -162,7 +162,8 @@ pub async fn pick_executable(
 ) -> Result<Option<String>, String> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
-        let mut dialog = rfd::FileDialog::new().add_filter("Executable", &["exe"]);
+        let mut dialog =
+            rfd::FileDialog::new().add_filter("Programs", &["exe", "bat", "cmd", "com"]);
         if let Some(directory) = dialog_directory(current.as_deref()) {
             dialog = dialog.set_directory(directory);
         }

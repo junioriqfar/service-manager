@@ -3,6 +3,7 @@
 mod batch;
 mod commands;
 mod remote;
+mod settings;
 mod state;
 mod updater;
 mod util;
@@ -53,6 +54,14 @@ fn main() {
             remote::preview_remote_trigger,
             remote::test_remote_ssh,
             remote::run_remote_trigger,
+            settings::load_settings_view,
+            settings::save_settings_view,
+            settings::detect_tool,
+            settings::test_tool,
+            settings::task_status,
+            settings::install_task,
+            settings::remove_task,
+            settings::test_task,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Service Manager");
@@ -75,12 +84,13 @@ mod ui_tests {
     const UPDATER_VIEW: &str = include_str!("../ui/src/components/updater-view.tsx");
     const UPDATER_FORM: &str = include_str!("../ui/src/components/updater-form-dialog.tsx");
     const REMOTE_VIEW: &str = include_str!("../ui/src/components/remote-trigger-view.tsx");
+    const SETTINGS_VIEW: &str = include_str!("../ui/src/components/settings-view.tsx");
     const HINT: &str = include_str!("../ui/src/components/hint.tsx");
     const TOOLTIP: &str = include_str!("../ui/src/components/ui/tooltip.tsx");
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{HINT}\n{TOOLTIP}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{HINT}\n{TOOLTIP}"
         )
     }
 
@@ -302,5 +312,85 @@ mod ui_tests {
         assert!(APP.contains("Hint"));
         assert!(HINT.contains("TooltipTrigger"));
         assert!(TOOLTIP.contains("TooltipPrimitive"));
+    }
+
+    #[test]
+    fn settings_ui_has_toolchain_and_privileged_task_actions() {
+        for label in [
+            "Settings",
+            "Toolchain",
+            "Updater defaults",
+            "Privileged Execution",
+            "Diagnostics",
+            "Git",
+            "PHP",
+            "Composer",
+            "Node.js",
+            "npm",
+            "pnpm",
+            "Yarn",
+            "Bun",
+            "Go",
+            "Apache",
+            "NSSM",
+            "Auto-detect",
+            "Browse…",
+            "Test",
+            "Save Settings",
+            "Reload",
+            "Install Task",
+            "Repair Task",
+            "Remove Task",
+            "Test Task",
+            "Legacy fallback",
+            "Missing required tools",
+            "Invalid tool path",
+            "Scheduled Task not installed",
+        ] {
+            assert!(
+                SETTINGS_VIEW.contains(label),
+                "missing settings view label: {label}"
+            );
+        }
+        for command in [
+            "load_settings_view",
+            "save_settings_view",
+            "detect_tool",
+            "test_tool",
+            "task_status",
+            "install_task",
+            "remove_task",
+            "test_task",
+            "pick_executable",
+            "pick_directory",
+        ] {
+            assert!(
+                SETTINGS_VIEW.contains(command),
+                "missing settings command: {command}"
+            );
+        }
+        for field in [
+            "logDir",
+            "maxConcurrentUpdates",
+            "preflightSeconds",
+            "fetchSeconds",
+            "toolSeconds",
+            "cloneSeconds",
+            "logRetentionDays",
+            "taskName",
+            "userId",
+            "logonType",
+        ] {
+            assert!(
+                SETTINGS_VIEW.contains(field),
+                "missing settings field: {field}"
+            );
+        }
+        assert!(SETTINGS_VIEW.contains("lucide-react"));
+        assert!(APP.contains("SettingsView"));
+        assert!(APP.contains("setView(\"settings\")"));
+        assert!(APP.contains("view === \"settings\""));
+        assert!(APP.contains("admin={admin}"));
+        assert!(APP.contains("lucide-react"));
     }
 }

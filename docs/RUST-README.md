@@ -160,7 +160,7 @@ sm-updater status
 sm-updater logs kasirin
 ```
 
-Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state, Git fast-forward, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, clone-on-first-run, service lifecycle (stop/restart/start), health check HTTP, webhook, dan credential helper. Mode lama `list/check/update --project` tetap tersedia. Panduan: [RUST-UPDATER.md](RUST-UPDATER.md). Roadmap: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md). Registry + trigger: [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md). Client SSH: [RUST-TRIGGER.md](RUST-TRIGGER.md).
+Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state, Git fast-forward, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, clone-on-first-run, service lifecycle (stop/restart/start), health check HTTP, webhook, dan credential helper. Mode lama `list/check/update --project` tetap tersedia. Panduan: [RUST-UPDATER.md](RUST-UPDATER.md). Roadmap: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md). Registry + trigger: [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md). Client SSH: [RUST-TRIGGER.md](RUST-TRIGGER.md). Settings/tool paths: [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md).
 
 ## Security Hardening (Phase 5)
 

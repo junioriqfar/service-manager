@@ -1,12 +1,15 @@
 # Runtime configuration - machine specific, may contain internal paths/IPs
 services.json
 projects.json
+settings.json
 services-export-*.json
 services-broken-*.json
 services.json.bak-*
 projects.json.bak-*
+settings.json.bak-*
 data/services.json
 data/projects.json
+data/settings.json
 data/services-export-*.json
 data/*.bak-*
 data/updater-state.json

@@ -10,6 +10,7 @@ Trigger.
 | --- | --- |
 | Config service | `<folder config>\data\services.json` |
 | Config project | `<folder config>\data\projects.json` |
+| Config settings global | `<folder config>\data\settings.json` |
 | Config Remote Trigger | `<folder config>\data\trigger-client.json` |
 | State updater | `<folder config>\data\updater-state.json` |
 | Lock updater | `<folder config>\data\updater.lock` |
@@ -165,6 +166,61 @@ Saat **Start All**, service diurutkan secara topologi berdasarkan `dependencies`
 | `manual` | Manual |
 
 Mode `delayed` diterapkan melalui Windows API `ChangeServiceConfig2` (`SERVICE_CONFIG_DELAYED_AUTO_START_INFO`).
+
+## Settings Global (`settings.json`)
+
+`data/settings.json` menyimpan path toolchain dan default updater. Contoh:
+[settings.example.json](../settings.example.json). File runtime tidak di-commit
+(masuk `.gitignore`).
+
+```json
+{
+  "version": 1,
+  "tools": {
+    "git": { "path": "C:\\Program Files\\Git\\cmd\\git.exe", "version": "", "detectedAt": "" },
+    "php": { "path": "C:\\path\\to\\php.exe", "version": "", "detectedAt": "" },
+    "apache": {
+      "path": "C:\\path\\to\\apache\\bin\\httpd.exe",
+      "root": "C:\\path\\to\\apache",
+      "config": "conf/httpd.conf",
+      "version": "",
+      "detectedAt": ""
+    }
+  },
+  "updater": {
+    "logDir": "C:\\tools\\ServiceManager\\logs",
+    "maxConcurrentUpdates": 1,
+    "timeouts": {
+      "preflightSeconds": 30,
+      "fetchSeconds": 120,
+      "toolSeconds": 300,
+      "cloneSeconds": 600
+    },
+    "logRetentionDays": 30
+  },
+  "trigger": { "allowedClientIPs": ["127.0.0.1", "::1"], "allowLocal": true },
+  "privilegedExecution": {
+    "mode": "scheduled-task",
+    "taskName": "ServiceManager-Updater",
+    "userId": "",
+    "logonType": "Interactive"
+  },
+  "variables": {}
+}
+```
+
+Catatan:
+
+- Tool yang wajib diisi: `git`, `php`, `composer`, `npm`. `node`, `pnpm`, `yarn`,
+  `bun`, `go`, `apache`, dan `nssm` opsional.
+- `version` dan `detectedAt` diisi oleh deteksi tool.
+- Password/token plaintext tidak diizinkan; password tetap memakai DPAPI di file
+  terpisah.
+- Jika file belum ada, `sm-updater` memakai `settings`/`trigger` lama di
+  `projects.json` sebagai fallback tanpa menulis `settings.json`. File baru dibuat
+  hanya oleh aksi simpan/migrasi eksplisit.
+- Di GUI, tab **Settings** membaca nilai efektif (fallback legacy ditandai di
+  Diagnostics) dan menulis `data/settings.json` hanya saat **Save Settings**.
 
 ## Project Registry (`projects.json` v2)
 

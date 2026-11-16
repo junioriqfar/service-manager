@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "tools": {
+    "git": {
+      "path": "C:\\Program Files\\Git\\cmd\\git.exe",
+      "version": "",
+      "detectedAt": ""
+    },
+    "php": {
+      "path": "C:\\path\\to\\php.exe",
+      "version": "",
+      "detectedAt": ""
+    },
+    "composer": {
+      "path": "C:\\path\\to\\composer.bat",
+      "version": "",
+      "detectedAt": ""
+    },
+    "node": {
+      "path": "C:\\Program Files\\nodejs\\node.exe",
+      "version": "",
+      "detectedAt": ""
+    },
+    "npm": {
+      "path": "C:\\Program Files\\nodejs\\npm.cmd",
+      "version": "",
+      "detectedAt": ""
+    },
+    "pnpm": {
+      "path": "",
+      "version": "",
+      "detectedAt": ""
+    },
+    "yarn": {
+      "path": "",
+      "version": "",
+      "detectedAt": ""
+    },
+    "bun": {
+      "path": "C:\\Users\\your-user\\.bun\\bin\\bun.exe",
+      "version": "",
+      "detectedAt": ""
+    },
+    "go": {
+      "path": "",
+      "version": "",
+      "detectedAt": ""
+    },
+    "apache": {
+      "path": "C:\\path\\to\\apache\\bin\\httpd.exe",
+      "root": "C:\\path\\to\\apache",
+      "config": "conf/httpd.conf",
+      "version": "",
+      "detectedAt": ""
+    },
+    "nssm": {
+      "path": "C:\\tools\\nssm\\nssm.exe",
+      "version": "",
+      "detectedAt": ""
+    }
+  },
+  "updater": {
+    "logDir": "C:\\tools\\ServiceManager\\logs",
+    "maxConcurrentUpdates": 1,
+    "timeouts": {
+      "preflightSeconds": 30,
+      "fetchSeconds": 120,
+      "toolSeconds": 300,
+      "cloneSeconds": 600
+    },
+    "logRetentionDays": 30
+  },
+  "trigger": {
+    "allowedClientIPs": [
+      "127.0.0.1",
+      "::1"
+    ],
+    "allowLocal": true
+  },
+  "privilegedExecution": {
+    "mode": "scheduled-task",
+    "taskName": "ServiceManager-Updater",
+    "userId": "DOMAIN\\user",
+    "logonType": "Interactive"
+  },
+  "variables": {}
+}

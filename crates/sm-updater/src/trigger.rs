@@ -9,6 +9,7 @@ use crate::lock::UpdateLock;
 use crate::registry::UpdaterConfig;
 use crate::runner::Runner;
 use crate::services::{ServiceControl, WindowsServiceControl};
+use crate::settings::{effective_settings, settings_path_for};
 use crate::state::{load_state, mark, save_state};
 use crate::update::UpdateOptions;
 
@@ -72,10 +73,20 @@ pub fn run_registry_with(
     let mut state = load_state(config_path);
     let mut outcomes = Vec::new();
 
-    let log_dir = if config.settings.log_dir.trim().is_empty() {
+    // settings.json authoritative jika ada; kalau tidak, fallback ke
+    // settings/trigger lama di projects.json tanpa menulis file baru.
+    let effective = effective_settings(
+        &settings_path_for(config_path),
+        &config.settings,
+        &config.trigger,
+    )
+    .map_err(|error| error.to_string())?;
+    let updater_settings = effective.to_updater_settings();
+
+    let log_dir = if updater_settings.log_dir.trim().is_empty() {
         default_log_dir(config_path)
     } else {
-        PathBuf::from(config.settings.log_dir.trim())
+        PathBuf::from(updater_settings.log_dir.trim())
     };
 
     if let Some(requested) = &options.app {
@@ -123,7 +134,7 @@ pub fn run_registry_with(
         let started = Instant::now();
         let outcome = update_app(
             app,
-            &config.settings,
+            &updater_settings,
             &log_dir,
             runner,
             services,
@@ -156,7 +167,7 @@ pub fn run_registry_with(
         });
 
         if let Some(commit) = head_commit(
-            &config.settings.git_path,
+            &updater_settings.git_path,
             Path::new(&app.local_path),
             runner,
         ) {
@@ -244,24 +255,34 @@ mod tests {
 
     struct FakeRunner {
         head_reads: AtomicUsize,
+        programs: std::sync::Mutex<Vec<String>>,
     }
 
     impl FakeRunner {
         fn new() -> Self {
             Self {
                 head_reads: AtomicUsize::new(0),
+                programs: std::sync::Mutex::new(Vec::new()),
             }
+        }
+
+        fn programs(&self) -> Vec<String> {
+            self.programs.lock().unwrap().clone()
         }
     }
 
     impl Runner for FakeRunner {
         fn run(
             &self,
-            _program: &Path,
+            program: &Path,
             args: &[String],
             _cwd: &Path,
             _timeout: Duration,
         ) -> Result<Output, RunnerError> {
+            self.programs
+                .lock()
+                .unwrap()
+                .push(program.to_string_lossy().to_string());
             let first = args.first().map(String::as_str).unwrap_or("");
             let stdout = match first {
                 "status" => String::new(),
@@ -429,5 +450,92 @@ mod tests {
         assert_eq!(state.apps["demo"].status, "updated");
         assert_eq!(state.apps["demo"].last_commit, "bbbb2222");
         assert!(!lock_path(&config_path).exists());
+    }
+
+    #[test]
+    fn settings_json_overrides_legacy_paths_and_log_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+
+        let legacy_git = temp.path().join("legacy-git.exe");
+        let settings_git = temp.path().join("settings-git.exe");
+        std::fs::write(&legacy_git, b"fake").unwrap();
+        std::fs::write(&settings_git, b"fake").unwrap();
+        let legacy_logs = temp.path().join("legacy-logs");
+        let settings_logs = temp.path().join("settings-logs");
+
+        let config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: legacy_git.to_string_lossy().to_string(),
+                php_path: temp.path().join("php.exe").to_string_lossy().to_string(),
+                composer_path: temp
+                    .path()
+                    .join("composer.bat")
+                    .to_string_lossy()
+                    .to_string(),
+                npm_path: temp.path().join("npm.cmd").to_string_lossy().to_string(),
+                log_dir: legacy_logs.to_string_lossy().to_string(),
+                ..crate::registry::UpdaterSettings::default()
+            },
+            trigger: crate::registry::TriggerSettings {
+                allowed_client_ips: Vec::new(),
+                allow_local: true,
+            },
+            apps: vec![AppConfig {
+                id: "demo".into(),
+                name: "Demo".into(),
+                repo_url: "https://example.com/demo.git".into(),
+                local_path: project.to_string_lossy().to_string(),
+                branch: "main".into(),
+                preset: Preset::Static,
+                composer: sm_core::ToggleMode::Never,
+                package_manager: crate::registry::PackageManager::None,
+                package_install: sm_core::ToggleMode::Never,
+                build: sm_core::ToggleMode::Never,
+                ..AppConfig::default()
+            }],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let mut global = crate::settings::Settings {
+            tools: crate::settings::Tools {
+                git: crate::settings::ToolPath::new(settings_git.to_string_lossy().to_string()),
+                ..crate::settings::Tools::default()
+            },
+            ..crate::settings::Settings::default()
+        };
+        global.updater.log_dir = settings_logs.to_string_lossy().to_string();
+        crate::settings::save_settings(&temp.path().join("data/settings.json"), &global).unwrap();
+
+        let runner = FakeRunner::new();
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &runner,
+            &NoServices,
+            RunOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].status, "updated");
+        let programs = runner.programs();
+        assert!(!programs.is_empty());
+        let expected_git = settings_git.to_string_lossy().to_string();
+        assert!(
+            programs.iter().all(|program| program == &expected_git),
+            "all git calls must use settings.json path: {programs:?}"
+        );
+        assert!(settings_logs.is_dir());
+        assert!(std::fs::read_dir(&settings_logs).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with("project-update-")));
+        assert!(!legacy_logs.exists());
     }
 }

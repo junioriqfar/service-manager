@@ -9,6 +9,7 @@ import {
   RadioTower,
   RotateCcw,
   ServerCog,
+  Settings as SettingsIcon,
   Square,
   Upload,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { RemoteTriggerView } from "@/components/remote-trigger-view";
 import { DeleteServiceDialog, InstallServiceDialog } from "@/components/service-action-dialogs";
 import { ServiceFormDialog } from "@/components/service-form-dialog";
 import { ServiceTable } from "@/components/service-table";
+import { SettingsView } from "@/components/settings-view";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UpdaterView } from "@/components/updater-view";
@@ -60,7 +62,7 @@ function App() {
 }
 
 function ServiceManager() {
-  const [view, setView] = useState<"services" | "updater" | "remote">("services");
+  const [view, setView] = useState<"services" | "updater" | "remote" | "settings">("services");
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [admin, setAdmin] = useState<boolean | null>(null);
@@ -616,6 +618,18 @@ function ServiceManager() {
               <RadioTower />
               Remote
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={view === "settings" ? "secondary" : "ghost"}
+              onClick={() => setView("settings")}
+              role="tab"
+              aria-selected={view === "settings"}
+              title="Settings: toolchain paths, updater defaults, and privileged execution"
+            >
+              <SettingsIcon />
+              Settings
+            </Button>
           </div>
 
           <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-2">
@@ -697,7 +711,9 @@ function ServiceManager() {
           </div>
         </header>
         <main className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-          {view === "updater" ? (
+          {view === "settings" ? (
+            <SettingsView admin={admin} />
+          ) : view === "updater" ? (
             <UpdaterView />
           ) : view === "remote" ? (
             <RemoteTriggerView />
@@ -737,18 +753,22 @@ function ServiceManager() {
 
         <footer className="flex items-center justify-between gap-4 border-t bg-card px-4 py-1.5 text-xs">
           <span>
-            {view === "updater"
-              ? "Updater ready"
-              : view === "remote"
-                ? "Remote trigger ready"
-                : statusText}
+            {view === "settings"
+              ? "Settings ready"
+              : view === "updater"
+                ? "Updater ready"
+                : view === "remote"
+                  ? "Remote trigger ready"
+                  : statusText}
           </span>
           <span className="truncate text-muted-foreground">
-            {view === "updater"
-              ? "Manual trigger only — GUI or sm-trigger over SSH"
-              : view === "remote"
-                ? "SSH client — keys/agent only, no background polling"
-                : counts}
+            {view === "settings"
+              ? "Changes are written only when you click Save Settings"
+              : view === "updater"
+                ? "Manual trigger only — GUI or sm-trigger over SSH"
+                : view === "remote"
+                  ? "SSH client — keys/agent only, no background polling"
+                  : counts}
           </span>
         </footer>
       </div>

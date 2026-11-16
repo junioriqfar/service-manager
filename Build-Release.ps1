@@ -69,10 +69,12 @@ try {
     Copy-Item -LiteralPath (Join-Path $root 'target\release\sm-diag.exe') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $repoRoot 'services.example.json') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $repoRoot 'projects.example.json') -Destination $stage
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'settings.example.json') -Destination $stage
     $dataStage = Join-Path $stage 'data'
     New-Item -ItemType Directory -Path $dataStage -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'services.example.json') -Destination (Join-Path $dataStage 'services.example.json')
     Copy-Item -LiteralPath (Join-Path $repoRoot 'projects.example.json') -Destination (Join-Path $dataStage 'projects.example.json')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'settings.example.json') -Destination (Join-Path $dataStage 'settings.example.json')
     New-Item -ItemType Directory -Path (Join-Path $stage 'backup') -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $stage 'logs') -Force | Out-Null
 
@@ -98,14 +100,15 @@ Service Manager RS $version - Portable
 
 1. Salin data\services.example.json menjadi data\services.json dan sesuaikan path.
 2. Salin data\projects.example.json menjadi data\projects.json bila memakai updater.
-3. Letakkan nssm.exe di C:\tools\nssm\nssm.exe (atau ..\nssm\nssm.exe).
-4. Jalankan sm-gui.exe sebagai Administrator.
-5. Updater registry: sm-updater.exe app list / run --all / run --all --check.
-6. Trigger SSH dari client lain: sm-trigger.exe --host HOST --user USER --all.
-7. Elevated trigger: daftarkan Scheduled Task dengan scripts\Install-UpdaterTask.ps1 (Administrator).
-8. Simpan kredensial Git: sm-updater.exe credential store --help
-9. Diagnosa: sm-diag.exe
-10. Backup config tersimpan di folder backup; log aplikasi di folder logs.
+3. Salin data\settings.example.json menjadi data\settings.json lalu sesuaikan path tool.
+4. Letakkan nssm.exe di C:\tools\nssm\nssm.exe (atau ..\nssm\nssm.exe).
+5. Jalankan sm-gui.exe sebagai Administrator.
+6. Updater registry: sm-updater.exe app list / run --all / run --all --check.
+7. Trigger SSH dari client lain: sm-trigger.exe --host HOST --user USER --all.
+8. Elevated trigger: daftarkan Scheduled Task dengan scripts\Install-UpdaterTask.ps1 (Administrator).
+9. Simpan kredensial Git: sm-updater.exe credential store --help
+10. Diagnosa: sm-diag.exe
+11. Backup config tersimpan di folder backup; log aplikasi di folder logs.
 
 Config dibaca dari <folder exe>\data. Set SERVICE_MANAGER_HOME untuk folder lain.
 Dokumentasi ada di folder docs.
