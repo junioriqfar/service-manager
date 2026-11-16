@@ -84,6 +84,10 @@ Versi 1 tetap dibaca. `scanRoots`/`projects` lama dapat dimigrasikan menjadi `ap
     "phpPath": "C:\\laragon\\bin\\php\\php.exe",
     "composerPath": "C:\\laragon\\bin\\composer\\composer.bat",
     "npmPath": "C:\\Program Files\\nodejs\\npm.cmd",
+    "bunPath": "C:\\Users\\EGOV22\\.bun\\bin\\bun.exe",
+    "pnpmPath": "",
+    "yarnPath": "",
+    "goPath": "C:\\Program Files\\Go\\bin\\go.exe",
     "logDir": "C:\\tools\\ServiceManager\\logs",
     "allowedClientIPs": ["10.255.240.143", "127.0.0.1", "::1"],
     "maxConcurrentUpdates": 1
@@ -102,8 +106,14 @@ Versi 1 tetap dibaca. `scanRoots`/`projects` lama dapat dimigrasikan menjadi `ap
       "branch": "main",
       "credentialProfile": "github-junioriqfar",
       "cloneOnFirstRun": false,
+      "preset": "auto",
       "composer": "auto",
+      "artisan": "auto",
+      "packageManager": "auto",
+      "packageInstall": "auto",
       "build": "auto",
+      "installCommand": "",
+      "buildCommand": "",
       "queueRestart": true,
       "migrationPolicy": "block",
       "preUpdateCommand": "",
@@ -137,7 +147,13 @@ Versi 1 tetap dibaca. `scanRoots`/`projects` lama dapat dimigrasikan menjadi `ap
 | `localPath` | Ya | Folder project atau target clone |
 | `branch` | Ya | Branch yang dipantau |
 | `enabled` | Ya | Ikut trigger atau tidak |
-| `composer`/`build` | Tidak | `auto`, `always`, `never` |
+| `preset` | Tidak | `auto`, `laravel`, `node`, `bun`, `go`, `static`, `custom` |
+| `composer` | Tidak | `auto`, `always`, `never` |
+| `artisan` | Tidak | `auto`, `always`, `never` |
+| `packageManager` | Tidak | `auto`, `npm`, `pnpm`, `yarn`, `bun`, `none` |
+| `packageInstall` | Tidak | `auto`, `always`, `never` |
+| `build` | Tidak | `auto`, `always`, `never` |
+| `installCommand` / `buildCommand` | Tidak | Override perintah manual (mis. Bun `build:win`, Go `make build-windows`) |
 | `queueRestart` | Tidak | Restart queue setelah update |
 
 ### 5.2 Field Trigger
@@ -157,6 +173,70 @@ Format IP yang didukung:
 - IPv6: `::1` atau `2001:db8::/32`
 
 `autoUpdate` per app tidak diperlukan pada fase trigger. App yang `enabled` akan diproses saat `run --all`. Mode `check` tetap tersedia untuk dry-run.
+
+### 5.3 Deteksi Toolchain dan Preset
+
+Framework **bukan penentu utama**. Urutan keputusan:
+
+1. Field eksplisit di registry (`preset`, `packageManager`, `buildCommand`, dst.).
+2. Deteksi lockfile/manifest di folder project.
+3. Preset framework sebagai default.
+4. Default konservatif: jangan jalankan tool yang tidak terdeteksi.
+
+Contoh: Laravel bisa memakai npm, pnpm, yarn, atau bun; Bun bisa menjadi runtime, package manager, sekaligus bundler.
+
+#### Penanda Deteksi
+
+| Penanda | Arti |
+| --- | --- |
+| `composer.json` / `composer.lock` | Composer |
+| `artisan` | Laravel; aktifkan `optimize:clear` dan `queue:restart` |
+| `package-lock.json` | npm |
+| `pnpm-lock.yaml` | pnpm |
+| `yarn.lock` | yarn |
+| `bun.lock` / `bun.lockb` / `bunfig.toml` | Bun |
+| `package.json` tanpa lockfile | Default npm, dengan warning |
+| `go.mod` | Go |
+| `scripts.build` di `package.json` | Ada perintah build standar |
+| `build:win` / `build:web` | Build khusus platform/web; butuh `buildCommand` eksplisit |
+| Tidak ada manifest | Static/no-build; hanya `git pull` |
+| Beberapa lockfile sekaligus | **Ambiguous**; jangan menebak, minta config |
+
+#### Hasil Observasi Project `D:\Projects`
+
+| Project | Stack terdeteksi | Package manager | Build |
+| --- | --- | --- | --- |
+| `PHPProjects\fileshare` | Laravel 13 + Inertia React + Vite | npm (`package-lock.json`) | `npm run build` → `vp build` |
+| `PHPProjects\kasirin` | Laravel 13 + Inertia React + Vite | npm | `npm run build` |
+| `PHPProjects\open-po` | Laravel 13 + Inertia React + Vite | npm | `npm run build` |
+| `BunProjects\opencode-quota` | Bun + TypeScript + Hono + React | bun (`bun.lock`) | `bun run build:win` untuk server, `bun run build:web` untuk web |
+| `NodeProjects\bsi-qris-api` | Node.js >= 22 (CommonJS) | npm | Tidak ada build |
+| `NodeProjects\wa-otp-server` | Node.js >= 20.9 | npm | Tidak ada build |
+| `GoProjects\presensi-sidoarjo-server` | Go 1.26 + PostgreSQL | — | `make build-windows` atau `go build -o build/syncserver.exe .` |
+| `PHPProjects\fortunagarment` | Static HTML | — | Tidak ada build |
+| `PHPProjects\open-po\.opencode` | Tooling internal | — | Bukan app; abaikan |
+
+Catatan:
+
+- `fileshare` memakai script build `vp build` (Vite Plus), jadi updater **tidak boleh** memanggil `vite build` langsung; cukup `npm run build`.
+- `opencode-quota` tidak punya script `build` biasa; build server memakai `build:win` dan build web memakai `build:web`.
+- `bsi-qris-api` dan `wa-otp-server` tidak punya build script; install dependency saja.
+- `presensi-sidoarjo-server` bukan Laravel/Node; gunakan `buildCommand` atau `postUpdateCommand`.
+- `fortunagarment` hanya perlu `git pull`.
+- Beberapa repo bisa sedang dirty; pipeline existing akan skip (status `dirty`).
+
+#### Profil Registry yang Disarankan
+
+| Profil | Field penting | Perintah |
+| --- | --- | --- |
+| Laravel + npm | `preset=laravel`, `composer=auto`, `packageManager=npm`, `build=auto` | composer install, `npm ci`, `npm run build`, artisan |
+| Laravel + bun | `preset=laravel`, `composer=auto`, `packageManager=bun`, `build=auto` | composer install, `bun install --frozen-lockfile`, `bun run build`, artisan |
+| Bun-only | `preset=bun`, `composer=never`, `packageManager=bun`, `buildCommand="bun run build:win"` | `bun install --frozen-lockfile`, build command |
+| Node-only | `preset=node`, `composer=never`, `packageManager=npm`, `build=never` | `npm ci`; restart service |
+| Go | `preset=custom`, `composer=never`, `packageManager=none`, `buildCommand="make build-windows"` | build command; restart service |
+| Static | `preset=static`, `composer=never`, `packageManager=none`, `build=never` | `git pull` saja |
+
+Dengan model ini, aplikasi baru cukup diarahkan ke folder/repo; updater mendeteksi toolchain yang ada, lalu operator dapat mengoreksi lewat field eksplisit jika hasil deteksi ambigu.
 
 ## 6. Fitur yang Akan Dibuat
 
@@ -194,18 +274,34 @@ Format IP yang didukung:
 Pipeline lama dipertahankan:
 
 1. Validasi repo/path/branch.
-2. Cek working tree bersih.
-3. Preflight auth remote.
-4. Fetch + fast-forward.
-5. Blokir migration.
-6. Composer jika perlu.
-7. npm ci/install + build jika perlu.
-8. `php artisan optimize:clear`.
-9. `php artisan queue:restart`.
-10. Pre/post command.
-11. Restart service terpilih (opsional).
-12. Health check (opsional).
-13. Simpan state + log + rollback hint.
+2. **Resolusi toolchain** (explicit → lockfile → preset).
+3. Cek working tree bersih.
+4. Preflight auth remote.
+5. Fetch + fast-forward.
+6. Blokir migration.
+7. Composer jika terdeteksi/diaktifkan.
+8. Package manager install jika terdeteksi/diaktifkan.
+9. Build jika ada script/perintah; skip jika tidak ada.
+10. `php artisan optimize:clear` jika Laravel.
+11. `php artisan queue:restart` jika Laravel + queue.
+12. Pre/post command.
+13. Restart service terpilih (opsional).
+14. Health check (opsional).
+15. Simpan state + log + rollback hint.
+
+Perintah per toolchain:
+
+| Toolchain | Install | Build |
+| --- | --- | --- |
+| Composer | `composer install --no-dev --optimize-autoloader --no-interaction` | — |
+| npm | `npm ci` (lock) / `npm install` | `npm run build` (jika script ada) |
+| pnpm | `pnpm install --frozen-lockfile` | `pnpm run build` |
+| yarn | `yarn install --frozen-lockfile` | `yarn run build` |
+| bun | `bun install --frozen-lockfile` | `bun run build` atau `buildCommand` |
+| Go/custom | — | `buildCommand` (mis. `make build-windows`) |
+| Static | — | — |
+
+Jika `build` tidak ditemukan dan `build=auto`, lewati dengan log. Jika `build=always` tetapi perintah tidak ada, laporkan `failed`.
 
 ### 6.4 State, Riwayat, dan Lock
 
@@ -231,7 +327,8 @@ Data yang disimpan:
 
 ```powershell
 # Registry
-sm-updater app add --id kasirin --name Kasirin --repo https://... --path D:\... --branch main
+sm-updater app add --id kasirin --name Kasirin --repo https://... --path D:\... --branch main `
+  --preset laravel --package-manager npm --build auto
 sm-updater app list
 sm-updater app show kasirin
 sm-updater app edit kasirin --branch develop
@@ -358,13 +455,13 @@ Trigger client (Windows / macOS / Linux)
 
 | Fase | Deliverable | Estimasi |
 | --- | --- | --- |
-| A. Registry & trigger server | Schema v2, migrasi, `app add/list/edit/remove/test`, `run --all`, IP/CIDR allowlist, lock, firewall docs, test | 4-6 hari |
+| A. Registry & trigger server | Schema v2, migrasi, toolchain detection (npm/bun/composer/go/static), `app add/list/edit/remove/test`, `run --all`, IP/CIDR allowlist, lock, firewall docs, test | 5-7 hari |
 | B. Trigger client cross-platform | `sm-trigger` CLI Windows/macOS/Linux + SSH profile + host key + status | 3-5 hari |
 | C. GUI Updater server | Tab, tabel, form registrasi, test, Update All/Check All, status/log | 5-7 hari |
 | D. Integrasi | Restart service, pre/post hook, health check, webhook opsional | 3-5 hari |
 | E. Opsional | GUI client macOS/Linux, Task Scheduler/polling, daemon, rollback | 3-5 hari |
 
-**Total fase inti:** 15-23 person-days; fitur opsional 3-5 hari tambahan.
+**Total fase inti:** 16-24 person-days; fitur opsional 3-5 hari tambahan.
 
 ## 11. Kriteria Penerimaan
 
@@ -374,6 +471,9 @@ Trigger client (Windows / macOS / Linux)
 - [ ] Windows Firewall membatasi port SSH hanya untuk IP trigger.
 - [ ] Trigger tidak melakukan polling; hanya satu kali cek/update.
 - [ ] App tanpa perubahan tidak diubah.
+- [ ] Deteksi Laravel+npm, Bun-only, Node-only, Go, dan static berjalan sesuai profil.
+- [ ] Ambiguous lockfile (mis. npm + bun) ditolak dan minta config eksplisit.
+- [ ] `buildCommand`/`installCommand` override dihormati.
 - [ ] Working tree kotor/branch salah/migration baru tidak diupdate otomatis.
 - [ ] Satu trigger memproses semua app enabled dengan lock.
 - [ ] State/log per app tersedia di CLI dan GUI.
@@ -401,7 +501,9 @@ Trigger client (Windows / macOS / Linux)
 4. Apakah `allowedClientIPs` perlu CIDR atau cukup IP tunggal?
 5. Apakah ada lebih dari satu server tujuan (profil server di client)?
 6. Apakah clone repo otomatis diperlukan untuk app baru?
-7. Apakah service queue perlu direstart selain `php artisan queue:restart`?
+7. Apakah `opencode-quota` harus build `build:win` (server exe) atau `build:web` (frontend)?
+8. Apakah project Go (`presensi-sidoarjo-server`) masuk scope update otomatis, atau hanya Laravel/Node/Bun?
+9. Apakah service queue perlu direstart selain `php artisan queue:restart`?
 
 ## 14. Rekomendasi
 
