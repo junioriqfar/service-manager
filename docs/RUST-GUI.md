@@ -31,6 +31,13 @@ cd service-manager-rs
 
 Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 
+## Perilaku Jendela
+
+- Jendela utama otomatis berada di tengah layar (`"center": true` di `tauri.conf.json`).
+- Build **release** (`sm-gui.exe`) memakai subsystem Windows GUI, jadi **tidak** membuka cmd/terminal.
+- Build **debug** (`cargo run -p sm-gui` atau `target/debug/sm-gui.exe`) tetap membuka console untuk log/panic.
+- `sm-updater.exe` dan `sm-diag.exe` adalah aplikasi console dan memang menampilkan terminal saat dijalankan langsung.
+
 ## Fitur
 
 - Tabel service: status, nama, display name, jenis, application, startup, restart.

@@ -21,9 +21,9 @@ Binary:
 
 | Binary | Fungsi |
 | --- | --- |
-| `sm-gui.exe` | GUI Tauri |
-| `sm-updater.exe` | Updater Laravel + credential helper |
-| `sm-diag.exe` | Diagnosa headless (config, NSSM, admin, status service) |
+| `sm-gui.exe` | GUI Tauri (release: tanpa console, jendela center) |
+| `sm-updater.exe` | Updater Laravel + credential helper (console) |
+| `sm-diag.exe` | Diagnosa headless (console) |
 
 ## Build dan Test
 
