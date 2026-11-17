@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sm_config::ConfigPaths;
 use sm_core::{ServiceType, ToggleMode};
+use sm_updater::history::{load_history, HistoryEntry};
 use sm_updater::plan::{plan_app, AppPlan};
 use sm_updater::registry::{
     load_config, save_config, AppConfig, HealthCheck, NotifyConfig, PackageManager, Preset,
@@ -544,6 +545,27 @@ pub async fn plan_updater_app(app_id: String) -> Result<AppPlan, String> {
     .map_err(|error| error.to_string())?
 }
 
+fn load_updater_history_at(
+    config_path: &Path,
+    app: Option<&str>,
+    limit: Option<u32>,
+) -> Vec<HistoryEntry> {
+    load_history(config_path, app, limit.unwrap_or(50) as usize)
+}
+
+#[tauri::command]
+pub async fn load_updater_history(
+    app: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<HistoryEntry>, String> {
+    let path = config_path();
+    tauri::async_runtime::spawn_blocking(move || {
+        load_updater_history_at(&path, app.as_deref(), limit)
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub async fn run_updater(
     app: Option<String>,
@@ -651,6 +673,7 @@ pub fn read_updater_log(app: Option<String>) -> Result<UpdaterLogView, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sm_updater::history::{append_history, HistoryEntry};
     use sm_updater::plan::PlanStatus;
     use sm_updater::registry::{UpdaterConfig, UpdaterSettings};
     use sm_updater::runner::{Output, RunnerError};
@@ -826,6 +849,37 @@ mod tests {
         let views = load_views_at(&config_path).unwrap();
         assert_eq!(views[0].status, "updated");
         assert!(views[0].last_updated_at.contains('T'));
+    }
+
+    #[test]
+    fn loads_updater_history_for_an_app_with_default_limit() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        for index in 0..60 {
+            append_history(
+                &config_path,
+                &HistoryEntry {
+                    timestamp: format!("2026-11-17T10:{:02}:00+07:00", index % 60),
+                    app_id: if index % 2 == 0 { "demo" } else { "other" }.into(),
+                    status: "updated".into(),
+                    message: "ok".into(),
+                    commit: "abc1234".into(),
+                    duration_ms: index,
+                    client_ip: "10.255.240.143".into(),
+                },
+            )
+            .unwrap();
+        }
+
+        let entries = load_updater_history_at(&config_path, Some("DEMO"), None);
+        assert_eq!(entries.len(), 30);
+        assert!(entries.iter().all(|entry| entry.app_id == "demo"));
+        assert_eq!(load_updater_history_at(&config_path, None, None).len(), 50);
+
+        let limited = load_updater_history_at(&config_path, Some("demo"), Some(5));
+        assert_eq!(limited.len(), 5);
+        assert_eq!(limited[0].duration_ms, 58);
+        assert_eq!(limited[4].duration_ms, 50);
     }
 
     #[test]

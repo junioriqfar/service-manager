@@ -3,6 +3,7 @@ import {
   ClipboardList,
   FileText,
   FlaskConical,
+  History,
   Loader2,
   Pencil,
   Play,
@@ -45,6 +46,7 @@ import type {
   PlanCommandGroup,
   PlanService,
   UpdaterApp,
+  UpdaterHistoryEntry,
   UpdaterLogView,
   UpdaterRunOutcome,
 } from "@/lib/types";
@@ -89,6 +91,12 @@ function serviceSummary(app: UpdaterApp): string {
 
 function shortSha(value: string): string {
   return value ? value.slice(0, 12) : "—";
+}
+
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0 ms";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
 }
 
 function PlanSection({
@@ -345,7 +353,15 @@ export function UpdaterView() {
     plan: AppPlan | null;
     error: string;
   }>({ open: false, loading: false, appId: "", plan: null, error: "" });
+  const [historyDialog, setHistoryDialog] = useState<{
+    open: boolean;
+    loading: boolean;
+    appId: string;
+    entries: UpdaterHistoryEntry[];
+    error: string;
+  }>({ open: false, loading: false, appId: "", entries: [], error: "" });
   const planRequest = useRef(0);
+  const historyRequest = useRef(0);
 
   const selected = apps.find((app) => app.id === selectedId) ?? null;
 
@@ -454,6 +470,48 @@ export function UpdaterView() {
   function closePlanDialog() {
     planRequest.current += 1;
     setPlanDialog((previous) => ({
+      ...previous,
+      open: false,
+      loading: false,
+    }));
+  }
+
+  async function openHistory(app: UpdaterApp) {
+    const request = historyRequest.current + 1;
+    historyRequest.current = request;
+    setHistoryDialog({
+      open: true,
+      loading: true,
+      appId: app.id,
+      entries: [],
+      error: "",
+    });
+    try {
+      const entries = await invoke<UpdaterHistoryEntry[]>("load_updater_history", {
+        app: app.id,
+        limit: 50,
+      });
+      if (historyRequest.current !== request) return;
+      setHistoryDialog({
+        open: true,
+        loading: false,
+        appId: app.id,
+        entries: Array.isArray(entries) ? entries : [],
+        error: "",
+      });
+    } catch (error) {
+      if (historyRequest.current !== request) return;
+      setHistoryDialog((previous) => ({
+        ...previous,
+        loading: false,
+        error: errorMessage(error),
+      }));
+    }
+  }
+
+  function closeHistoryDialog() {
+    historyRequest.current += 1;
+    setHistoryDialog((previous) => ({
       ...previous,
       open: false,
       loading: false,
@@ -727,6 +785,13 @@ export function UpdaterView() {
                       <FileText />
                       Log
                     </ContextMenuItem>
+                    <ContextMenuItem
+                      title="Show the latest 50 update history entries for this app"
+                      onSelect={() => void openHistory(app)}
+                    >
+                      <History />
+                      History
+                    </ContextMenuItem>
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       onSelect={() => setForm({ open: true, edit: true, app })}
@@ -822,6 +887,83 @@ export function UpdaterView() {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closePlanDialog}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={historyDialog.open}
+        onOpenChange={(open) => {
+          if (open) {
+            setHistoryDialog((previous) => ({ ...previous, open: true }));
+          } else {
+            closeHistoryDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>History: {historyDialog.appId}</DialogTitle>
+            <DialogDescription>
+              Latest 50 update outcomes, newest first. History is append-only and is not
+              removed by log retention.
+            </DialogDescription>
+          </DialogHeader>
+
+          {historyDialog.loading && (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="animate-spin" />
+              Loading history…
+            </div>
+          )}
+
+          {historyDialog.error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {historyDialog.error}
+            </div>
+          )}
+
+          {!historyDialog.loading &&
+            !historyDialog.error &&
+            historyDialog.entries.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">No history yet.</p>
+            )}
+
+          {historyDialog.entries.length > 0 && (
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+              {historyDialog.entries.map((entry, index) => (
+                <div
+                  key={`${entry.timestamp}-${index}`}
+                  className="rounded-md border px-3 py-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={statusVariant(entry.status)}>{entry.status}</Badge>
+                    <span className="text-muted-foreground">{formatWhen(entry.timestamp)}</span>
+                    <span
+                      className="ml-auto font-mono text-muted-foreground"
+                      title={entry.commit || "No commit recorded"}
+                    >
+                      {shortSha(entry.commit)}
+                    </span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                    {entry.message || "—"}
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                    <span>Duration: {formatDuration(entry.durationMs)}</span>
+                    <span title="Trigger client IP recorded for audit">
+                      Client IP: {entry.clientIp || "—"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeHistoryDialog}>
               Close
             </Button>
           </DialogFooter>

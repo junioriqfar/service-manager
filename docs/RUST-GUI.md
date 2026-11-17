@@ -69,7 +69,7 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
   Untuk preset Laravel ditampilkan versi PHP efektif; app dengan `webServerService`
   menampilkan nama service Apache dan versi Apache dari settings efektif.
 - Tombol **Refresh**, **Add App**, **Check All**, **Update All**.
-- Aksi per app: Preview Plan, Run, Check, Test, Log, Edit, Delete.
+- Aksi per app: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
 - Form registrasi/edit: repo URL, local path (Browse…), branch, preset, package manager,
   composer/artisan/package-install/build, install/build command, queue restart,
   web server Apache opsional, allowlist IP per app, service lifecycle, clone-on-first-run,
@@ -89,7 +89,12 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
   saat fetch/inspeksi berjalan; error ditampilkan di dialog.
 - **Check All/Update All** berjalan di `spawn_blocking`, jadi UI tidak freeze.
 - Dialog hasil menampilkan status per app; log terbaru tampil di panel bawah.
-- Klik kanan baris app: Preview Plan, Run, Check, Test, Log, Edit, Delete.
+- **History** (context menu, setelah Log) memanggil `load_updater_history` dan
+  menampilkan 50 entry terbaru per app: timestamp, badge status, pesan, commit
+  pendek, durasi, dan client IP trigger. Dialog punya state loading/error serta empty
+  state **No history yet.**, dan area daftar bisa di-scroll. History bersifat
+  append-only dan tidak dihapus oleh **Clean Logs Now**.
+- Klik kanan baris app: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
 - Tooltip tersedia pada tab, tombol aksi, dan field penting.
 - Tidak ada polling/auto-update. Aksi hanya dipicu tombol atau `sm-trigger` via SSH.
 - Service lifecycle membutuhkan GUI/task elevated; tanpa Administrator, update dengan
@@ -130,7 +135,16 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
   filenya karena `nssm version` membuka GUI dan tidak pernah selesai. File `.bat`/`.cmd`
   dijalankan melalui `cmd.exe /c` oleh `SystemRunner`.
 - **Updater defaults**: log directory, max concurrent updates, timeout
-  preflight/fetch/tool/clone, dan log retention days.
+  preflight/fetch/tool/clone, dan log retention days. Tombol **Clean Logs Now** di
+  samping retention days membuka konfirmasi
+  "Delete logs older than N days? Active/recent logs are skipped." lalu memanggil
+  `prune_logs_now`. Setelah selesai, toast dan teks inline menampilkan jumlah file,
+  byte yang dihapus, file aktif yang dilewati, dan jumlah error. Retention hanya
+  manual (tidak berjalan saat update), tidak butuh Administrator, menghapus
+  `project-update-*.log`/`updater-task-*.log` yang lebih lama dari N hari (file
+  dalam 5 menit terakhir selalu dilewati), dan tidak menghapus history atau audit
+  Apache. Nilai 0 berarti retention dinonaktifkan dan tombol delete menghasilkan
+  error yang jelas.
 - **Trigger**: editor allowlist IP/CIDR (dipisah koma atau newline), switch
   **Allow local trigger**, IP client saat ini dari `SSH_CONNECTION`/`SSH_CLIENT`,
   dan tombol **Migrate Trigger**. Migrasi hanya muncul saat `settings.json` belum ada
@@ -312,14 +326,18 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 394 test):
+Test GUI mencakup (total workspace 413 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
 - Util: log tail, batas baris, export JSON, app log.
 - Updater: registry CRUD, state view, preservasi field lanjutan, validasi service,
   validasi `webServerService` (Apache vs non-Apache), versi PHP/Apache efektif,
-  dan command `plan_updater_app` (plan ready tanpa perubahan service).
+  command `plan_updater_app` (plan ready tanpa perubahan service), dan
+  `load_updater_history` (filter case-insensitive + default limit 50).
+- Retention: `prune_logs_at` menghapus log updater/project lama, menolak
+  `days = 0` dengan pesan jelas, dan `prune_logs_now_at` memakai `logDir` efektif
+  dari `settings.json`.
 - Plan: status up-to-date/ready/dirty/blocked-migration/clone-required/error,
   command per group, service read-only, redaksi webhook, dan smoke CLI.
 - Remote: normalisasi config, save/load, preview wrapper/direct, BatchMode/askpass, DPAPI password.
@@ -346,8 +364,8 @@ Test GUI mencakup (total workspace 394 test):
   dan report builder.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
   tab Settings (termasuk kartu Trigger, Apache App Mapping, field web server,
-  panel Apache pending, dialog PHP references, dan kartu Doctor dengan Run/Copy),
-  serta ikon/tema.
+  panel Apache pending, dialog PHP references, kartu Doctor dengan Run/Copy, dan
+  tombol Clean Logs Now), dialog History dengan empty state, serta ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 

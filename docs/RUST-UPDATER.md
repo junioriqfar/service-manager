@@ -517,6 +517,34 @@ sm-trigger --host 10.255.240.160 --user EGOV22 --all --check
 
 Panduan lengkap: [docs/RUST-TRIGGER.md](RUST-TRIGGER.md).
 
+## History (audit)
+
+Setiap run registry menulis history append-only ke
+`data/updater-history.jsonl` (sibling `projects.json`; satu JSON object per baris,
+tanpa pretty print). Entry ditulis untuk **setiap app yang diproses**, termasuk
+`forbidden`, `up-to-date`, `check`, `updated`, `dirty`, `blocked-migration`,
+`degraded`, dan `failed`. App disabled, app tidak terpilih, dan plan dry-run tidak
+menulis history.
+
+Field entry (serde camelCase):
+
+| Field | Isi |
+| --- | --- |
+| `timestamp` | Waktu lokal ISO 8601 saat entry ditulis |
+| `appId` | ID app registry |
+| `status` | Status outcome (`updated`, `forbidden`, dst.) |
+| `message` | Pesan outcome, di-redaksi `sm_core::redact_secrets`, maksimal 4000 karakter |
+| `commit` | HEAD best-effort setelah update; kosong bila Git/HEAD tidak tersedia atau app forbidden |
+| `durationMs` | Durasi update app dalam milidetik |
+| `clientIp` | IP client hasil resolusi trigger (`--client-ip` atau environment SSH); kosong untuk trigger lokal |
+
+`load_updater_history(app_id?, limit)` (GUI) membaca newest-first, memfilter app
+secara case-insensitive, mengabaikan baris rusak, dan meng-clamp `limit` ke
+`1..=500` (default GUI 50). History tidak pernah menghapus atau menggagalkan update:
+jika append gagal, error hanya dilaporkan ke stderr dan outcome run tidak berubah.
+History bersifat append-only dan **tidak** dipangkas oleh retensi log; belum ada
+rotasi/cap ukuran file.
+
 ## Log
 
 - `logDir/project-update-YYYYMMDD-HHmmss.log`
@@ -525,6 +553,26 @@ Panduan lengkap: [docs/RUST-TRIGGER.md](RUST-TRIGGER.md).
 `sm-updater logs` menampilkan log global terbaru; `sm-updater logs ID --tail N`
 menampilkan tail log project. Log berisi perintah, output (maksimal 60 baris per perintah),
 commit/file berubah, dan rollback hint.
+
+## Retensi Log
+
+Retensi bersifat **manual-only**; update/run tidak pernah memangkas log otomatis.
+Dari GUI Settings, **Clean Logs Now** memanggil `prune_logs_now` dengan aturan:
+
+- Hanya file langsung di `logDir` yang namanya `project-update-*.log` atau
+  `updater-task-*.log` (case-insensitive); folder/symlink dan file lain diabaikan.
+- Log project hanya `project-update-*.log` di `<localPath>/storage/logs` untuk app
+  yang terdaftar; path kosong/tidak valid dilewati.
+- File dengan modified time lebih lama dari `logRetentionDays` dihapus; file yang
+  dimodifikasi dalam 5 menit terakhir selalu dihitung `skippedActive` dan tidak
+  dihapus.
+- `days = 0` berarti retention dinonaktifkan dan command GUI mengembalikan error
+  `Log retention is disabled (0 days).`
+- `PruneResult` melaporkan `cutoff`, `scannedFiles`, `deletedFiles`,
+  `deletedBytes`, `skippedActive`, dan `errors`. Error metadata/delete dicatat dan
+  tidak menghentikan file lain; folder yang hilang menghasilkan hasil kosong.
+- Tidak butuh Administrator. History, `app.log`, dan audit Apache
+  `logs/apache-apply.log` tidak disentuh.
 
 ## Simpan Kredensial Git
 
@@ -560,7 +608,12 @@ Test mencakup registry v1→v2, migrasi, allowlist IP/CIDR, lock, state, deteksi
 (termasuk lockfile ambigu), custom command, service lifecycle, rollback service saat build
 gagal, seluruh matriks update Laravel, serta plan dry-run (status up-to-date/ready/dirty/
 blocked-migration/clone-required/error, command per group, service read-only, redaksi
-webhook, parse CLI, dan smoke test tanpa SCM/network). Total workspace: 394 test.
+webhook, parse CLI, dan smoke test tanpa SCM/network). History diuji untuk roundtrip
+JSONL, urutan/limit, filter case-insensitive, baris rusak, file hilang, redaksi/cap
+pesan, satu object per baris, integrasi trigger (allowed + forbidden + client IP),
+dan kegagalan tulis yang tidak menggagalkan run. Retensi diuji untuk pola file,
+batas hari, file aktif, folder hilang, log project, merge count, dan error delete
+yang tidak menghentikan file lain. Total workspace: 413 test.
 
 ## Task Scheduler / Elevation
 

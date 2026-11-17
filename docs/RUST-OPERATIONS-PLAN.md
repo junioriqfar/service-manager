@@ -1,6 +1,6 @@
 # Rencana Fase 3 — Operasional, Doctor, Plan, History
 
-Status: **Sprint 3.1–3.2 selesai; Sprint 3.3–3.5 belum**
+Status: **Sprint 3.1–3.3 selesai; Sprint 3.4–3.5 belum**
 
 Lanjutan dari [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md). Fase 3 berfokus pada
 observability dan keselamatan operasi, bukan fitur update inti.
@@ -195,6 +195,8 @@ Catatan implementasi Sprint 3.2:
 
 ## Sprint 3.3 — History, Retention, Audit
 
+Status: **Selesai**.
+
 History:
 
 - `data/updater-history.jsonl` append-only:
@@ -226,6 +228,61 @@ Tests:
 - Trigger menulis history.
 - UI source tests.
 
+Catatan implementasi Sprint 3.3:
+
+- File `crates/sm-updater/src/history.rs`: `HistoryEntry` (`timestamp, appId, status,
+  message, commit, durationMs, clientIp`, serde camelCase), `history_path`,
+  `append_history`, dan `load_history`.
+- Path history adalah sibling `projects.json` (`data/updater-history.jsonl` di layout
+  standar). Satu baris = satu JSON object tanpa pretty print; parent folder dibuat
+  otomatis. Pesan di-redaksi `sm_core::redact_secrets` lalu dibatasi 4000 karakter
+  sebelum serialisasi.
+- `load_history` membaca best-effort: file hilang/IO error/malformed line tidak
+  menghasilkan error, entry difilter per app secara case-insensitive, hasil
+  newest-first, dan `limit` di-clamp ke `1..=500`.
+- `run_registry_with` menulis satu history entry untuk setiap app yang diproses:
+  `forbidden`, `up-to-date`, `check`, `updated`, `dirty`, `blocked-migration`,
+  `degraded`, dan `failed`. `clientIp` berisi IP hasil resolusi trigger
+  (`--client-ip`/environment SSH), atau string kosong untuk trigger lokal.
+  `commit` adalah HEAD best-effort setelah update (kosong untuk app forbidden karena
+  Git tidak dijalankan); `durationMs` adalah durasi update app.
+- Kegagalan menulis history hanya dilaporkan ke stderr dan **tidak** mengubah hasil
+  run, state, atau exit code. Tidak ada entry history untuk app disabled/tidak
+  terpilih, dan tidak ada history yang ditulis oleh plan dry-run.
+- Command GUI `load_updater_history(app, limit)` berjalan di `spawn_blocking`,
+  memakai `data/projects.json` aktif, dan default limit 50. Dialog **History** di
+  context menu tab Updater menampilkan timestamp, badge status, pesan, commit
+  pendek, durasi, dan client IP; ada state loading/error/empty dan area scroll.
+- File `crates/sm-updater/src/retention.rs`: `PruneResult` (`cutoff, scannedFiles,
+  deletedFiles, deletedBytes, skippedActive, errors`, serde camelCase),
+  `prune_logs`, dan `prune_project_logs`. Hanya file langsung (bukan folder/symlink)
+  dengan nama `project-update-*.log` atau `updater-task-*.log` (case-insensitive)
+  yang dipertimbangkan; log project hanya `project-update-*.log` di
+  `<localPath>/storage/logs`.
+- File yang dimodifikasi dalam `active_grace` (default 5 menit) selalu dihitung
+  `skippedActive` dan tidak dihapus. Folder log yang hilang menghasilkan hasil kosong
+  tanpa error; error metadata/delete masuk `errors` dan pemrosesan lanjut. Byte yang
+  dihapus dihitung dari metadata sebelum delete. `cutoff` adalah ISO timestamp untuk
+  ditampilkan.
+- Command GUI `prune_logs_now` memakai `settings.json` efektif: `updater.logDir`
+  (trim) atau `trigger::default_log_dir(config_path)`, lalu
+  `updater.logRetentionDays`. Nilai 0 menghasilkan error
+  `Log retention is disabled (0 days).`; command tidak membutuhkan Administrator.
+  Retention **manual-only**: tidak ada prune otomatis saat update/run.
+- Settings: tombol **Clean Logs Now** di samping **Log retention days**, dialog
+  konfirmasi, lalu toast + teks inline berisi jumlah file/byte dihapus, file aktif
+  yang dilewati, dan jumlah error. History tidak pernah dihapus oleh aksi ini;
+  `logs/apache-apply.log` juga tidak disentuh.
+- Test baru: 7 history, 6 retention, 2 trigger (total crate `sm-updater` 152),
+  plus 1 GUI history dan 3 GUI retention. Total workspace **413 test**.
+- Batasan: history belum dirotasi/di-cap dan `load_history` membaca seluruh file;
+  tidak ada index per app. Client IP bergantung pada `SSH_CONNECTION`/`SSH_CLIENT`
+  atau `--client-ip`, jadi bisa kosong pada trigger lokal. Proteksi file aktif
+  berbasis waktu 5 menit, bukan deteksi proses yang sedang menulis. Retention tidak
+  menghapus history, `app.log`, atau audit Apache, dan tidak berjalan otomatis lewat
+  scheduler. Helper `prune_logs` dengan `days = 0` akan memakai cutoff sekarang;
+  nilai 0 hanya ditolak secara eksplisit pada command GUI.
+
 ---
 
 ## Sprint 3.4 — Admin tools (opsional, butuh keputusan)
@@ -250,8 +307,8 @@ Tests:
 
 - [x] Doctor report lengkap, read-only, redacted.
 - [x] Plan preview tanpa side effect.
-- [ ] History JSONL dan UI history.
-- [ ] Retention manual + tombol Settings.
-- [ ] Audit trigger IP/action.
-- [ ] Test/clippy/fmt hijau.
-- [ ] Docs diperbarui.
+- [x] History JSONL dan UI history.
+- [x] Retention manual + tombol Settings.
+- [x] Audit trigger IP/action.
+- [x] Test/clippy/fmt hijau.
+- [x] Docs diperbarui.

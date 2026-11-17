@@ -180,6 +180,25 @@ export interface UpdaterLogView {
   text: string;
 }
 
+export interface UpdaterHistoryEntry {
+  timestamp: string;
+  appId: string;
+  status: string;
+  message: string;
+  commit: string;
+  durationMs: number;
+  clientIp: string;
+}
+
+export interface PruneResult {
+  cutoff: string;
+  scannedFiles: number;
+  deletedFiles: number;
+  deletedBytes: number;
+  skippedActive: number;
+  errors: string[];
+}
+
 export type PlanStatus =
   | "up-to-date"
   | "dirty"

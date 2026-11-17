@@ -14,6 +14,7 @@ Trigger.
 | Config Remote Trigger | `<folder config>\data\trigger-client.json` |
 | Pending perubahan Apache | `<folder config>\data\apache-pending.json` (tidak di-commit) |
 | State updater | `<folder config>\data\updater-state.json` |
+| History updater | `<folder config>\data\updater-history.jsonl` (append-only JSONL) |
 | Lock updater | `<folder config>\data\updater.lock` |
 | Override folder | Environment variable `SERVICE_MANAGER_HOME` |
 | Backup otomatis | `<folder config>\backup\services-*.json` |
@@ -24,6 +25,28 @@ Trigger.
 | NSSM | `..\nssm\nssm.exe` atau `C:\tools\nssm\nssm.exe` |
 
 Jika `data/services.json` tidak ada, aplikasi dimulai dengan daftar kosong. Jika JSON tidak valid, file lama dicadangkan ke `backup/services-broken-<timestamp>.json` dan aplikasi tetap berjalan dengan daftar kosong.
+
+File runtime berikut tidak di-commit (lihat `.gitignore`): `data/updater-state.json`,
+`data/updater-history.jsonl`, `data/updater.lock`, `data/updater-request.json`,
+`data/updater-result.json`, `data/trigger-client.json`, dan
+`data/apache-pending.json`.
+
+### History updater (`updater-history.jsonl`)
+
+`data/updater-history.jsonl` adalah file append-only berisi satu JSON object per
+baris:
+
+```json
+{"timestamp":"2026-11-17T10:00:00+07:00","appId":"kasirin","status":"updated","message":"...","commit":"abc1234","durationMs":1234,"clientIp":"10.255.240.143"}
+```
+
+- Ditulis trigger registry untuk setiap app yang diproses (termasuk `forbidden`,
+  `up-to-date`, check-only, `failed`, dan `degraded`).
+- `message` di-redaksi dan dibatasi 4000 karakter; `clientIp` kosong untuk trigger
+  lokal tanpa IP.
+- GUI membaca 50 entry terbaru per app (maksimal 500) dengan urutan newest-first.
+- History **tidak** dipangkas oleh retensi log dan tidak boleh dihapus otomatis;
+  file ini adalah audit trail. Rotasi/cap ukuran belum tersedia.
 
 ## Struktur
 

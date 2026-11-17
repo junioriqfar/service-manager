@@ -72,6 +72,8 @@ DPAPI **bukan** pengganti Credential Manager untuk token Git. Gunakan DPAPI hany
 - log aplikasi GUI (`app.log`);
 - log updater (run log + `storage/logs`);
 - pesan error credential helper;
+- pesan history updater (`data/updater-history.jsonl`) sebelum ditulis, dengan cap
+  4000 karakter agar satu baris tidak membengkak;
 - seluruh `detail` dan `hint` laporan Doctor (`sm-gui/src/doctor.rs`) sebelum
   dikirim ke UI.
 
@@ -98,6 +100,33 @@ Log service aplikasi tidak di-redaksi karena merupakan output aplikasi pengguna;
 - file lama → `logs/app.log.1` (overwrite);
 - file baru dibuat;
 - log updater sudah per-run (`project-update-<timestamp>.log`), tidak perlu rotasi.
+
+Retensi log bersifat **manual-only** lewat **Clean Logs Now** di Settings:
+
+- hanya `project-update-*.log` dan `updater-task-*.log` langsung di log dir, serta
+  `project-update-*.log` di `<localPath>/storage/logs` app terdaftar;
+- file yang dimodifikasi dalam 5 menit terakhir tidak pernah dihapus;
+- `logRetentionDays = 0` menonaktifkan retensi dan command mengembalikan error;
+- tidak ada prune otomatis saat update;
+- `app.log`, `logs/apache-apply.log`, dan `data/updater-history.jsonl` tidak
+  disentuh.
+
+## Audit History dan Client IP
+
+`data/updater-history.jsonl` adalah audit trail append-only per app:
+
+- Setiap app yang diproses menulis satu entry, termasuk `forbidden`, check-only,
+  `updated`, `failed`, dan `degraded`.
+- `clientIp` menyimpan IP trigger hasil `--client-ip` atau `SSH_CONNECTION`/
+  `SSH_CLIENT`; trigger lokal tanpa IP ditulis sebagai string kosong.
+- `commit` adalah HEAD best-effort setelah update; `durationMs` adalah durasi update.
+- `message` di-redaksi dan dibatasi 4000 karakter. Token/password tidak boleh masuk
+  history.
+- History **tidak** dipangkas oleh retensi log dan tidak dihapus otomatis. Batas
+  retensi audit saat ini adalah kebijakan operator (file dapat diarsipkan manual).
+- Kegagalan menulis history hanya dilaporkan ke stderr; update tetap berjalan dan
+  outcome tidak berubah.
+- Audit apply Apache tetap terpisah di `logs/apache-apply.log` dan tidak berubah.
 
 ## SSH Trigger dan Allowlist IP
 

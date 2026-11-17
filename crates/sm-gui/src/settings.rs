@@ -7,10 +7,12 @@ use serde::{Deserialize, Serialize};
 use sm_config::ConfigPaths;
 use sm_updater::ip::client_ip_from_env;
 use sm_updater::registry::{load_config, TriggerSettings};
+use sm_updater::retention::{prune_logs, prune_project_logs, PruneResult, DEFAULT_ACTIVE_GRACE};
 use sm_updater::runner::{wrap_command, Output, Runner, SystemRunner};
 use sm_updater::settings::{
     effective_settings, load_settings, save_settings, settings_path_for, Settings, SettingsTrigger,
 };
+use sm_updater::trigger::default_log_dir;
 
 use crate::apache::{self, ApacheChangeView};
 use crate::php_paths::{self, PhpPathChangeView};
@@ -923,6 +925,48 @@ fn migrate_trigger_at(settings_file: &Path, projects_file: &Path) -> Result<Sett
     };
     backup_settings_file(settings_file)?;
     save_settings_at(settings_file, settings)
+}
+
+/// Manual retention helper: prune updater logs plus every registered app's
+/// Laravel `storage/logs`. `days == 0` disables retention explicitly.
+pub(crate) fn prune_logs_at(
+    config_path: &Path,
+    log_dir: &Path,
+    days: u32,
+) -> Result<PruneResult, String> {
+    if days == 0 {
+        return Err("Log retention is disabled (0 days).".to_string());
+    }
+    let config = load_config(config_path)?;
+    let mut result = prune_logs(log_dir, days, DEFAULT_ACTIVE_GRACE);
+    result.merge(prune_project_logs(&config.apps, days, DEFAULT_ACTIVE_GRACE));
+    Ok(result)
+}
+
+fn prune_logs_now_at(config_path: &Path) -> Result<PruneResult, String> {
+    let config = load_config(config_path)?;
+    let settings = effective_settings(
+        &settings_path_for(config_path),
+        &config.settings,
+        &config.trigger,
+    )
+    .map_err(|error| error.to_string())?;
+    let log_dir = if settings.updater.log_dir.trim().is_empty() {
+        default_log_dir(config_path)
+    } else {
+        PathBuf::from(settings.updater.log_dir.trim())
+    };
+    prune_logs_at(config_path, &log_dir, settings.updater.log_retention_days)
+}
+
+/// Manual log cleanup. No Administrator privileges are required and no
+/// automatic prune runs during updates.
+#[tauri::command]
+pub async fn prune_logs_now() -> Result<PruneResult, String> {
+    let config_path = ConfigPaths::detect().projects_path();
+    tauri::async_runtime::spawn_blocking(move || prune_logs_now_at(&config_path))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 fn powershell_exe() -> PathBuf {
@@ -1854,5 +1898,103 @@ mod tests {
         let result = save_settings_view_at(&paths, next).unwrap();
 
         assert!(result.php_path_change.is_none());
+    }
+
+    fn write_old_log(path: &Path, age: std::time::Duration, content: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, content).unwrap();
+        let modified = std::time::SystemTime::now()
+            .checked_sub(age)
+            .unwrap_or(std::time::UNIX_EPOCH);
+        let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+    }
+
+    #[test]
+    fn prune_logs_at_deletes_old_updater_and_project_logs() {
+        use sm_updater::registry::{save_config, AppConfig, UpdaterConfig};
+
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        let project = temp.path().join("project");
+        let project_log = project.join("storage/logs/project-update-old.log");
+        write_old_log(
+            &project_log,
+            std::time::Duration::from_secs(10 * 86_400),
+            "project-old",
+        );
+        let recent_project_log = project.join("storage/logs/project-update-new.log");
+        write_old_log(
+            &recent_project_log,
+            std::time::Duration::from_secs(86_400),
+            "project-new",
+        );
+
+        let mut config = UpdaterConfig::default();
+        config.apps.push(AppConfig {
+            id: "demo".into(),
+            name: "Demo".into(),
+            repo_url: "https://example.com/demo.git".into(),
+            local_path: project.to_string_lossy().to_string(),
+            ..AppConfig::default()
+        });
+        save_config(&paths.projects_path(), &config).unwrap();
+
+        let log_dir = temp.path().join("logs");
+        let global_log = log_dir.join("updater-task-old.log");
+        write_old_log(
+            &global_log,
+            std::time::Duration::from_secs(10 * 86_400),
+            "global-old",
+        );
+
+        let result = prune_logs_at(&paths.projects_path(), &log_dir, 7).unwrap();
+
+        assert_eq!(result.deleted_files, 2);
+        assert_eq!(
+            result.deleted_bytes,
+            ("project-old".len() + "global-old".len()) as u64
+        );
+        assert!(result.errors.is_empty());
+        assert!(!project_log.exists());
+        assert!(recent_project_log.exists());
+        assert!(!global_log.exists());
+    }
+
+    #[test]
+    fn prune_logs_at_rejects_zero_days() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        let log_dir = temp.path().join("logs");
+        let log = log_dir.join("project-update-old.log");
+        write_old_log(&log, std::time::Duration::from_secs(10 * 86_400), "old");
+
+        let error = prune_logs_at(&paths.projects_path(), &log_dir, 0).unwrap_err();
+
+        assert_eq!(error, "Log retention is disabled (0 days).");
+        assert!(log.exists());
+    }
+
+    #[test]
+    fn prune_logs_now_uses_effective_settings_log_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        let custom_logs = temp.path().join("custom-logs");
+        let old_log = custom_logs.join("project-update-old.log");
+        write_old_log(&old_log, std::time::Duration::from_secs(10 * 86_400), "old");
+
+        let settings_file = settings_path_for(&paths.projects_path());
+        let mut settings = Settings::default();
+        settings.updater.log_dir = custom_logs.to_string_lossy().to_string();
+        settings.updater.log_retention_days = 7;
+        save_settings_at(&settings_file, settings).unwrap();
+
+        let result = prune_logs_now_at(&paths.projects_path()).unwrap();
+
+        assert_eq!(result.deleted_files, 1);
+        assert!(!old_log.exists());
     }
 }

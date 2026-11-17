@@ -1,11 +1,13 @@
 pub mod app_update;
 pub mod cli;
 pub mod credential;
+pub mod history;
 pub mod ip;
 pub mod lock;
 pub mod log;
 pub mod plan;
 pub mod registry;
+pub mod retention;
 pub mod runner;
 pub mod scan;
 pub mod services;
@@ -17,12 +19,14 @@ pub mod trigger;
 pub mod update;
 pub mod variables;
 
+pub use history::{append_history, history_path, load_history, HistoryEntry};
 pub use log::UpdateLogger;
 pub use plan::{
     plan_app, AppPlan, PlanCommand, PlanCommandGroup, PlanCommit, PlanHealth, PlanNotify,
     PlanService, PlanServices, PlanStatus,
 };
 pub use registry::{AppConfig, PackageManager, Preset, UpdaterConfig};
+pub use retention::{prune_logs, prune_project_logs, PruneResult, DEFAULT_ACTIVE_GRACE};
 pub use runner::{Output, Runner, RunnerError, SystemRunner};
 pub use scan::{discover_projects, is_laravel_project, ProjectInfo};
 pub use settings::{

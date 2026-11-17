@@ -57,6 +57,7 @@ import type {
   DoctorReport,
   DoctorStatus,
   PhpPathChangeView,
+  PruneResult,
   ServiceRow,
   Settings,
   SettingsDiagnostics,
@@ -193,6 +194,18 @@ function toolLabel(key: ToolKey): string {
 function formatWhen(value: string): string {
   if (!value) return "—";
   return value.replace("T", " ").slice(0, 19);
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
 
 function splitPatterns(value: string): string[] {
@@ -1032,6 +1045,10 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const [doctor, setDoctor] = useState<DoctorReport | null>(null);
   const [doctorLoading, setDoctorLoading] = useState(false);
   const [doctorError, setDoctorError] = useState<string | null>(null);
+  const [pruneOpen, setPruneOpen] = useState(false);
+  const [pruning, setPruning] = useState(false);
+  const [pruneResult, setPruneResult] = useState<PruneResult | null>(null);
+  const [pruneError, setPruneError] = useState<string | null>(null);
   const [busyTools, setBusyTools] = useState<Partial<Record<ToolKey, ToolBusy>>>({});
   const [toolMessages, setToolMessages] = useState<
     Partial<Record<ToolKey, ToolMessage>>
@@ -1439,6 +1456,34 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       toast.error(`Could not copy the Doctor report: ${errorMessage(error)}`, {
         duration: 10000,
       });
+    }
+  }
+
+  async function pruneLogsNow() {
+    if (pruning) return;
+    setPruning(true);
+    setPruneError(null);
+    try {
+      const result = await invoke<PruneResult>("prune_logs_now");
+      setPruneResult(result);
+      setPruneOpen(false);
+      const summary = `Deleted ${result.deletedFiles} log file(s) (${formatBytes(
+        result.deletedBytes,
+      )}). ${result.skippedActive} active/recent file(s) skipped.`;
+      if (result.errors.length > 0) {
+        toast.warning(
+          `${summary} ${result.errors.length} file(s) could not be removed.`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.success(summary, { duration: 8000 });
+      }
+    } catch (error) {
+      const message = errorMessage(error);
+      setPruneError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setPruning(false);
     }
   }
 
@@ -2106,20 +2151,55 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   <Label className="text-xs" htmlFor="settings-retention">
                     Log retention days
                   </Label>
-                  <Input
-                    id="settings-retention"
-                    type="number"
-                    min={0}
-                    max={3650}
-                    value={draft.updater.logRetentionDays}
-                    onChange={(event) =>
-                      updateUpdater({
-                        logRetentionDays: Number.parseInt(event.target.value, 10) || 0,
-                      })
-                    }
-                    className="h-8"
-                    title="Delete updater logs older than this many days (0–3650)."
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="settings-retention"
+                      type="number"
+                      min={0}
+                      max={3650}
+                      value={draft.updater.logRetentionDays}
+                      onChange={(event) =>
+                        updateUpdater({
+                          logRetentionDays: Number.parseInt(event.target.value, 10) || 0,
+                        })
+                      }
+                      className="h-8 flex-1"
+                      title="Delete updater logs older than this many days (0–3650)."
+                    />
+                    <Hint label="Delete old updater and project logs now. Manual only; updates never prune automatically.">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => {
+                          setPruneResult(null);
+                          setPruneError(null);
+                          setPruneOpen(true);
+                        }}
+                        disabled={pruning}
+                        title="Clean Logs Now"
+                      >
+                        {pruning ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                        Clean Logs Now
+                      </Button>
+                    </Hint>
+                  </div>
+                  {pruneResult && (
+                    <p
+                      className="text-xs text-muted-foreground"
+                      title={pruneResult.errors.join("\n")}
+                    >
+                      Last cleanup: {pruneResult.deletedFiles} file(s),{" "}
+                      {formatBytes(pruneResult.deletedBytes)} deleted; {pruneResult.skippedActive}{" "}
+                      active/recent skipped
+                      {pruneResult.errors.length > 0
+                        ? `, ${pruneResult.errors.length} error(s)`
+                        : ""}
+                      . History is not pruned.
+                    </p>
+                  )}
+                  {pruneError && <p className="text-xs text-destructive">{pruneError}</p>}
                 </div>
               </div>
 
@@ -2587,6 +2667,51 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
               title="Close this dialog without changing projects.json"
             >
               Leave
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pruneOpen} onOpenChange={setPruneOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4" />
+              Clean updater logs?
+            </DialogTitle>
+            <DialogDescription>
+              Delete logs older than {draft.updater.logRetentionDays} days? Active/recent logs are skipped.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Targets <code>project-update-*.log</code> and <code>updater-task-*.log</code> in the
+            updater log directory, plus <code>project-update-*.log</code> under each registered
+            app&apos;s <code>storage/logs</code>. Files modified in the last 5 minutes are never
+            deleted. Update history is append-only and is not pruned.
+          </p>
+          {pruneError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {pruneError}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPruneOpen(false)}
+              disabled={pruning}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void pruneLogsNow()}
+              disabled={pruning}
+              title="Delete old log files now"
+            >
+              {pruning ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

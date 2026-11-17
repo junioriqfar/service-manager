@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use std::net::IpAddr;
 
 use crate::app_update::update_app;
+use crate::history::{append_history, HistoryEntry};
 use crate::ip::{app_allowed_for_ip_with_trigger, client_ip_from_env};
 use crate::lock::UpdateLock;
 use crate::registry::{TriggerSettings, UpdaterConfig};
@@ -121,6 +122,15 @@ pub fn run_registry_with(
                 None => format!("Trigger lokal tidak diizinkan untuk app '{}'.", app.id),
             };
             mark(&mut state, &app.id, "forbidden", Some(&message), 0);
+            record_history(
+                config_path,
+                &app.id,
+                "forbidden",
+                &message,
+                "",
+                0,
+                client_ip,
+            );
             outcomes.push(RunOutcome {
                 app_id: app.id.clone(),
                 status: "forbidden".to_string(),
@@ -142,6 +152,7 @@ pub fn run_registry_with(
             },
         );
         let status = outcome.status.as_str().to_string();
+        let duration_ms = started.elapsed().as_millis() as u64;
         mark(
             &mut state,
             &app.id,
@@ -156,7 +167,27 @@ pub fn run_registry_with(
             } else {
                 None
             },
-            started.elapsed().as_millis() as u64,
+            duration_ms,
+        );
+
+        let commit = head_commit(
+            &updater_settings.git_path,
+            Path::new(&app.local_path),
+            runner,
+        );
+        if let Some(commit) = &commit {
+            if let Some(entry) = state.apps.get_mut(&app.id) {
+                entry.last_commit = commit.clone();
+            }
+        }
+        record_history(
+            config_path,
+            &app.id,
+            &status,
+            &outcome.message,
+            commit.as_deref().unwrap_or(""),
+            duration_ms,
+            client_ip,
         );
         outcomes.push(RunOutcome {
             app_id: app.id.clone(),
@@ -164,16 +195,6 @@ pub fn run_registry_with(
             message: outcome.message,
             forbidden: false,
         });
-
-        if let Some(commit) = head_commit(
-            &updater_settings.git_path,
-            Path::new(&app.local_path),
-            runner,
-        ) {
-            if let Some(entry) = state.apps.get_mut(&app.id) {
-                entry.last_commit = commit;
-            }
-        }
     }
 
     save_state(config_path, &state)?;
@@ -182,6 +203,32 @@ pub fn run_registry_with(
         return Err("Tidak ada app yang cocok/diproses.".to_string());
     }
     Ok(outcomes)
+}
+
+/// Best-effort history write. A history failure must never fail the run or
+/// change its outcome, so it is only reported on stderr.
+#[allow(clippy::too_many_arguments)]
+fn record_history(
+    config_path: &Path,
+    app_id: &str,
+    status: &str,
+    message: &str,
+    commit: &str,
+    duration_ms: u64,
+    client_ip: Option<IpAddr>,
+) {
+    let entry = HistoryEntry {
+        timestamp: chrono::Local::now().to_rfc3339(),
+        app_id: app_id.to_string(),
+        status: status.to_string(),
+        message: message.to_string(),
+        commit: commit.to_string(),
+        duration_ms,
+        client_ip: client_ip.map(|ip| ip.to_string()).unwrap_or_default(),
+    };
+    if let Err(error) = append_history(config_path, &entry) {
+        eprintln!("Gagal menulis updater history untuk app '{app_id}': {error}");
+    }
 }
 
 fn head_commit(git_path: &str, project: &Path, runner: &dyn Runner) -> Option<String> {
@@ -233,6 +280,7 @@ fn selected_apps_need_services(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::history::load_history;
     use crate::registry::{save_config, AppConfig, Preset, UpdaterConfig};
     use crate::runner::{Output, RunnerError};
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -450,6 +498,116 @@ mod tests {
         assert_eq!(state.apps["demo"].status, "updated");
         assert_eq!(state.apps["demo"].last_commit, "bbbb2222");
         assert!(!lock_path(&config_path).exists());
+
+        let history = load_history(&config_path, None, 10);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].app_id, "demo");
+        assert_eq!(history[0].status, "updated");
+        assert_eq!(history[0].commit, "bbbb2222");
+        assert!(history[0].client_ip.is_empty());
+        assert!(!history[0].timestamp.is_empty());
+    }
+
+    #[test]
+    fn history_records_allowed_and_forbidden_apps_with_client_ip() {
+        let temp = tempfile::tempdir().unwrap();
+        let allowed_project = temp.path().join("allowed");
+        let denied_project = temp.path().join("denied");
+        std::fs::create_dir_all(&allowed_project).unwrap();
+        std::fs::create_dir_all(&denied_project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        std::fs::write(temp.path().join("git.exe"), b"fake").unwrap();
+
+        let mut denied = static_app("denied", &denied_project);
+        denied.allowed_client_ips = vec!["10.0.0.9".into()];
+        let config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: temp.path().join("git.exe").to_string_lossy().to_string(),
+                log_dir: temp.path().join("logs").to_string_lossy().to_string(),
+                ..crate::registry::UpdaterSettings::default()
+            },
+            trigger: crate::registry::TriggerSettings {
+                allowed_client_ips: Vec::new(),
+                allow_local: true,
+            },
+            apps: vec![static_app("allowed", &allowed_project), denied],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions {
+                client_ip: Some("10.255.240.143".parse().unwrap()),
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 2);
+        assert_eq!(outcomes[0].status, "updated");
+        assert_eq!(outcomes[1].status, "forbidden");
+
+        let history = load_history(&config_path, None, 50);
+        assert_eq!(history.len(), 2);
+        let denied_entry = history
+            .iter()
+            .find(|entry| entry.app_id == "denied")
+            .expect("forbidden app history entry");
+        assert_eq!(denied_entry.status, "forbidden");
+        assert_eq!(denied_entry.client_ip, "10.255.240.143");
+        assert!(denied_entry.commit.is_empty());
+        let allowed_entry = history
+            .iter()
+            .find(|entry| entry.app_id == "allowed")
+            .expect("allowed app history entry");
+        assert_eq!(allowed_entry.status, "updated");
+        assert_eq!(allowed_entry.client_ip, "10.255.240.143");
+        assert_eq!(allowed_entry.commit, "bbbb2222");
+    }
+
+    #[test]
+    fn history_write_failure_does_not_fail_the_run() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        // Make the history destination a directory so appending must fail.
+        std::fs::create_dir_all(temp.path().join("data/updater-history.jsonl")).unwrap();
+        std::fs::write(temp.path().join("git.exe"), b"fake").unwrap();
+
+        let config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: temp.path().join("git.exe").to_string_lossy().to_string(),
+                log_dir: temp.path().join("logs").to_string_lossy().to_string(),
+                ..crate::registry::UpdaterSettings::default()
+            },
+            trigger: crate::registry::TriggerSettings {
+                allowed_client_ips: Vec::new(),
+                allow_local: true,
+            },
+            apps: vec![static_app("demo", &project)],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].status, "updated");
+        assert_eq!(load_state(&config_path).apps["demo"].status, "updated");
     }
 
     #[test]

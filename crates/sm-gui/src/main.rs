@@ -52,6 +52,7 @@ fn main() {
             updater::delete_updater_app,
             updater::test_updater_app,
             updater::plan_updater_app,
+            updater::load_updater_history,
             updater::run_updater,
             updater::read_updater_log,
             remote::load_remote_trigger,
@@ -62,6 +63,7 @@ fn main() {
             settings::load_settings_view,
             settings::save_settings_view,
             settings::migrate_trigger_to_settings,
+            settings::prune_logs_now,
             apache::apache_change_status,
             apache::apply_apache_change,
             apache_config::detect_apache_mappings,
@@ -240,6 +242,7 @@ mod ui_tests {
             "run_updater",
             "test_updater_app",
             "plan_updater_app",
+            "load_updater_history",
             "delete_updater_app",
             "read_updater_log",
             "save_updater_app",
@@ -287,6 +290,7 @@ mod ui_tests {
             "Check",
             "Test",
             "Log",
+            "History",
             "Edit",
             "Delete",
         ] {
@@ -295,9 +299,12 @@ mod ui_tests {
                 "missing updater context action: {action}"
             );
         }
+        assert!(UPDATER_VIEW.contains("No history yet."));
+        assert!(UPDATER_VIEW.contains("Client IP:"));
         assert!(UPDATER_VIEW.contains("Dry run"));
         assert!(UPDATER_VIEW.contains("does not merge"));
         assert!(include_str!("main.rs").contains("updater::plan_updater_app"));
+        assert!(include_str!("main.rs").contains("updater::load_updater_history"));
     }
 
     #[test]
@@ -382,6 +389,8 @@ mod ui_tests {
         for label in [
             "Settings",
             "Toolchain",
+            "Log retention days",
+            "Clean Logs Now",
             "Updater defaults",
             "Privileged Execution",
             "Diagnostics",
@@ -444,6 +453,7 @@ mod ui_tests {
             "load_settings_view",
             "save_settings_view",
             "migrate_trigger_to_settings",
+            "prune_logs_now",
             "detect_tool",
             "test_tool",
             "task_status",
@@ -502,6 +512,8 @@ mod ui_tests {
             );
         }
         assert!(SETTINGS_VIEW.contains("lucide-react"));
+        assert!(SETTINGS_VIEW.contains("Active/recent logs are skipped."));
+        assert!(include_str!("main.rs").contains("settings::prune_logs_now"));
         assert!(APP.contains("SettingsView"));
         assert!(APP.contains("setView(\"settings\")"));
         assert!(APP.contains("view === \"settings\""));

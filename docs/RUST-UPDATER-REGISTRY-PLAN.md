@@ -3,7 +3,7 @@
 Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + update yang dipicu dari PC 143**. Fokusnya bukan polling setiap menit, tetapi satu trigger aman dari komputer Anda ke server 160.
 
 - Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle, clone-on-first-run, health check, webhook), **Phase B selesai** (`sm-trigger`, GUI Updater, GUI Remote, wrapper Scheduled Task). Sisa backlog: update paralel (`maxConcurrentUpdates`), scheduler opsional, dan GUI client macOS/Linux.
-- Basis: `sm-updater` + `sm-trigger` + GUI Updater (394 test workspace)
+- Basis: `sm-updater` + `sm-trigger` + GUI Updater (413 test workspace)
 - Prinsip: trigger eksplisit, aman, idempoten, tanpa polling default
 - Config target: `data/projects.json` versi 2 (kompatibel versi 1)
 - **Server tetap Windows**; trigger client direncanakan cross-platform (Windows, macOS, Linux).
@@ -24,7 +24,8 @@ Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** 
 | `maxConcurrentUpdates` | Belum | Saat ini serial |
 | Scheduler/polling | Tidak dipakai | Default `false` |
 | `sm-trigger` cross-platform | Selesai | Windows/macOS/Linux, shell ke `ssh` |
-| GUI tab Updater | Selesai | Registry CRUD, test, run/check, log, Preview Plan (dry-run) |
+| GUI tab Updater | Selesai | Registry CRUD, test, run/check, log, History (50 terbaru), Preview Plan (dry-run) |
+| History audit + retensi manual | Selesai | `data/updater-history.jsonl`, client IP, Clean Logs Now (manual) |
 | GUI tab Remote | Selesai | Host/user, key/password (DPAPI), wrapper, preview, test SSH, run streaming |
 | Wrapper Scheduled Task elevated | Selesai | `scripts/Invoke-UpdaterTask.ps1` + action/installer |
 

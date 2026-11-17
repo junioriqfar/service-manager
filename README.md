@@ -17,9 +17,11 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Updater `sm-updater`: registry app, trigger SSH dengan allowlist IP/CIDR, cek/update Git, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, service lifecycle, credential helper.
 - Client `sm-trigger` cross-platform (Windows/macOS/Linux) untuk memicu update via SSH tanpa polling.
 - GUI tab **Remote** di `sm-gui` untuk trigger via SSH dengan output live (Windows client), mendukung SSH key/agent atau password (DPAPI).
-- Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Preview Plan, Run, Check, Test, Log, Edit, Delete.
-- GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, log, serta tampilan versi PHP/Apache efektif dan `webServerService`.
+- Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
+- GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, log, history per app, serta tampilan versi PHP/Apache efektif dan `webServerService`.
 - **Preview Plan** dry-run di tab Updater: status, branch/HEAD, incoming commit, changed/migration files, command install/build/artisan, service stop/restart/start + state, health/webhook (redacted), dan warnings. Plan hanya fetch remote refs; tidak merge, build, install, atau mengubah service.
+- **History** append-only di `data/updater-history.jsonl`: satu entry per app per run (termasuk forbidden/check-only/failed) dengan status, pesan redacted, commit, durasi, dan IP trigger. Dialog History menampilkan 50 entry terbaru per app.
+- **Clean Logs Now** manual di Settings: konfirmasi, lalu hapus log updater/project lebih lama dari retention days (file 5 menit terakhir selalu dilewati) dan tampilkan jumlah file/byte/error. History dan audit Apache tidak dipangkas.
 - GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, trigger allowlist + Migrate Trigger, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
 - **Doctor** read-only di Settings: cek Administrator, tool, settings/registry, service Apache + SCM, remote Git, Scheduled Task, SSH, storage/disk, pending Apache, dan referensi PHP; hasil dikelompokkan dengan badge status dan bisa disalin lewat **Copy Report**.
 - Kartu **Apache App Mapping** mem-parsing DocumentRoot/Include/variabel config Apache dan menyarankan `webServerService`; mapping hanya ditulis setelah app dipilih dan **Apply Mappings** diklik (dengan backup `projects.json`).
@@ -190,7 +192,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **394 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **413 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 
