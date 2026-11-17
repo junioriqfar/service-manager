@@ -6,7 +6,8 @@ Dokumen ini menjelaskan kontrol keamanan komponen Rust (`sm-win`, `sm-gui`, `sm-
 
 | Kontrol | Implementasi | Lokasi |
 | --- | --- | --- |
-| Kredensial Git | Git Credential Manager + DPAPI (`GCM_CREDENTIAL_STORE=dpapi`) | `sm-updater/src/credential.rs`, `runner.rs` |
+| Kredensial Git | Git Credential Manager + DPAPI (`GCM_CREDENTIAL_STORE=dpapi`) | `sm-updater/src/credential.rs`, `runner.rs`, `sm-gui/src/credentials.rs` |
+| Git credential UI | Store/test/clear PAT tanpa menyimpan token di config/log | `sm-gui/src/credentials.rs`, `settings-view.tsx` |
 | Enkripsi data lokal | Windows DPAPI (`CryptProtectData`/`CryptUnprotectData`) | `sm-win/src/dpapi.rs` |
 | Redaksi log | Pola token/Bearer/password/URL userinfo | `sm-core/src/security.rs` |
 | Rotasi log aplikasi | `app.log` > 5 MB → `app.log.1` | `sm-gui/src/util.rs` |
@@ -15,6 +16,7 @@ Dokumen ini menjelaskan kontrol keamanan komponen Rust (`sm-win`, `sm-gui`, `sm-
 | Elevated updater task | Scheduled Task `RunLevel Highest`, wrapper + nonce/expiry | `scripts/`, `sm-gui/src/remote.rs` |
 | SSH client GUI | Key: `BatchMode=yes`; password: `SSH_ASKPASS` + DPAPI | `sm-gui/src/remote.rs`, `sm-trigger/src/main.rs` |
 | Maintenance mode | Block update/trigger non-check; tidak bypass auth/allowlist | `sm-updater/src/settings.rs`, `trigger.rs` |
+| Firewall SSH | Snapshot read-only (`Get-NetFirewallRule`), tanpa write | `sm-gui/src/firewall.rs` |
 | Export settings | Hanya settings efektif; tanpa rahasia/service/history | `sm-gui/src/settings.rs` |
 | Argumen proses | Array argumen, tanpa penggabungan shell | `sm-win`, `sm-updater` |
 | Command admin-only | `commands.*`/`buildCommand`/`shell` hanya dari config admin | `sm-updater/src/toolchain.rs` |
@@ -39,6 +41,32 @@ Alur:
 2. Input `protocol/host/username/password` dikirim ke `git credential approve` melalui **stdin**.
 3. GCM menyimpan token dengan DPAPI; program tidak menulis token ke file/log.
 4. Verifikasi `git ls-remote --heads origin`; error di-redaksi sebelum ditampilkan.
+
+GUI **Settings → Git Credentials** memakai jalur yang sama:
+
+- Host berasal dari `repoUrl` app (`https`, `http`, `ssh`, scp-like `git@host:path`,
+  `git`); userinfo/port/path dibuang dan host didedup case-insensitive.
+- **Store Token** memanggil `store_git_credential` → `store_credential` dengan
+  `GCM_CREDENTIAL_STORE=dpapi`, `GCM_INTERACTIVE=never`, dan
+  `GIT_TERMINAL_PROMPT=0`. Token hanya dikirim ke proses `git credential approve`
+  lewat stdin; nilai balik command berupa pesan sukses tanpa token.
+- **Test Remote** memanggil `test_git_credential` → `verify_remote`
+  (`git ls-remote --heads origin`) memakai Git path efektif. Output/error
+  di-redaksi; credential helper tidak pernah menampilkan token.
+- **Clear** membuka konfirmasi lalu memanggil `clear_git_credential` →
+  `reject_credential`, yaitu `git credential reject` tanpa field password/token.
+- Validasi host/username/token menolak nilai kosong, karakter kontrol/baris baru,
+  dan spasi. Ini mencegah injeksi baris tambahan ke protokol credential. Token tidak
+  pernah dimasukkan ke pesan error; error sink di-redaksi dengan
+  `sm_core::redact_secrets`, token yang dikirim juga diganti eksplisit dengan
+  `[REDACTED]` bila muncul di error sink, dan `Debug` untuk `CredentialRequest`
+  mencetak token sebagai `[REDACTED]`.
+- Token **tidak** disimpan di `settings.json`, `projects.json`,
+  `data/updater-history.jsonl`, `app.log`, toast, atau nilai balik command. Field
+  token di UI dikosongkan setelah store dan tidak pernah ditampilkan kembali.
+- `settings.json` tidak memiliki field token; export settings karena itu tidak
+  membawa kredensial. Credential tetap terikat user+machine lewat DPAPI/GCM, jadi
+  store ulang diperlukan pada mesin/akun lain.
 
 Token dengan hak minimum:
 
@@ -153,6 +181,23 @@ Retensi log bersifat **manual-only** lewat **Clean Logs Now** di Settings:
   dan task memakai `MultipleInstances IgnoreNew`.
 - Tidak ada port HTTP baru; akses hanya lewat SSH dan firewall yang sudah ada.
 
+## Firewall Windows (read-only)
+
+- GUI Settings → **SSH Firewall (read-only)** hanya membaca inbound rule dengan
+  `Get-NetFirewallRule` + `Get-NetFirewallPortFilter`; filter: display name cocok
+  `OpenSSH|SSH` atau local port berisi `22`. Timeout 20 detik.
+- Command Tauri `ssh_firewall_status` berjalan di `spawn_blocking` dan tidak pernah
+  memanggil `New-NetFirewallRule`, `Set-NetFirewallRule`, atau
+  `Remove-NetFirewallRule`.
+- Hasil berupa `FirewallStatusView { supported, rules, message }`. JSON array, satu
+  object (PowerShell collapse), output kosong, dan JSON invalid ditangani tanpa
+  panic. Kegagalan PowerShell/cmdlet menghasilkan `supported=false` + pesan jelas;
+  UI hanya menampilkan state unsupported.
+- Add/remove/change rule firewall **tidak diimplementasikan** di sprint ini dan
+  tetap harus dilakukan manual di Windows Firewall. Doctor tetap hanya memeriksa port
+  22 dan tidak mengubah rule; koneksi SSH diuji lewat tab Remote (**Test SSH**).
+- Snapshot tidak memerlukan secret dan tidak ditulis ke log/config.
+
 ## Maintenance Mode
 
 - `settings.json.maintenance.enabled` menolak run update non-check dan trigger SSH
@@ -224,14 +269,20 @@ cargo test -p sm-updater credential
 cargo test -p sm-updater ip
 cargo test -p sm-gui util
 cargo test -p sm-gui remote
+cargo test -p sm-gui credentials
+cargo test -p sm-gui firewall
 ```
 
 Test mencakup redaksi pola token, rotasi log, round-trip DPAPI, validasi credential request,
+reject input tanpa password, validasi host/username/token tanpa membocorkan token,
 allowlist IP/CIDR, konfigurasi/preview Remote Trigger, dan pemanggilan sink kredensial
-tanpa menyentuh Credential Manager asli.
+tanpa menyentuh Credential Manager asli. Parser firewall diuji untuk array, object,
+output kosong, JSON invalid, dan field mapping; snapshot nyata tidak dijalankan oleh
+unit test.
 
 ## Keterbatasan
 
 - Belum ada code signing installer (fase rilis).
 - Belum ada audit log tamper-evident.
+- Firewall write/add/remove belum ada; hanya snapshot read-only.
 - Redaksi berbasis pola, bukan deteksi rahasia semantik; tetap hindari menulis rahasia ke log.

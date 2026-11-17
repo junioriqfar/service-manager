@@ -163,14 +163,15 @@ sm-updater status
 sm-updater logs kasirin
 ```
 
-Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state, Git fast-forward, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, clone-on-first-run, service lifecycle (stop/restart/start), health check HTTP, webhook, dan credential helper. Mode lama `list/check/update --project` tetap tersedia. Panduan: [RUST-UPDATER.md](RUST-UPDATER.md). Roadmap: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md). Registry + trigger: [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md). Client SSH: [RUST-TRIGGER.md](RUST-TRIGGER.md). Settings/tool paths: [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md).
+Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state, Git fast-forward, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, clone-on-first-run, service lifecycle (stop/restart/start), health check HTTP, webhook, credential helper, serta GUI Settings untuk Git credential store/test/clear dan SSH firewall read-only. Mode lama `list/check/update --project` tetap tersedia. Panduan: [RUST-UPDATER.md](RUST-UPDATER.md). Roadmap: [RUST-UPDATER-PLAN.md](RUST-UPDATER-PLAN.md). Registry + trigger: [RUST-UPDATER-REGISTRY-PLAN.md](RUST-UPDATER-REGISTRY-PLAN.md). Client SSH: [RUST-TRIGGER.md](RUST-TRIGGER.md). Settings/tool paths: [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md).
 
 ## Security Hardening (Phase 5)
 
 - `sm-win::dpapi` — enkripsi/dekripsi DPAPI dengan entropy opsional + test round-trip.
 - `sm-core::redact_secrets` — redaksi token provider, Bearer, password=, dan userinfo URL.
 - Log aplikasi GUI di-redaksi dan dirotasi otomatis pada 5 MB (`app.log.1`).
-- `sm-updater credential store` — simpan PAT lewat Git Credential Manager (DPAPI), token dibaca tanpa echo dan tidak pernah ditulis ke log/file.
+- `sm-updater credential store` — simpan PAT lewat Git Credential Manager (DPAPI), token dibaca tanpa echo dan tidak pernah ditulis ke log/file. GUI Settings menambahkan store/test/clear dengan helper yang sama; token tidak disimpan di `settings.json`.
+- SSH firewall GUI hanya read-only (`Get-NetFirewallRule`); add/remove rule tetap manual di Windows Firewall.
 - Elevasi UAC via banner GUI dan `ShellExecuteW runas`.
 - SSH trigger: allowlist IP/CIDR dua lapis, `authorize` sebelum task elevated, Scheduled Task `RunLevel Highest`, request nonce + expiry 15 menit.
 - GUI Remote mendukung key/agent (`BatchMode=yes`) atau password via `SSH_ASKPASS`; password opsional disimpan dengan DPAPI.
@@ -188,4 +189,4 @@ Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state,
 | 5. Security & hardening | Selesai |
 | 6. Release | Selesai |
 | 7. Registry + SSH trigger + GUI Remote | Selesai |
-| 8. Operasional (Phase 3) | Doctor 3.1 + Plan 3.2 selesai; History/Admin tools belum |
+| 8. Operasional (Phase 3) | Doctor 3.1, Plan 3.2, History/Retention 3.3, Maintenance/Export 3.4a, Git credential + firewall read-only 3.4b selesai; parallel updates 3.5 belum |

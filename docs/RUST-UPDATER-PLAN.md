@@ -4,9 +4,9 @@
 
 Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur yang sudah ada, serta fitur yang direncanakan berikut prioritasnya.
 
-- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan, Sprint 3.3 history/retention, dan Sprint 3.4a maintenance/export settings selesai**
+- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan, Sprint 3.3 history/retention, Sprint 3.4a maintenance/export settings, dan Sprint 3.4b Git credential UI/firewall read-only selesai**
 - Lokasi: `crates/sm-updater`
-- Test: **158 unit test** untuk crate ini; total workspace **427 test**. Config default ada di `data/projects.json`.
+- Test: **164 unit test** untuk crate ini; total workspace **448 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
@@ -183,10 +183,21 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 | Banner Updater | Selesai | `load_maintenance_status` saat mount/refresh; tanpa shortcut disable |
 | Export/load settings | Selesai | Helper `.json` atomik tanpa rahasia; load hanya draft GUI |
 
+### 3.11b Git credential reject/validation (Sprint 3.4b)
+
+| Fitur | Status | Detail |
+| --- | --- | --- |
+| `credential_reject_input` | Selesai | `protocol/host/username` tanpa password |
+| `reject_credential` | Selesai | `git credential reject` via stdin, GCM/DPAPI, tanpa prompt |
+| Validasi host/username/token | Selesai | Wajib, tanpa control char/newline/spasi; cegah injeksi protokol |
+| Redaksi error | Selesai | Error sink di-redaksi; token tidak masuk pesan |
+| GUI store/test/clear | Selesai | Lihat `docs/RUST-GUI.md`; token tidak disimpan di settings/log |
+| Firewall SSH | Read-only | Snapshot di `sm-gui`; add/remove rule ditunda |
+
 ### 3.12 Pengujian
 
-- **158 unit test** crate `sm-updater`:
-  - parsing CLI, registry, dan credential,
+- **164 unit test** crate `sm-updater`:
+  - parsing CLI, registry, dan credential (termasuk reject input/validasi tanpa token),
   - scan project/override,
   - runner nyata (exit code/timeout/timeout+env),
   - log dan redaksi,

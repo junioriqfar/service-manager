@@ -297,6 +297,25 @@ JSON invalid, settings yang gagal validasi (mis. required tool kosong atau
 ditolak dengan error yang jelas. File settings aktif tidak berubah selama proses
 export/load.
 
+### Kredensial Git dan Firewall
+
+Tidak ada field config baru untuk Sprint 3.4b:
+
+- Token Git **tidak** disimpan di `settings.json` atau `projects.json`. Tab Settings
+  → **Git Credentials** memakai host dari `apps[].repoUrl`, lalu mengirim token ke
+  Git Credential Manager melalui `git credential approve`
+  (`GCM_CREDENTIAL_STORE=dpapi`, `GCM_INTERACTIVE=never`,
+  `GIT_TERMINAL_PROMPT=0`). **Test Remote** memakai Git path efektif dan
+  `git ls-remote --heads origin`; **Clear** memakai `git credential reject` tanpa
+  token. Export/load settings tidak membawa kredensial.
+- Status **SSH Firewall (read-only)** dihitung saat tombol **Refresh** diklik dengan
+  PowerShell `Get-NetFirewallRule`/`Get-NetFirewallPortFilter` dan timeout 20 detik.
+  Hasilnya hanya tampilan; tidak ada rule yang ditambah/diubah/dihapus dan tidak ada
+  key config baru.
+- Konfigurasi tetap memakai `settings.json` (dengan fallback legacy `projects.json`)
+  dan `projects.json`; lihat [RUST-SECURITY.md](RUST-SECURITY.md) untuk penanganan
+  token/DPAPI.
+
 ### Variabel command (`${NAME}`)
 
 `settings.json.variables` menyimpan variabel admin tambahan. Selain itu backend

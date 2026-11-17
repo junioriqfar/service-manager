@@ -1,6 +1,6 @@
 # Rencana Fase 3 — Operasional, Doctor, Plan, History
 
-Status: **Sprint 3.1–3.3 dan 3.4a selesai; Sprint 3.4b–3.5 belum**
+Status: **Sprint 3.1–3.4b selesai untuk scope 3.4b (Git credential UI + firewall read-only); Sprint 3.5 belum**
 
 Lanjutan dari [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md). Fase 3 berfokus pada
 observability dan keselamatan operasi, bukan fitur update inti.
@@ -274,7 +274,7 @@ Catatan implementasi Sprint 3.3:
   yang dilewati, dan jumlah error. History tidak pernah dihapus oleh aksi ini;
   `logs/apache-apply.log` juga tidak disentuh.
 - Test baru: 7 history, 6 retention, 2 trigger (total crate `sm-updater` 152),
-  plus 1 GUI history dan 3 GUI retention. Total workspace **413 test**.
+  plus 1 GUI history dan 3 GUI retention. Total workspace saat Sprint 3.3: **413 test**.
 - Batasan: history belum dirotasi/di-cap dan `load_history` membaca seluruh file;
   tidak ada index per app. Client IP bergantung pada `SSH_CONNECTION`/`SSH_CLIENT`
   atau `--client-ip`, jadi bisa kosong pada trigger lokal. Proteksi file aktif
@@ -349,13 +349,76 @@ Batasan:
 - Git credential UI, firewall helper, backup/restore penuh, dan parallel updates
   belum termasuk 3.4a.
 
-## Sprint 3.4b — Admin tools (sisa, opsional)
+## Sprint 3.4b — Admin tools (sebagian selesai)
 
-- Credential manager UI (Git PAT store/test/clear) — 3.4b.
+Status: **Selesai untuk Git credential UI dan firewall read-only. Firewall write
+(add/remove rule) sengaja ditunda; parallel updates dan SSH execution yang sudah ada
+tidak diubah.**
+
+- Credential manager UI (Git PAT store/test/clear) — **selesai**.
 - Backup/restore settings tanpa rahasia — **selesai 3.4a** (export/load efektif).
 - Maintenance mode / pause trigger — **selesai 3.4a**.
-- Firewall helper (read/add/remove rule SSH; admin) — 3.4b.
-- Test koneksi SSH remote — 3.4b.
+- Firewall helper (read/add/remove rule SSH; admin) — **read-only selesai**;
+  add/remove rule **belum diimplementasikan** dan tetap menjadi backlog admin.
+- Test koneksi SSH remote — **sudah tersedia** di tab Remote (**Test SSH**); tidak ada
+  perubahan pada eksekusi SSH.
+
+Catatan implementasi Sprint 3.4b:
+
+- `crates/sm-updater/src/credential.rs` menambahkan
+  `credential_reject_input(host, username)` (tanpa password), `reject_credential`
+  (`git credential reject` dengan `GCM_CREDENTIAL_STORE=dpapi`,
+  `GCM_INTERACTIVE=never`, `GIT_TERMINAL_PROMPT=0`, input via stdin), serta validasi
+  host/username/token: wajib, tanpa karakter kontrol/baris baru/spasi. Nilai di-trim
+  sebelum masuk protokol Git. Token tidak pernah masuk pesan error; error dari sink
+  di-redaksi dengan `sm_core::redact_secrets`.
+- `crates/sm-gui/src/credentials.rs` membaca `repoUrl` app dari `projects.json` dan
+  mengekstrak host dari `https://`, `http://`, `ssh://git@host:port/...`,
+  `git@host:path`, dan `git://...`. Userinfo, port, path, dan query dibuang; host
+  di-lowercase, deduplikasi case-insensitive, dan diurutkan. `hosts[].apps` berisi
+  app id; UI menampilkan nama app dari registry.
+- Command Tauri: `list_git_credential_hosts`, `store_git_credential`,
+  `test_git_credential`, `clear_git_credential`. Store memakai Git path efektif
+  (`settings.json`, fallback legacy `projects.json.settings`), app `localPath`, dan
+  `CredentialRequest`; sukses hanya mengembalikan pesan tanpa token. Store juga
+  menolak host yang tidak cocok dengan host `repoUrl` app dan app tanpa `localPath`.
+  Test memanggil `verify_remote` (`git ls-remote --heads origin`) dan mengembalikan
+  pesan yang di-redaksi. Clear memanggil `git credential reject`; tidak ada token yang
+  dikirim.
+- Settings UI memiliki kartu **Git Credentials**: host select (menampilkan app per
+  host), username default `oauth2`, token password (dikosongkan setelah store), app
+  select untuk konteks Test/Clear (app pada host terpilih; fallback semua app), tombol
+  **Store Token**, **Test Remote**, **Clear** dengan tooltip dan dialog konfirmasi
+  Clear. Kartu menjelaskan bahwa token disimpan Git Credential Manager (DPAPI), bukan
+  `settings.json`, dan menyarankan PAT dengan scope minimum.
+- `crates/sm-gui/src/firewall.rs` menyediakan `FirewallRuleView`/`FirewallStatusView`,
+  parser `parse_firewall_rules` (array, satu object, output kosong, JSON invalid), dan
+  snapshot `ssh_firewall_status()` yang menjalankan PowerShell read-only
+  (`Get-NetFirewallRule`/`Get-NetFirewallPortFilter`) dengan timeout 20 detik. Query
+  menggabungkan rule yang nama/display name-nya cocok `OpenSSH|SSH` dengan rule yang
+  port 22 (dideduplikasi per nama) agar tidak memanggil port filter untuk semua rule.
+  Hanya rule inbound yang dikembalikan. Kegagalan menghasilkan `supported=false` +
+  pesan jelas.
+- Command Tauri bernama `ssh_firewall_status` (fungsi Rust
+  `read_ssh_firewall_status`, `spawn_blocking`, `#[tauri::command(rename = ...)]`).
+  Settings UI memiliki kartu **SSH Firewall (read-only)** dengan **Refresh**, tabel
+  display name/enabled/action/profile/local port, serta empty/unsupported state.
+  Catatan kartu: ubah rule di Windows Firewall; Doctor hanya memeriksa port 22 dan
+  koneksi SSH diuji di tab Remote.
+- Test baru: 6 `sm-updater` credential (reject input, validasi, injeksi newline,
+  redaksi error sink, reject validation, redaksi `Debug`), 10 GUI credentials (parsing host, grouping,
+  missing config, git path, mock sink, app/project/token rejection, test remote
+  missing/unsupported, clear validation), 4 firewall parser/serialization, dan 1 UI
+  source test. Total crate `sm-updater` **164 test**, workspace **448 test**.
+- Batasan: firewall **write/add/remove tidak tersedia** dan tidak boleh ditambahkan
+  lewat CLI/GUI tanpa desain admin baru; snapshot firewall bisa gagal pada mesin tanpa
+  cmdlet/izin baca dan tidak melakukan retry. Daftar host hanya dari skema yang
+  didukung serta menyertakan app disabled; app dengan `repoUrl` kosong/tidak didukung
+  tidak muncul. Test Remote membutuhkan `localPath` yang valid dan remote Git yang
+  dapat diakses; clear bergantung pada credential helper yang aktif dan tidak
+  memverifikasi hasilnya. Tidak ada token di `settings.json`, history, log, atau nilai
+  balik command; tidak ada perubahan pada eksekusi SSH, **Test SSH** Remote, atau
+  `maxConcurrentUpdates` (parallel updates tetap Sprint 3.5).
 
 ## Sprint 3.5 — Parallel updates (opsional)
 
@@ -375,6 +438,9 @@ Batasan:
 - [x] Retention manual + tombol Settings.
 - [x] Maintenance mode + banner Updater + Doctor warning.
 - [x] Export/load settings tanpa rahasia.
+- [x] Git credential UI store/test/clear tanpa token di settings/log.
+- [x] Firewall SSH read-only (write/add/remove ditunda).
+- [ ] Parallel updates (Sprint 3.5).
 - [x] Audit trigger IP/action.
 - [x] Test/clippy/fmt hijau.
 - [x] Docs diperbarui.

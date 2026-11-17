@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai; Dry-run Plan Sprint 3.2 selesai; History/retention Sprint 3.3 selesai; Maintenance mode + export/load settings Sprint 3.4a selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only + plan preview read-only + history/audit + maintenance/export).
+Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai; Dry-run Plan Sprint 3.2 selesai; History/retention Sprint 3.3 selesai; Maintenance mode + export/load settings Sprint 3.4a selesai; Git credential UI + firewall read-only Sprint 3.4b selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only + plan preview read-only + history/audit + maintenance/export + credential/firewall read-only).
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -31,7 +31,9 @@ Dokumen ini menjawab revisi pengguna:
 | Dry-run plan preview | Selesai (Sprint 3.2) |
 | History/retention/audit | Selesai (Sprint 3.3) |
 | Maintenance mode + export/load settings | Selesai (Sprint 3.4a) |
-| Git credential UI, firewall helper, backup/restore penuh | Belum (Sprint 3.4b) |
+| Git credential UI (store/test/clear) | Selesai (Sprint 3.4b) |
+| Firewall SSH read-only | Selesai (Sprint 3.4b); add/remove rule ditunda |
+| Backup/restore penuh (bukan hanya settings) | Belum (di luar sprint) |
 | Windows Service mode | Tidak diperlukan (no-login tidak dibutuhkan) |
 
 Catatan implementasi Phase 1:
@@ -156,6 +158,26 @@ Catatan implementasi Sprint 3.4a (maintenance + export/load):
   `rfd::FileDialog`; tidak ada secret yang diekspor.
 - Batasan: bukan backup penuh, bukan autentikasi, dan perubahan hasil load baru
   berlaku setelah **Save Settings**.
+
+Catatan implementasi Sprint 3.4b (Git credentials + firewall read-only):
+
+- Kredensial Git **tidak** menjadi bagian schema `settings.json`. Token disimpan
+  Git Credential Manager dengan DPAPI; UI Settings hanya menyimpan host/username/app
+  pilihan di state sementara. Store/test/clear memakai Git path efektif
+  (`settings.json`, fallback legacy `projects.json.settings`).
+- Host kredensial diekstrak dari `repoUrl` app dan didedup case-insensitive; app
+  select untuk Test/Clear dibatasi ke app pada host terpilih, dengan fallback semua
+  app bila host tidak punya app.
+- Command baru: `list_git_credential_hosts`, `store_git_credential`,
+  `test_git_credential`, `clear_git_credential`, `ssh_firewall_status`.
+- Firewall SSH hanya read-only (`Get-NetFirewallRule` + port filter, timeout 20 detik)
+  dan tidak menawarkan add/remove rule. Perubahan firewall tetap manual di Windows
+  Firewall. Doctor tetap memeriksa port 22; **Test SSH** tetap di tab Remote.
+- Token tidak pernah dikembalikan, ditampilkan ulang, ditulis ke settings/history/log,
+  atau diekspor. Error credential di-redaksi.
+- Batasan: firewall write ditunda, test remote membutuhkan app dengan `localPath` dan
+  remote Git yang dapat diakses, dan snapshot firewall bisa unsupported bila cmdlet
+  atau izin baca tidak tersedia.
 
 ## 1. Keputusan Arsitektur
 
@@ -438,7 +460,8 @@ Tab **Settings**:
 
 - Environment expansion (`%VAR%`) untuk path admin; `${PHP_HOME}` dan variabel tool
   command sudah tersedia sejak Sprint 2.4.
-- Credential manager UI untuk PAT/service account.
+- Credential manager UI untuk PAT/service account — **selesai 3.4b** (GCM/DPAPI,
+  store/test/clear; tanpa token di settings/log).
 - Windows Service mode jika benar-benar dibutuhkan.
 
 ---

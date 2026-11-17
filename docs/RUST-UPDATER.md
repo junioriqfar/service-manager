@@ -587,6 +587,12 @@ sm-updater credential store `
 Token diminta tanpa echo, dikirim ke `git credential approve` melalui stdin, lalu
 diverifikasi dengan `git ls-remote --heads origin`. Token tidak pernah ditulis ke log/file.
 
+Helper `git credential reject` tersedia untuk menghapus kredensial (`credential_reject_input`,
+`reject_credential`) tanpa mengirim password. GUI Settings memakai helper ini untuk
+**Clear**; token juga tidak disimpan di `settings.json`, history, atau nilai balik command.
+Validasi host/username/token menolak baris baru/karakter kontrol untuk mencegah injeksi
+protokol credential.
+
 ## Keamanan
 
 - Env otomatis: `GCM_CREDENTIAL_STORE=dpapi`, `GCM_INTERACTIVE=never`, `GIT_TERMINAL_PROMPT=0`.
@@ -616,7 +622,9 @@ batas hari, file aktif, folder hilang, log project, merge count, dan error delet
 yang tidak menghentikan file lain. Maintenance mode diuji untuk default/normalize/validasi
 message, penolakan update non-check tanpa state/history, dan check yang tetap berjalan.
 Export/load settings diuji untuk roundtrip, legacy fallback, penolakan JSON/settings/
-control character/non-`.json`, dan tidak ada write ke config aktif. Total workspace: 427 test.
+control character/non-`.json`, dan tidak ada write ke config aktif. Credential reject,
+validasi host/username/token, dan redaksi token diuji tanpa menyentuh Credential Manager
+asli. Total workspace: 448 test.
 
 ## Task Scheduler / Elevation
 

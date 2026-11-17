@@ -4,7 +4,9 @@ mod apache;
 mod apache_config;
 mod batch;
 mod commands;
+mod credentials;
 mod doctor;
+mod firewall;
 mod php_paths;
 mod remote;
 mod settings;
@@ -79,6 +81,12 @@ fn main() {
             settings::remove_task,
             settings::test_task,
             doctor::run_doctor,
+            credentials::list_git_credential_hosts,
+            credentials::store_git_credential,
+            credentials::test_git_credential,
+            credentials::clear_git_credential,
+            // UI command name: `ssh_firewall_status` (renamed in firewall.rs).
+            firewall::read_ssh_firewall_status,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Service Manager");
@@ -102,12 +110,13 @@ mod ui_tests {
     const UPDATER_FORM: &str = include_str!("../ui/src/components/updater-form-dialog.tsx");
     const REMOTE_VIEW: &str = include_str!("../ui/src/components/remote-trigger-view.tsx");
     const SETTINGS_VIEW: &str = include_str!("../ui/src/components/settings-view.tsx");
+    const TYPES: &str = include_str!("../ui/src/lib/types.ts");
     const HINT: &str = include_str!("../ui/src/components/hint.tsx");
     const TOOLTIP: &str = include_str!("../ui/src/components/ui/tooltip.tsx");
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{HINT}\n{TOOLTIP}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{TYPES}\n{HINT}\n{TOOLTIP}"
         )
     }
 
@@ -540,5 +549,65 @@ mod ui_tests {
         assert!(APP.contains("view === \"settings\""));
         assert!(APP.contains("admin={admin}"));
         assert!(APP.contains("lucide-react"));
+    }
+
+    #[test]
+    fn settings_ui_has_git_credentials_and_readonly_firewall() {
+        for label in [
+            "Git Credentials",
+            "Store Token",
+            "Test Remote",
+            "Git Credential Manager",
+            "DPAPI",
+            "not in settings.json",
+            "minimum scope",
+            "App for Test/Clear",
+            "No credential hosts found",
+            "Personal Access Token",
+        ] {
+            assert!(
+                SETTINGS_VIEW.contains(label),
+                "missing Git credential label: {label}"
+            );
+        }
+        for command in [
+            "list_git_credential_hosts",
+            "store_git_credential",
+            "test_git_credential",
+            "clear_git_credential",
+        ] {
+            assert!(
+                SETTINGS_VIEW.contains(command),
+                "missing Git credential command: {command}"
+            );
+        }
+
+        for label in [
+            "SSH Firewall (read-only)",
+            "Refresh",
+            "Display name",
+            "Enabled",
+            "Action",
+            "Profile",
+            "Local port",
+            "Read-only view. Change rules in Windows Firewall.",
+            "Doctor checks port 22",
+            "test SSH",
+            "No inbound SSH rules found",
+        ] {
+            assert!(
+                SETTINGS_VIEW.contains(label),
+                "missing firewall label: {label}"
+            );
+        }
+        assert!(SETTINGS_VIEW.contains("ssh_firewall_status"));
+        assert!(TYPES.contains("export interface GitCredentialHostView"));
+        assert!(TYPES.contains("export interface FirewallRuleView"));
+        assert!(TYPES.contains("export interface FirewallStatusView"));
+        assert!(include_str!("main.rs").contains("credentials::list_git_credential_hosts"));
+        assert!(include_str!("main.rs").contains("credentials::store_git_credential"));
+        assert!(include_str!("main.rs").contains("credentials::test_git_credential"));
+        assert!(include_str!("main.rs").contains("credentials::clear_git_credential"));
+        assert!(include_str!("main.rs").contains("firewall::read_ssh_firewall_status"));
     }
 }

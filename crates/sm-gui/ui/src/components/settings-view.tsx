@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -8,6 +8,7 @@ import {
   Download,
   FlaskConical,
   FolderOpen,
+  KeyRound,
   Loader2,
   Network,
   Play,
@@ -58,6 +59,8 @@ import type {
   DoctorCheck,
   DoctorReport,
   DoctorStatus,
+  FirewallStatusView,
+  GitCredentialHostView,
   PhpPathChangeView,
   PruneResult,
   ServiceRow,
@@ -727,6 +730,587 @@ function DoctorCard({
         )}
 
         {report && !loading && <DoctorChecks checks={report.checks} />}
+      </CardContent>
+    </Card>
+  );
+}
+
+function appLabel(apps: UpdaterApp[], id: string): string {
+  const app = apps.find((candidate) => candidate.id.toLowerCase() === id.toLowerCase());
+  if (!app) return id;
+  const name = app.name.trim();
+  return name && name !== app.id ? `${name} (${app.id})` : app.id;
+}
+
+function GitCredentialsCard() {
+  const [hosts, setHosts] = useState<GitCredentialHostView[]>([]);
+  const [apps, setApps] = useState<UpdaterApp[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [host, setHost] = useState("");
+  const [username, setUsername] = useState("oauth2");
+  const [token, setToken] = useState("");
+  const [appId, setAppId] = useState("");
+  const [busy, setBusy] = useState<"store" | "test" | "clear" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
+
+  const load = useCallback(async (showToast: boolean) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [hostViews, appViews] = await Promise.all([
+        invoke<GitCredentialHostView[]>("list_git_credential_hosts"),
+        invoke<UpdaterApp[]>("list_updater_apps"),
+      ]);
+      setHosts(Array.isArray(hostViews) ? hostViews : []);
+      setApps(Array.isArray(appViews) ? appViews : []);
+      if (showToast) toast.success("Git credential hosts reloaded.");
+    } catch (caught) {
+      const message = errorMessage(caught);
+      setLoadError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load(false);
+  }, [load]);
+
+  useEffect(() => {
+    if (hosts.length === 0) {
+      setHost("");
+      setAppId("");
+      return;
+    }
+    setHost((previous) =>
+      hosts.some((view) => view.host === previous) ? previous : hosts[0].host,
+    );
+  }, [hosts]);
+
+  const { appChoices, scopedAppCount } = useMemo(() => {
+    const ids = hosts.find((view) => view.host === host)?.apps ?? [];
+    const scoped = apps.filter((app) =>
+      ids.some((id) => id.toLowerCase() === app.id.toLowerCase()),
+    );
+    return {
+      appChoices: scoped.length > 0 ? scoped : apps,
+      scopedAppCount: scoped.length,
+    };
+  }, [apps, host, hosts]);
+
+  useEffect(() => {
+    setAppId((previous) =>
+      appChoices.some((app) => app.id === previous) ? previous : (appChoices[0]?.id ?? ""),
+    );
+  }, [appChoices]);
+
+  const selectedApp = appChoices.find((app) => app.id === appId) ?? null;
+
+  function changeHost(value: string) {
+    setHost(value);
+    setToken("");
+    setResult(null);
+    setError(null);
+  }
+
+  async function storeToken() {
+    if (!host) {
+      setError("Select a Git host first.");
+      return;
+    }
+    if (!token.trim()) {
+      setError("Enter a Personal Access Token.");
+      return;
+    }
+    if (!appId) {
+      setError("Select an app so the credential has a project context.");
+      return;
+    }
+    setBusy("store");
+    setError(null);
+    setResult(null);
+    try {
+      const message = await invoke<string>("store_git_credential", {
+        host,
+        username: username.trim(),
+        token,
+        appId,
+      });
+      setToken("");
+      setResult(message);
+      toast.success(
+        "Git credential stored in Git Credential Manager. The token was not saved in settings.json.",
+        { duration: 8000 },
+      );
+    } catch (caught) {
+      const message = errorMessage(caught);
+      setError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function testRemote() {
+    if (!appId) {
+      setError("Select an app before testing the remote.");
+      return;
+    }
+    setBusy("test");
+    setError(null);
+    setResult(null);
+    try {
+      const message = await invoke<string>("test_git_credential", { appId });
+      setResult(message);
+      toast.success("Remote credential test passed.");
+    } catch (caught) {
+      const message = errorMessage(caught);
+      setError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function clearCredential() {
+    if (!host || !username.trim()) {
+      setError("Select a host and enter a username.");
+      return;
+    }
+    setBusy("clear");
+    setError(null);
+    try {
+      await invoke<null>("clear_git_credential", {
+        host,
+        username: username.trim(),
+      });
+      setClearOpen(false);
+      setToken("");
+      setResult(
+        `Removal requested for ${username.trim()}@${host}. Git Credential Manager handles the stored secret.`,
+      );
+      toast.success("Stored Git credential removed.");
+    } catch (caught) {
+      const message = errorMessage(caught);
+      setError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <KeyRound className="h-4 w-4" />
+              Git Credentials
+            </CardTitle>
+            <CardDescription>
+              Store a Personal Access Token for updater remote checks. Hosts come from
+              app repoUrl values in projects.json. Tokens are entered once and never displayed again.
+            </CardDescription>
+          </div>
+          <Badge variant={hosts.length > 0 ? "outline" : "warning"}>
+            {hosts.length} host{hosts.length === 1 ? "" : "s"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        {loading && (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading credential hosts and updater apps…
+          </p>
+        )}
+
+        {loadError && (
+          <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="min-w-0">
+              <div className="font-medium">Could not load Git credential hosts</div>
+              <p>{loadError}</p>
+            </div>
+          </div>
+        )}
+
+        {!loading && !loadError && hosts.length === 0 && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-medium">No credential hosts found</div>
+              <p>
+                No registered app has a supported HTTP/SSH Git remote URL. Add an app in the
+                Updater tab first.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!loading && hosts.length > 0 && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Git host</Label>
+                <Select value={host || undefined} onValueChange={changeHost}>
+                  <SelectTrigger
+                    className="h-8"
+                    title="Hosts are parsed from app repoUrl values. Userinfo, port, path, and query are stripped."
+                  >
+                    <SelectValue placeholder="Select a Git host" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hosts.map((view) => (
+                      <SelectItem key={view.host} value={view.host}>
+                        {view.host}
+                        {view.apps.length > 0
+                          ? ` · ${view.apps.map((id) => appLabel(apps, id)).join(", ")}`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs" htmlFor="settings-git-username">
+                  Username
+                </Label>
+                <Input
+                  id="settings-git-username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="oauth2"
+                  className="h-8"
+                  title="Git credential username, for example oauth2 for GitLab or x-access-token for GitHub."
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">App for Test/Clear</Label>
+              <Select
+                value={appId || undefined}
+                onValueChange={setAppId}
+                disabled={appChoices.length === 0}
+              >
+                <SelectTrigger
+                  className="h-8"
+                  title="Test Remote runs git ls-remote for this app. Apps on the selected host are listed; all apps are available when the host has no registered apps."
+                >
+                  <SelectValue
+                    placeholder={
+                      apps.length === 0 ? "No updater apps registered" : "Select an app"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {appChoices.map((app) => (
+                    <SelectItem key={app.id} value={app.id}>
+                      {appLabel(apps, app.id)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {scopedAppCount > 0
+                  ? `Showing ${scopedAppCount} app${scopedAppCount === 1 ? "" : "s"} on ${host}.`
+                  : "The selected host has no registered apps; all apps are shown as a fallback."}{" "}
+                Store validates the selected app&apos;s localPath.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs" htmlFor="settings-git-token">
+                Personal Access Token
+              </Label>
+              <Input
+                id="settings-git-token"
+                type="password"
+                autoComplete="new-password"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder="Paste token (never shown after Store)"
+                className="h-8 font-mono text-xs"
+                title="Sent to git credential approve through stdin. Stored by Git Credential Manager with DPAPI; never written to settings.json or logs."
+              />
+            </div>
+
+            <div className="flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                Token is stored by Git Credential Manager (DPAPI), not in settings.json. Use a
+                Personal Access Token (PAT) with minimum scope, for example read_repository.
+              </p>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>{error}</div>
+              </div>
+            )}
+
+            {result && (
+              <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-emerald-300/70 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-200">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>{result}</div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Hint label="Store the token in Git Credential Manager for this host and username. It is not saved in settings.json.">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void storeToken()}
+                  disabled={
+                    busy !== null || !host || !username.trim() || !token.trim() || !appId
+                  }
+                >
+                  {busy === "store" ? <Loader2 className="animate-spin" /> : <KeyRound />}
+                  Store Token
+                </Button>
+              </Hint>
+              <Hint label="Run git ls-remote --heads origin for the selected app with GCM_CREDENTIAL_STORE=dpapi and no prompts">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void testRemote()}
+                  disabled={busy !== null || !appId}
+                >
+                  {busy === "test" ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+                  Test Remote
+                </Button>
+              </Hint>
+              <Hint label="Remove the stored Git credential for this host and username">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setError(null);
+                    setClearOpen(true);
+                  }}
+                  disabled={busy !== null || !host || !username.trim()}
+                >
+                  {busy === "clear" ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                  Clear
+                </Button>
+              </Hint>
+              <Hint label="Reload hosts and apps from the active projects.json">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void load(true)}
+                  disabled={loading || busy !== null}
+                >
+                  {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                  Refresh
+                </Button>
+              </Hint>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              {selectedApp
+                ? `Store/Test context: ${selectedApp.name || selectedApp.id}. Store validates the app localPath; remote checks use it too.`
+                : "Select an app to enable Store Token and Test Remote."}
+            </p>
+          </>
+        )}
+      </CardContent>
+
+      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4" />
+              Clear Git credential?
+            </DialogTitle>
+            <DialogDescription>
+              Ask Git Credential Manager to remove the stored credential for{" "}
+              <span className="font-mono">
+                {username.trim() || "(username)"}@{host || "(host)"}
+              </span>
+              . The token is not shown and settings.json is not changed.
+            </DialogDescription>
+          </DialogHeader>
+          {error && (
+            <div className="whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setClearOpen(false)}
+              disabled={busy === "clear"}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void clearCredential()}
+              disabled={busy === "clear"}
+            >
+              {busy === "clear" ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              Clear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+function SshFirewallCard() {
+  const [status, setStatus] = useState<FirewallStatusView | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await invoke<FirewallStatusView>("ssh_firewall_status");
+      setStatus(next);
+      if (next.supported) {
+        toast.success(
+          next.rules.length === 0
+            ? "Firewall read: no inbound SSH rules found."
+            : `Firewall read: ${next.rules.length} inbound SSH rule${
+                next.rules.length === 1 ? "" : "s"
+              } found.`,
+        );
+      } else {
+        toast.warning(next.message, { duration: 10000 });
+      }
+    } catch (caught) {
+      const message = errorMessage(caught);
+      setStatus(null);
+      setError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="h-4 w-4" />
+              SSH Firewall (read-only)
+            </CardTitle>
+            <CardDescription>
+              Inbound rules that look like SSH, read with Get-NetFirewallRule. This view never
+              writes, adds, or removes a firewall rule.
+            </CardDescription>
+          </div>
+          <Hint label="Read inbound SSH firewall rules again. No firewall change is made.">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void refresh()}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              Refresh
+            </Button>
+          </Hint>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Read-only view. Change rules in Windows Firewall. Doctor checks port 22; test SSH
+            connections in the Remote tab.
+          </p>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>{error}</div>
+          </div>
+        )}
+
+        {!status && !loading && !error && (
+          <p className="text-xs text-muted-foreground">
+            Click Refresh to read inbound rules whose display name matches OpenSSH/SSH or whose
+            local port includes 22. Windows Firewall remains the source of truth.
+          </p>
+        )}
+
+        {status && !status.supported && (
+          <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-medium">Firewall snapshot unavailable</div>
+              <p>{status.message}</p>
+            </div>
+          </div>
+        )}
+
+        {status && status.supported && status.rules.length === 0 && (
+          <div className="flex items-start gap-2 rounded-md border px-3 py-2 text-xs text-muted-foreground">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-medium">No inbound SSH rules found</div>
+              <p>{status.message}</p>
+            </div>
+          </div>
+        )}
+
+        {status && status.supported && status.rules.length > 0 && (
+          <>
+            <div className="text-xs text-muted-foreground">{status.message}</div>
+            <div className="max-h-72 overflow-auto rounded-md border">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-muted/70">
+                  <tr>
+                    <th className="px-2 py-1.5 font-medium">Display name</th>
+                    <th className="px-2 py-1.5 font-medium">Enabled</th>
+                    <th className="px-2 py-1.5 font-medium">Action</th>
+                    <th className="px-2 py-1.5 font-medium">Profile</th>
+                    <th className="px-2 py-1.5 font-medium">Local port</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {status.rules.map((rule, index) => (
+                    <tr
+                      key={`${rule.name || rule.displayName}-${index}`}
+                      className="border-t"
+                      title={`${rule.name || "(unnamed rule)"} · ${rule.direction || "direction unknown"}`}
+                    >
+                      <td className="max-w-64 break-words px-2 py-1.5 font-medium">
+                        {rule.displayName || rule.name || "(unnamed rule)"}
+                      </td>
+                      <td className="px-2 py-1.5">{rule.enabled || "—"}</td>
+                      <td className="px-2 py-1.5">{rule.action || "—"}</td>
+                      <td className="px-2 py-1.5">{rule.profile || "—"}</td>
+                      <td className="px-2 py-1.5 font-mono">{rule.localPort || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -1931,6 +2515,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
           </CardContent>
         </Card>
 
+        <GitCredentialsCard />
+
         <Card>
           <CardHeader className="p-4 pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
@@ -2669,6 +3255,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             </div>
           </CardContent>
         </Card>
+
+        <SshFirewallCard />
 
         <DoctorCard
           report={doctor}

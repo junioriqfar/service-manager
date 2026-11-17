@@ -161,6 +161,34 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
   trigger SSH ditolak sebelum Git/state/history; check dan dry-run plan tetap
   berjalan. Pesan tampil di Doctor dan banner tab Updater. Perubahan hanya tersimpan
   lewat **Save Settings**; banner Updater tidak menyediakan shortcut disable.
+- **Git Credentials**: kartu untuk menyimpan PAT ke Git Credential Manager.
+  - Host select diisi dari `list_git_credential_hosts`; host diekstrak dari
+    `repoUrl` app (`https`, `http`, `ssh`, scp-like `git@host:path`, dan `git`) tanpa
+    userinfo/port/path. Setiap item menampilkan app yang memakai host tersebut.
+  - Input **Username** default `oauth2`, input **Personal Access Token** bertipe
+    password, dan app select **App for Test/Clear** berisi app pada host terpilih
+    (fallback semua app bila host tidak punya app).
+  - **Store Token** memanggil `store_git_credential`; setelah sukses field token
+    dikosongkan, toast ditampilkan, dan token tidak pernah ditampilkan lagi. Pesan
+    sukses tidak memuat token.
+  - **Test Remote** memanggil `test_git_credential` untuk app terpilih
+    (`git ls-remote --heads origin` dengan Git path efektif dan GCM/DPAPI, tanpa
+    prompt). **Clear** membuka dialog konfirmasi lalu memanggil
+    `clear_git_credential` (`git credential reject`, tanpa password).
+  - Peringatan kartu: token disimpan Git Credential Manager (DPAPI), **bukan**
+    `settings.json`; gunakan PAT dengan scope minimum (mis. `read_repository`).
+  - Loading/error/empty state tersedia. Bila tidak ada app dengan remote HTTP/SSH
+    yang didukung, kartu menampilkan arahan untuk menambah app di tab Updater.
+  - Untuk menguji koneksi SSH (bukan kredensial Git), gunakan **Test SSH** di tab
+    Remote.
+- **SSH Firewall (read-only)**: kartu dengan tombol **Refresh** yang memanggil
+  command `ssh_firewall_status`. Snapshot PowerShell hanya membaca
+  `Get-NetFirewallRule`/`Get-NetFirewallPortFilter` untuk inbound rule yang display
+  name-nya cocok OpenSSH/SSH atau local port 22, timeout 20 detik. Tabel menampilkan
+  display name, enabled, action, profile, dan local port. Ada state loading,
+  empty, dan unsupported (`supported=false` + pesan); tidak ada tombol add/remove
+  dan tidak ada perubahan firewall. Catatan kartu: ubah rule di Windows Firewall;
+  Doctor hanya memeriksa port 22 dan koneksi SSH diuji di tab Remote.
 - **Export Settings… / Load Settings File…** di header Settings memakai
   `rfd::FileDialog`. Export menulis settings efektif ke pretty JSON atomik dengan
   nama default `settings-export-<tanggal>.json`, menampilkan path di toast, dan tidak
@@ -325,6 +353,8 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
 | `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, maintenance status, export/load settings JSON, trigger migration, Scheduled Task) |
 | `crates/sm-gui/src/doctor.rs` | Doctor read-only: status/check/report types, agregasi overall, check environment/tools/settings/registry/services/remote/task/SSH/storage/pending/PHP, command `run_doctor` |
+| `crates/sm-gui/src/credentials.rs` | Git credential UI: host parsing dari repoUrl, grouping app, store/test/clear via GCM/DPAPI, command `list_git_credential_hosts`/`store_git_credential`/`test_git_credential`/`clear_git_credential` |
+| `crates/sm-gui/src/firewall.rs` | Snapshot firewall SSH read-only, parser JSON array/object, command `ssh_firewall_status` (`spawn_blocking`, tanpa write) |
 | `crates/sm-gui/src/apache.rs` | Pending Apache change, matching service/app, apply/rollback/audit, command `apache_change_status`/`apply_apache_change` |
 | `crates/sm-gui/src/apache_config.rs` | Parser DocumentRoot/include/variabel, saran mapping, command `detect_apache_mappings`/`apply_apache_mappings` |
 | `crates/sm-gui/src/php_paths.rs` | Scan referensi PHP hardcoded, dialog payload `phpPathChange`, command `replace_php_references` (variable/new_path, backup, selected apps) |
@@ -347,7 +377,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 427 test):
+Test GUI mencakup (total workspace 448 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
@@ -385,11 +415,19 @@ Test GUI mencakup (total workspace 427 test):
   terpasang/tidak, task status, pending Apache, SSH, storage probe temp dir,
   disk threshold, remote sukses/gagal, scan PHP hardcoded, redaksi detail/hint,
   dan report builder.
+- Git credentials: parsing host `https/http/ssh/git/scp-like` (userinfo/port/path
+  dibuang), grouping/dedup case-insensitive + sorting, config hilang/invalid, Git
+  path efektif, mock `CredentialSink`, penolakan app/project/token, validasi token
+  tanpa membocorkan secret, test remote app hilang/unsupported, clear validation,
+  serta reject input tanpa password.
+- Firewall SSH: parser JSON array, single object, output kosong, JSON invalid,
+  field mapping/camelCase, dan serialisasi status read-only.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
-  tab Settings (termasuk kartu Maintenance Mode, tombol Export/Load Settings, kartu
-  Trigger, Apache App Mapping, field web server, panel Apache pending, dialog PHP
-  references, kartu Doctor dengan Run/Copy, dan tombol Clean Logs Now), banner
-  maintenance tab Updater, dialog History dengan empty state, serta ikon/tema.
+  tab Settings (termasuk kartu Maintenance Mode, Git Credentials, SSH Firewall
+  read-only, tombol Export/Load Settings, kartu Trigger, Apache App Mapping, field
+  web server, panel Apache pending, dialog PHP references, kartu Doctor dengan
+  Run/Copy, dan tombol Clean Logs Now), banner maintenance tab Updater, dialog
+  History dengan empty state, serta ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 

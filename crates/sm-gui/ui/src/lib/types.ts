@@ -295,6 +295,27 @@ export interface RemoteTriggerResult {
   output: string;
 }
 
+export interface GitCredentialHostView {
+  host: string;
+  apps: string[];
+}
+
+export interface FirewallRuleView {
+  name: string;
+  displayName: string;
+  enabled: string;
+  direction: string;
+  action: string;
+  profile: string;
+  localPort: string;
+}
+
+export interface FirewallStatusView {
+  supported: boolean;
+  rules: FirewallRuleView[];
+  message: string;
+}
+
 export interface ToolPath {
   path: string;
   version: string;
