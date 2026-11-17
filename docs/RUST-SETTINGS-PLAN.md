@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai; Dry-run Plan Sprint 3.2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only + plan preview read-only).
+Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai; Dry-run Plan Sprint 3.2 selesai; History/retention Sprint 3.3 selesai; Maintenance mode + export/load settings Sprint 3.4a selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only + plan preview read-only + history/audit + maintenance/export).
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -29,7 +29,9 @@ Dokumen ini menjawab revisi pengguna:
 | `webServerService` per app | Selesai (Sprint 2.1) |
 | Doctor read-only (readiness report) | Selesai (Sprint 3.1) |
 | Dry-run plan preview | Selesai (Sprint 3.2) |
-| History/retention, admin tools | Belum (Sprint 3.3–3.4) |
+| History/retention/audit | Selesai (Sprint 3.3) |
+| Maintenance mode + export/load settings | Selesai (Sprint 3.4a) |
+| Git credential UI, firewall helper, backup/restore penuh | Belum (Sprint 3.4b) |
 | Windows Service mode | Tidak diperlukan (no-login tidak dibutuhkan) |
 
 Catatan implementasi Phase 1:
@@ -136,6 +138,25 @@ Catatan implementasi Sprint 3.1 (Doctor):
   Doctor berjalan), cek port SSH hanya `127.0.0.1:22` IPv4, dan Doctor tidak
   memperbaiki masalah otomatis.
 
+Catatan implementasi Sprint 3.4a (maintenance + export/load):
+
+- `settings.json.maintenance` (`enabled`, `message`) default nonaktif. Message
+  di-trim, maksimal 500 karakter, dan menolak karakter kontrol.
+- Trigger non-check ditolak sebelum app/Git/state/history saat maintenance aktif;
+  `check` dan dry-run plan tetap berjalan. Doctor menampilkan check
+  `maintenance.status` (warning saat aktif).
+- GUI Settings memiliki kartu **Maintenance Mode**; tab Updater menampilkan banner
+  peringatan yang dimuat lewat `load_maintenance_status` dan tidak punya shortcut
+  disable.
+- Helper `export_settings_at`/`load_settings_from_file_at` hanya memproses file
+  `.json`. Export menulis settings efektif secara atomik tanpa memuat
+  projects/services/log/history/rahasia. Load hanya mengganti draft GUI dan tidak
+  menyimpan atau mengubah service/Apache.
+- Command Tauri `export_settings_file` dan `load_settings_file` memakai
+  `rfd::FileDialog`; tidak ada secret yang diekspor.
+- Batasan: bukan backup penuh, bukan autentikasi, dan perubahan hasil load baru
+  berlaku setelah **Save Settings**.
+
 ## 1. Keputusan Arsitektur
 
 ### 1.1 `settings.json` terpisah dari `projects.json`
@@ -222,6 +243,10 @@ Catatan implementasi Sprint 3.1 (Doctor):
   "trigger": {
     "allowedClientIPs": ["10.255.240.143", "127.0.0.1", "::1"],
     "allowLocal": true
+  },
+  "maintenance": {
+    "enabled": false,
+    "message": ""
   },
   "privilegedExecution": {
     "mode": "scheduled-task",

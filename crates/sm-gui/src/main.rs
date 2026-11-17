@@ -62,6 +62,9 @@ fn main() {
             remote::run_remote_trigger,
             settings::load_settings_view,
             settings::save_settings_view,
+            settings::load_maintenance_status,
+            settings::export_settings_file,
+            settings::load_settings_file,
             settings::migrate_trigger_to_settings,
             settings::prune_logs_now,
             apache::apache_change_status,
@@ -246,6 +249,7 @@ mod ui_tests {
             "delete_updater_app",
             "read_updater_log",
             "save_updater_app",
+            "load_maintenance_status",
         ] {
             assert!(
                 UPDATER_VIEW.contains(command) || UPDATER_FORM.contains(command),
@@ -303,6 +307,8 @@ mod ui_tests {
         assert!(UPDATER_VIEW.contains("Client IP:"));
         assert!(UPDATER_VIEW.contains("Dry run"));
         assert!(UPDATER_VIEW.contains("does not merge"));
+        assert!(UPDATER_VIEW.contains("Maintenance mode is enabled"));
+        assert!(UPDATER_VIEW.contains("Disable maintenance mode in Settings when ready."));
         assert!(include_str!("main.rs").contains("updater::plan_updater_app"));
         assert!(include_str!("main.rs").contains("updater::load_updater_history"));
     }
@@ -423,6 +429,13 @@ mod ui_tests {
             "Allow local trigger",
             "Current client IP",
             "Migrate Trigger",
+            "Maintenance Mode",
+            "Pause updates and SSH trigger",
+            "Maintenance message",
+            "Deploy window / maintenance reason",
+            "Check and dry-run plan still work",
+            "Export Settings…",
+            "Load Settings File…",
             "Apache change pending",
             "Affected services",
             "Affected apps",
@@ -452,6 +465,8 @@ mod ui_tests {
         for command in [
             "load_settings_view",
             "save_settings_view",
+            "export_settings_file",
+            "load_settings_file",
             "migrate_trigger_to_settings",
             "prune_logs_now",
             "detect_tool",
@@ -488,6 +503,9 @@ mod ui_tests {
             "allowedClientIPs",
             "allowLocal",
             "currentClientIp",
+            "maintenance",
+            "draft.maintenance.enabled",
+            "draft.maintenance.message",
             "oldPath",
             "newPath",
             "oldRoot",
@@ -514,6 +532,9 @@ mod ui_tests {
         assert!(SETTINGS_VIEW.contains("lucide-react"));
         assert!(SETTINGS_VIEW.contains("Active/recent logs are skipped."));
         assert!(include_str!("main.rs").contains("settings::prune_logs_now"));
+        assert!(include_str!("main.rs").contains("settings::export_settings_file"));
+        assert!(include_str!("main.rs").contains("settings::load_settings_file"));
+        assert!(include_str!("main.rs").contains("settings::load_maintenance_status"));
         assert!(APP.contains("SettingsView"));
         assert!(APP.contains("setView(\"settings\")"));
         assert!(APP.contains("view === \"settings\""));

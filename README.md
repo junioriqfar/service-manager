@@ -23,6 +23,8 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - **History** append-only di `data/updater-history.jsonl`: satu entry per app per run (termasuk forbidden/check-only/failed) dengan status, pesan redacted, commit, durasi, dan IP trigger. Dialog History menampilkan 50 entry terbaru per app.
 - **Clean Logs Now** manual di Settings: konfirmasi, lalu hapus log updater/project lebih lama dari retention days (file 5 menit terakhir selalu dilewati) dan tampilkan jumlah file/byte/error. History dan audit Apache tidak dipangkas.
 - GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, trigger allowlist + Migrate Trigger, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
+- **Maintenance Mode** di Settings: switch **Pause updates and SSH trigger** + message opsional. Run non-check dan trigger SSH ditolak sebelum Git/state/history; check dan dry-run plan tetap bekerja. Tab Updater menampilkan banner peringatan, tanpa shortcut disable.
+- **Export Settings… / Load Settings File…**: export settings efektif ke JSON atomik tanpa rahasia/registry/service/history; load hanya mengganti draft (tidak menyimpan atau mengubah service/Apache) dan ditandai unsaved sampai **Save Settings**.
 - **Doctor** read-only di Settings: cek Administrator, tool, settings/registry, service Apache + SCM, remote Git, Scheduled Task, SSH, storage/disk, pending Apache, dan referensi PHP; hasil dikelompokkan dengan badge status dan bisa disalin lewat **Copy Report**.
 - Kartu **Apache App Mapping** mem-parsing DocumentRoot/Include/variabel config Apache dan menyarankan `webServerService`; mapping hanya ditulis setelah app dipilih dan **Apply Mappings** diklik (dengan backup `projects.json`).
 - Command app mendukung variabel `${PHP}`, `${PHP_HOME}`, `${GIT}`, `${APACHE_HOME}`, dan variabel settings lain. Jika path PHP berubah, GUI menampilkan dialog referensi PHP hardcoded dengan pilihan **Use ${PHP}**, **Use new path**, atau **Leave**; tidak ada rewrite otomatis.
@@ -192,7 +194,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **413 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **427 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 

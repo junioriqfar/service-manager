@@ -68,6 +68,11 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
 - Tabel app registry: nama/ID, branch, toolchain, service lifecycle, status, last update.
   Untuk preset Laravel ditampilkan versi PHP efektif; app dengan `webServerService`
   menampilkan nama service Apache dan versi Apache dari settings efektif.
+- Jika `settings.json.maintenance.enabled`, banner peringatan **Maintenance mode is
+  enabled** tampil di atas tabel berisi message opsional dan penjelasan bahwa update
+  serta trigger SSH dijeda. Check dan dry-run plan tetap bekerja. Banner dimuat lewat
+  `load_maintenance_status` saat mount/refresh dan tidak memiliki tombol disable;
+  maintenance hanya dinonaktifkan dari tab Settings.
 - Tombol **Refresh**, **Add App**, **Check All**, **Update All**.
 - Aksi per app: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
 - Form registrasi/edit: repo URL, local path (Browse…), branch, preset, package manager,
@@ -150,6 +155,20 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
   dan tombol **Migrate Trigger**. Migrasi hanya muncul saat `settings.json` belum ada
   atau trigger `projects.json` berbeda; migrasi menyalin trigger ke `settings.json`
   tanpa mengubah `projects.json`.
+- **Maintenance Mode**: switch **Pause updates and SSH trigger** dan input
+  **Maintenance message** (placeholder "Deploy window / maintenance reason",
+  maksimal 500 karakter, tanpa karakter kontrol). Saat aktif, update non-check dan
+  trigger SSH ditolak sebelum Git/state/history; check dan dry-run plan tetap
+  berjalan. Pesan tampil di Doctor dan banner tab Updater. Perubahan hanya tersimpan
+  lewat **Save Settings**; banner Updater tidak menyediakan shortcut disable.
+- **Export Settings… / Load Settings File…** di header Settings memakai
+  `rfd::FileDialog`. Export menulis settings efektif ke pretty JSON atomik dengan
+  nama default `settings-export-<tanggal>.json`, menampilkan path di toast, dan tidak
+  menyertakan registry/service/log/history/rahasia. Load hanya mengganti draft,
+  menandai **Unsaved changes**, dan menampilkan toast
+  "Settings loaded. Review and Save Settings."; tidak ada service/Apache yang
+  berubah sampai **Save Settings**. File non-`.json`, JSON invalid, settings invalid,
+  dan karakter kontrol ditolak.
 - **Privileged Execution**: status Scheduled Task (`installed`, state, run level,
   user, logon type, last run, last result), field task name/user/logon type, dan
   tombol **Install Task**/**Repair Task**, **Remove Task**, **Test Task**.
@@ -186,6 +205,8 @@ di-update?" tanpa mengubah apa pun.
     credential; URL userinfo di-redaksi.
   - **Scheduled Task**: installed, state, dan last result.
   - **SSH**: service `sshd` dan port 22, best effort.
+  - **Maintenance**: status `settings.json.maintenance`; enabled menghasilkan
+    warning dan hint untuk menonaktifkannya dari Settings.
   - **Storage**: `data/`, `logs/`, `backup/` writable dan disk bebas.
   - **Pending changes**: `data/apache-pending.json`.
   - **PHP references**: path `php.exe` hardcoded yang bukan `${PHP}`.
@@ -302,7 +323,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/commands.rs` | Command IPC (CRUD, install, start/stop, import, backup/restore, batch) |
 | `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log, plan read-only) |
 | `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
-| `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, trigger migration, Scheduled Task) |
+| `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, maintenance status, export/load settings JSON, trigger migration, Scheduled Task) |
 | `crates/sm-gui/src/doctor.rs` | Doctor read-only: status/check/report types, agregasi overall, check environment/tools/settings/registry/services/remote/task/SSH/storage/pending/PHP, command `run_doctor` |
 | `crates/sm-gui/src/apache.rs` | Pending Apache change, matching service/app, apply/rollback/audit, command `apache_change_status`/`apply_apache_change` |
 | `crates/sm-gui/src/apache_config.rs` | Parser DocumentRoot/include/variabel, saran mapping, command `detect_apache_mappings`/`apply_apache_mappings` |
@@ -326,7 +347,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 413 test):
+Test GUI mencakup (total workspace 427 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
@@ -343,7 +364,9 @@ Test GUI mencakup (total workspace 413 test):
 - Remote: normalisasi config, save/load, preview wrapper/direct, BatchMode/askpass, DPAPI password.
 - Settings: parser JSON status Scheduled Task, validasi nama task/user/logon type,
   fallback settings lama, save/load helper, migrasi trigger eksplisit, diagnostik,
-  deteksi/resolusi path tool, Apache root/config, dan test versi melalui file `.bat`.
+  deteksi/resolusi path tool, Apache root/config, test versi melalui file `.bat`,
+  maintenance save/view + status, export/load roundtrip tanpa write ke config aktif,
+  legacy fallback export, penolakan JSON/settings invalid/control character/non-`.json`.
 - Apache propagation: matching service berdasarkan executable/root, first config
   semua service Apache, filter app via `webServerService`, pending
   save/load/clear/validation, update hanya service terdampak, backup services,
@@ -363,9 +386,10 @@ Test GUI mencakup (total workspace 413 test):
   disk threshold, remote sukses/gagal, scan PHP hardcoded, redaksi detail/hint,
   dan report builder.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
-  tab Settings (termasuk kartu Trigger, Apache App Mapping, field web server,
-  panel Apache pending, dialog PHP references, kartu Doctor dengan Run/Copy, dan
-  tombol Clean Logs Now), dialog History dengan empty state, serta ikon/tema.
+  tab Settings (termasuk kartu Maintenance Mode, tombol Export/Load Settings, kartu
+  Trigger, Apache App Mapping, field web server, panel Apache pending, dialog PHP
+  references, kartu Doctor dengan Run/Copy, dan tombol Clean Logs Now), banner
+  maintenance tab Updater, dialog History dengan empty state, serta ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 
@@ -389,3 +413,7 @@ Start-Process .\target\debug\sm-gui.exe
   serta variabel `${PHP}`/`${PHP_HOME}` dan dialog replace referensi PHP hardcoded.
   Replace tetap hanya berjalan setelah user memilih **Use ${PHP}** atau
   **Use new path**.
+- Maintenance mode hanya menolak update/trigger non-check; ia bukan autentikasi dan
+  tidak menggantikan allowlist IP/elevation. Export settings bukan full backup dan
+  tidak memuat `projects.json`/`services.json`/history. Load hanya mengisi draft;
+  perubahan berlaku setelah **Save Settings**.

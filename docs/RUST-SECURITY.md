@@ -14,6 +14,8 @@ Dokumen ini menjelaskan kontrol keamanan komponen Rust (`sm-win`, `sm-gui`, `sm-
 | SSH trigger IP allowlist | Global + per-app IP/CIDR dari `SSH_CONNECTION` | `sm-updater/src/ip.rs`, `trigger.rs` |
 | Elevated updater task | Scheduled Task `RunLevel Highest`, wrapper + nonce/expiry | `scripts/`, `sm-gui/src/remote.rs` |
 | SSH client GUI | Key: `BatchMode=yes`; password: `SSH_ASKPASS` + DPAPI | `sm-gui/src/remote.rs`, `sm-trigger/src/main.rs` |
+| Maintenance mode | Block update/trigger non-check; tidak bypass auth/allowlist | `sm-updater/src/settings.rs`, `trigger.rs` |
+| Export settings | Hanya settings efektif; tanpa rahasia/service/history | `sm-gui/src/settings.rs` |
 | Argumen proses | Array argumen, tanpa penggabungan shell | `sm-win`, `sm-updater` |
 | Command admin-only | `commands.*`/`buildCommand`/`shell` hanya dari config admin | `sm-updater/src/toolchain.rs` |
 | Validasi input | Nama service, path executable, native fields | `sm-core/src/validation.rs` |
@@ -151,6 +153,30 @@ Retensi log bersifat **manual-only** lewat **Clean Logs Now** di Settings:
   dan task memakai `MultipleInstances IgnoreNew`.
 - Tidak ada port HTTP baru; akses hanya lewat SSH dan firewall yang sudah ada.
 
+## Maintenance Mode
+
+- `settings.json.maintenance.enabled` menolak run update non-check dan trigger SSH
+  sebelum app/Git/state/history disentuh.
+- Check dan dry-run plan tetap berjalan karena read-only.
+- Maintenance **tidak** menggantikan atau menonaktifkan allowlist IP, pemeriksaan
+  elevation, Scheduled Task, SSH authentication, atau wrapper nonce/expiry.
+- `message` adalah teks operasional biasa: maksimal 500 karakter, tanpa karakter
+  kontrol, dan tidak boleh dipakai untuk menulis rahasia. Doctor menganggap
+  maintenance aktif sebagai warning, bukan error.
+
+## Export dan Load Settings
+
+- **Export Settings…** hanya menulis settings efektif (pretty JSON, atomik) ke path
+  `.json` pilihan user. File tidak memuat `projects.json`, `services.json`, log,
+  history, password, token, atau ciphertext DPAPI.
+- `Settings` memang tidak memiliki field password/token; `variables` dengan nama
+  sensitif (`password`, `token`, `secret`, `apikey`, dan sejenisnya) ditolak oleh
+  validasi settings baik saat save maupun export.
+- **Load Settings File…** hanya membaca, memvalidasi, lalu mengisi draft GUI. Tidak
+  ada file yang ditulis, service/Apache yang diubah, atau apply otomatis. File JSON
+  invalid, settings invalid, dan karakter kontrol ditolak sebelum draft berubah.
+- Path non-`.json` ditolak. Export/load tidak menulis log atau history.
+
 ## Elevasi Administrator
 
 - GUI memeriksa token admin saat start dan menampilkan banner jika tidak elevated.
@@ -182,6 +208,7 @@ git diff --cached
 Aturan `.gitignore`:
 
 - `data/services.json`, `data/projects.json`, `data/services-export-*.json`;
+- `settings-export-*.json` (export settings, machine-specific paths);
 - `data/trigger-client.json`, `data/updater-state.json`, `data/updater.lock`,
   `data/updater-request.json`, `data/updater-result.json`;
 - `logs/`, `backup/`;

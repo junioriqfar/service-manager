@@ -1,6 +1,6 @@
 # Rencana Fase 3 — Operasional, Doctor, Plan, History
 
-Status: **Sprint 3.1–3.3 selesai; Sprint 3.4–3.5 belum**
+Status: **Sprint 3.1–3.3 dan 3.4a selesai; Sprint 3.4b–3.5 belum**
 
 Lanjutan dari [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md). Fase 3 berfokus pada
 observability dan keselamatan operasi, bukan fitur update inti.
@@ -285,13 +285,77 @@ Catatan implementasi Sprint 3.3:
 
 ---
 
-## Sprint 3.4 — Admin tools (opsional, butuh keputusan)
+## Sprint 3.4a — Maintenance mode + Settings export/load
 
-- Credential manager UI (Git PAT store/test/clear).
-- Backup/restore settings tanpa rahasia.
-- Maintenance mode / pause trigger.
-- Firewall helper (read/add/remove rule SSH; admin).
-- Test koneksi SSH remote.
+Status: **Selesai**.
+
+Tujuan: menjeda update dan trigger SSH selama deploy window, serta memindahkan
+settings efektif antar mesin tanpa membawa rahasia. Git credential UI, firewall
+UI, dan parallel updates tetap di 3.4b/3.5.
+
+Maintenance:
+
+- `settings.json.maintenance` berisi `{ "enabled": bool, "message": string }`
+  (serde camelCase, default `false` dan string kosong). `message` di-trim,
+  maksimal 500 karakter, dan menolak karakter kontrol.
+- `run_registry_with` menolak **non-check** run sebelum app/Git disentuh jika
+  maintenance aktif. Pesan error menjelaskan bahwa update dan trigger SSH dijeda,
+  menyertakan `message` kustom bila tidak kosong, dan mengarahkan user ke Settings.
+- `run --check` dan dry-run plan tetap berjalan read-only; history/state tidak
+  ditulis untuk run yang diblokir. Maintenance tidak mengubah allowlist IP,
+  elevation, Scheduled Task, atau autentikasi.
+- Doctor menambahkan check `maintenance.status` (kategori `maintenance`):
+  enabled = warning dengan hint "Updates and SSH trigger are paused. Disable
+  maintenance mode in Settings when ready."; disabled = ok.
+- GUI Settings memiliki kartu **Maintenance Mode** dekat Trigger/Privileged
+  Execution: switch **Pause updates and SSH trigger**, input **Maintenance
+  message** (placeholder "Deploy window / maintenance reason"), penjelasan bahwa
+  check dan dry-run plan tetap bekerja, serta tooltip. Nilai disimpan lewat
+  **Save Settings**.
+- Tab Updater memuat `load_maintenance_status` saat mount/refresh dan menampilkan
+  banner peringatan di atas tabel berisi message. Tidak ada tombol disable di
+  banner; maintenance hanya dinonaktifkan dari Settings.
+
+Export/load settings:
+
+- Helper murni `export_settings_at(settings_file, projects_file, destination)`
+  memuat settings efektif, memvalidasi, dan menulis pretty JSON secara atomik
+  (temp + rename) ke destination. Hanya settings yang diekspor: tidak ada
+  `projects.json`, `services.json`, log, history, password, atau token.
+- `load_settings_from_file_at(path)` membaca, menormalisasi, dan memvalidasi file
+  tanpa menulis apa pun.
+- Path wajib berekstensi `.json` (case-insensitive) untuk export dan load.
+- Command Tauri `export_settings_file` memakai `rfd::FileDialog` dengan default
+  `settings-export-<tanggal>.json`; `load_settings_file` membuka file `.json`.
+- GUI Settings memiliki tombol **Export Settings…** dan **Load Settings File…**.
+  Export menampilkan toast berisi path. Load hanya mengganti draft (tidak
+  menyimpan, tidak mengubah service/Apache), menandai **Unsaved changes**, dan
+  menampilkan toast "Settings loaded. Review and Save Settings.".
+- `.json` yang tidak valid, settings yang gagal validasi, dan message dengan
+  karakter kontrol ditolak; `settings.json`/`projects.json` aktif tidak berubah
+  selama export/load.
+
+Batasan:
+
+- Maintenance mode bukan kontrol autentikasi dan tidak menggantikan allowlist IP,
+  elevation, atau wrapper task; ia hanya menolak run non-check lebih awal.
+- Export adalah salinan settings efektif, bukan full backup. Restore penuh tetap
+  memakai `projects.json`/`services.json`/`backup` yang ada.
+- `variables` admin ikut terekspor; nilai dengan nama sensitif ditolak, tetapi
+  operator tetap tidak boleh menaruh rahasia dengan nama tidak sensitif.
+- Load tidak menerapkan perubahan otomatis; user harus meninjau draft dan klik
+  **Save Settings**. Pending Apache dan dialog PHP references baru dihitung saat
+  Save.
+- Git credential UI, firewall helper, backup/restore penuh, dan parallel updates
+  belum termasuk 3.4a.
+
+## Sprint 3.4b — Admin tools (sisa, opsional)
+
+- Credential manager UI (Git PAT store/test/clear) — 3.4b.
+- Backup/restore settings tanpa rahasia — **selesai 3.4a** (export/load efektif).
+- Maintenance mode / pause trigger — **selesai 3.4a**.
+- Firewall helper (read/add/remove rule SSH; admin) — 3.4b.
+- Test koneksi SSH remote — 3.4b.
 
 ## Sprint 3.5 — Parallel updates (opsional)
 
@@ -309,6 +373,8 @@ Catatan implementasi Sprint 3.3:
 - [x] Plan preview tanpa side effect.
 - [x] History JSONL dan UI history.
 - [x] Retention manual + tombol Settings.
+- [x] Maintenance mode + banner Updater + Doctor warning.
+- [x] Export/load settings tanpa rahasia.
 - [x] Audit trigger IP/action.
 - [x] Test/clippy/fmt hijau.
 - [x] Docs diperbarui.

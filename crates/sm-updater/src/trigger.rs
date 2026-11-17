@@ -89,6 +89,18 @@ pub fn run_registry_with(
         PathBuf::from(updater_settings.log_dir.trim())
     };
 
+    if !options.check_only && effective.maintenance.enabled {
+        let mut message = String::from(
+            "Maintenance mode is enabled: updates and the SSH trigger are paused. \
+             Disable maintenance mode in Settings when ready.",
+        );
+        let custom = effective.maintenance.message.trim();
+        if !custom.is_empty() {
+            message.push_str(&format!(" Maintenance message: {custom}"));
+        }
+        return Err(message);
+    }
+
     if let Some(requested) = &options.app {
         if config.find(requested).is_none() {
             return Err(format!("App '{requested}' tidak ditemukan di registry."));
@@ -711,6 +723,138 @@ mod tests {
             build: sm_core::ToggleMode::Never,
             ..AppConfig::default()
         }
+    }
+
+    #[test]
+    fn maintenance_mode_blocks_update_without_state_or_history() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        std::fs::write(temp.path().join("git.exe"), b"fake").unwrap();
+
+        let config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: temp.path().join("git.exe").to_string_lossy().to_string(),
+                log_dir: temp.path().join("logs").to_string_lossy().to_string(),
+                ..crate::registry::UpdaterSettings::default()
+            },
+            apps: vec![static_app("demo", &project)],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let mut settings = crate::settings::Settings::default();
+        settings.maintenance.enabled = true;
+        settings.maintenance.message = "Deploy window until 17:00".into();
+        crate::settings::save_settings(&temp.path().join("data/settings.json"), &settings).unwrap();
+
+        let runner = FakeRunner::new();
+        let error = run_registry_with(
+            &config,
+            &config_path,
+            &runner,
+            &NoServices,
+            RunOptions::default(),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("Maintenance mode"), "{error}");
+        assert!(error.contains("Deploy window until 17:00"), "{error}");
+        assert!(
+            runner.programs().is_empty(),
+            "no Git command may run while maintenance mode blocks the update"
+        );
+        assert!(!temp.path().join("data/updater-state.json").exists());
+        assert!(!temp.path().join("data/updater-history.jsonl").exists());
+        assert!(!lock_path(&config_path).exists());
+        assert!(!temp.path().join("logs").exists());
+    }
+
+    #[test]
+    fn maintenance_mode_without_message_still_blocks_and_allows_check() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        std::fs::write(temp.path().join("git.exe"), b"fake").unwrap();
+
+        let config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: temp.path().join("git.exe").to_string_lossy().to_string(),
+                log_dir: temp.path().join("logs").to_string_lossy().to_string(),
+                ..crate::registry::UpdaterSettings::default()
+            },
+            apps: vec![static_app("demo", &project)],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let mut settings = crate::settings::Settings::default();
+        settings.maintenance.enabled = true;
+        crate::settings::save_settings(&temp.path().join("data/settings.json"), &settings).unwrap();
+
+        let error = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.contains("Maintenance mode"), "{error}");
+        assert!(!error.contains("Maintenance message"));
+        assert!(!temp.path().join("data/updater-state.json").exists());
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions {
+                check_only: true,
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].status, "check");
+    }
+
+    #[test]
+    fn maintenance_mode_is_ignored_when_settings_are_absent() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        std::fs::write(temp.path().join("git.exe"), b"fake").unwrap();
+
+        let config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: temp.path().join("git.exe").to_string_lossy().to_string(),
+                log_dir: temp.path().join("logs").to_string_lossy().to_string(),
+                ..crate::registry::UpdaterSettings::default()
+            },
+            apps: vec![static_app("demo", &project)],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &FakeRunner::new(),
+            &NoServices,
+            RunOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].status, "updated");
+        assert!(!temp.path().join("data/settings.json").exists());
     }
 
     #[test]

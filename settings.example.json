@@ -77,6 +77,10 @@
     ],
     "allowLocal": true
   },
+  "maintenance": {
+    "enabled": false,
+    "message": ""
+  },
   "privilegedExecution": {
     "mode": "scheduled-task",
     "taskName": "ServiceManager-Updater",

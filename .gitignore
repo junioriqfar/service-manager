@@ -4,6 +4,7 @@ projects.json
 settings.json
 services-export-*.json
 services-broken-*.json
+settings-export-*.json
 services.json.bak-*
 projects.json.bak-*
 settings.json.bak-*
@@ -11,6 +12,7 @@ data/services.json
 data/projects.json
 data/settings.json
 data/services-export-*.json
+data/settings-export-*.json
 data/*.bak-*
 data/updater-state.json
 data/updater-history.jsonl

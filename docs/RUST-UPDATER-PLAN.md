@@ -4,9 +4,9 @@
 
 Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur yang sudah ada, serta fitur yang direncanakan berikut prioritasnya.
 
-- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan dan Sprint 3.3 history/retention selesai**
+- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan, Sprint 3.3 history/retention, dan Sprint 3.4a maintenance/export settings selesai**
 - Lokasi: `crates/sm-updater`
-- Test: **152 unit test** untuk crate ini; total workspace **413 test**. Config default ada di `data/projects.json`.
+- Test: **158 unit test** untuk crate ini; total workspace **427 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
@@ -171,9 +171,21 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 | Clean Logs Now | Selesai | Tombol Settings + konfirmasi + hasil file/byte/error |
 | Otomatis saat update | Tidak | Retention manual-only; scheduler terpisah belum ada |
 
-### 3.11 Pengujian
+### 3.11 Maintenance mode (Sprint 3.4a)
 
-- **152 unit test** crate `sm-updater`:
+| Fitur | Status | Detail |
+| --- | --- | --- |
+| `settings.json.maintenance` | Selesai | `enabled` + `message` (trim, max 500, tanpa control char) |
+| Pause trigger/update | Selesai | Non-check run ditolak sebelum Git/state/history; pesan menyertakan message |
+| Check/plan tetap | Selesai | `run --check` dan dry-run plan tetap read-only |
+| Doctor check | Selesai | `maintenance.status` warning saat aktif |
+| GUI Settings | Selesai | Kartu Maintenance Mode, switch + message, simpan lewat Save Settings |
+| Banner Updater | Selesai | `load_maintenance_status` saat mount/refresh; tanpa shortcut disable |
+| Export/load settings | Selesai | Helper `.json` atomik tanpa rahasia; load hanya draft GUI |
+
+### 3.12 Pengujian
+
+- **158 unit test** crate `sm-updater`:
   - parsing CLI, registry, dan credential,
   - scan project/override,
   - runner nyata (exit code/timeout/timeout+env),
@@ -185,7 +197,8 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
   - matriks update: up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional,
   - plan dry-run: seluruh status, command per group, service read-only, redaksi webhook, parse CLI, dan smoke test tanpa SCM/network,
   - history: roundtrip append/load, newest-first/limit, filter case-insensitive, baris rusak, file hilang, redaksi/cap, JSONL satu baris, integrasi trigger allowed+forbidden+IP, dan kegagalan tulis yang tidak menggagalkan run,
-  - retention: pola file, batas hari, file aktif, folder hilang, log project, merge count, dan error delete yang tidak menghentikan file lain.
+  - retention: pola file, batas hari, file aktif, folder hilang, log project, merge count, dan error delete yang tidak menghentikan file lain,
+  - maintenance mode: default/normalize/validasi message, update non-check ditolak tanpa state/history, check tetap jalan, dan fallback tanpa settings.json.
 - **E2E lokal** dengan repository Git bare:
   - `list` mendeteksi project,
   - `check` melaporkan up-to-date/incoming,

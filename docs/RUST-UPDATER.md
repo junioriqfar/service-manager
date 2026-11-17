@@ -613,7 +613,10 @@ JSONL, urutan/limit, filter case-insensitive, baris rusak, file hilang, redaksi/
 pesan, satu object per baris, integrasi trigger (allowed + forbidden + client IP),
 dan kegagalan tulis yang tidak menggagalkan run. Retensi diuji untuk pola file,
 batas hari, file aktif, folder hilang, log project, merge count, dan error delete
-yang tidak menghentikan file lain. Total workspace: 413 test.
+yang tidak menghentikan file lain. Maintenance mode diuji untuk default/normalize/validasi
+message, penolakan update non-check tanpa state/history, dan check yang tetap berjalan.
+Export/load settings diuji untuk roundtrip, legacy fallback, penolakan JSON/settings/
+control character/non-`.json`, dan tidak ada write ke config aktif. Total workspace: 427 test.
 
 ## Task Scheduler / Elevation
 

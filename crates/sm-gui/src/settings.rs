@@ -13,6 +13,7 @@ use sm_updater::settings::{
     effective_settings, load_settings, save_settings, settings_path_for, Settings, SettingsTrigger,
 };
 use sm_updater::trigger::default_log_dir;
+use tauri::AppHandle;
 
 use crate::apache::{self, ApacheChangeView};
 use crate::php_paths::{self, PhpPathChangeView};
@@ -176,6 +177,14 @@ pub struct SettingsView {
     /// IP client dari `SSH_CONNECTION`/`SSH_CLIENT`, jika ada.
     pub current_client_ip: Option<String>,
     pub diagnostics: SettingsDiagnostics,
+}
+
+/// Status maintenance efektif untuk banner tab Updater.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaintenanceView {
+    pub enabled: bool,
+    pub message: String,
 }
 
 /// Hasil Save Settings. `apachePending` berisi preview service/app yang perlu
@@ -825,6 +834,70 @@ fn save_settings_at(settings_file: &Path, mut settings: Settings) -> Result<Sett
     Ok(settings)
 }
 
+fn require_json_extension(path: &Path) -> Result<(), String> {
+    let is_json = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+    if !is_json {
+        return Err(format!(
+            "Settings file must use a .json extension: {}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Export effective settings to a user-selected JSON file.
+///
+/// Only settings values are written: no registry apps, service config, logs,
+/// history, or secrets. The destination is written atomically (`save_settings`).
+pub(crate) fn export_settings_at(
+    settings_file: &Path,
+    projects_file: &Path,
+    destination: &Path,
+) -> Result<(), String> {
+    require_json_extension(destination)?;
+    if destination.is_dir() {
+        return Err(format!(
+            "Export destination is a folder, not a file: {}",
+            destination.display()
+        ));
+    }
+    let config = load_config(projects_file)?;
+    let mut settings = effective_settings(settings_file, &config.settings, &config.trigger)
+        .map_err(|error| error.to_string())?;
+    settings.normalize();
+    save_settings(destination, &settings).map_err(|error| error.to_string())
+}
+
+/// Read, parse, normalize, and validate a settings file without writing
+/// anything. The caller decides whether to apply it as a draft.
+pub(crate) fn load_settings_from_file_at(path: &Path) -> Result<Settings, String> {
+    require_json_extension(path)?;
+    match load_settings(path).map_err(|error| error.to_string())? {
+        Some(settings) => Ok(settings),
+        None => Err(format!(
+            "Settings file is empty or missing: {}",
+            path.display()
+        )),
+    }
+}
+
+fn maintenance_status_at(
+    settings_file: &Path,
+    projects_file: &Path,
+) -> Result<MaintenanceView, String> {
+    let config = load_config(projects_file)?;
+    let settings = effective_settings(settings_file, &config.settings, &config.trigger)
+        .map_err(|error| error.to_string())?;
+    Ok(MaintenanceView {
+        enabled: settings.maintenance.enabled,
+        message: settings.maintenance.message,
+    })
+}
+
 /// Backup `settings.json` sebelum migrasi trigger.
 fn backup_settings_file(settings_file: &Path) -> Result<Option<PathBuf>, String> {
     if !settings_file.is_file() {
@@ -1170,6 +1243,72 @@ pub async fn load_settings_view() -> Result<SettingsView, String> {
     .map_err(|error| error.to_string())?
 }
 
+/// Read-only maintenance status for the Updater banner.
+#[tauri::command]
+pub async fn load_maintenance_status() -> Result<MaintenanceView, String> {
+    let paths = ConfigPaths::detect();
+    tauri::async_runtime::spawn_blocking(move || {
+        maintenance_status_at(
+            &settings_path_for(&paths.projects_path()),
+            &paths.projects_path(),
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Save a copy of the effective settings. The dialog picks the destination;
+/// the helper writes pretty JSON atomically and never exports registry apps.
+#[tauri::command]
+pub async fn export_settings_file(app: AppHandle) -> Result<Option<String>, String> {
+    let default_name = format!(
+        "settings-export-{}.json",
+        chrono::Local::now().format("%Y%m%d-%H%M%S")
+    );
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let selected = rfd::FileDialog::new()
+            .add_filter("JSON", &["json"])
+            .set_file_name(&default_name)
+            .save_file();
+        let _ = sender.send(selected);
+    })
+    .map_err(|error| error.to_string())?;
+    let Some(destination) = receiver.await.map_err(|error| error.to_string())? else {
+        return Ok(None);
+    };
+
+    let paths = ConfigPaths::detect();
+    let settings_file = settings_path_for(&paths.projects_path());
+    let projects_file = paths.projects_path();
+    tauri::async_runtime::spawn_blocking(move || {
+        export_settings_at(&settings_file, &projects_file, &destination)?;
+        Ok(Some(destination.to_string_lossy().to_string()))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Load a settings file into a draft. Nothing is saved and no service or Apache
+/// change is applied.
+#[tauri::command]
+pub async fn load_settings_file(app: AppHandle) -> Result<Option<Settings>, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let selected = rfd::FileDialog::new()
+            .add_filter("JSON", &["json"])
+            .pick_file();
+        let _ = sender.send(selected);
+    })
+    .map_err(|error| error.to_string())?;
+    let Some(path) = receiver.await.map_err(|error| error.to_string())? else {
+        return Ok(None);
+    };
+    tauri::async_runtime::spawn_blocking(move || load_settings_from_file_at(&path).map(Some))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub fn save_settings_view(settings: Settings) -> Result<SettingsSaveResult, String> {
     let paths = ConfigPaths::detect();
@@ -1424,6 +1563,193 @@ mod tests {
         assert!(!legacy_fallback);
         assert_eq!(loaded.tools.apache.root, r"C:\apache");
         assert_eq!(loaded.updater.log_retention_days, 14);
+    }
+
+    #[test]
+    fn save_and_load_preserve_maintenance_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let settings_file = data.join("settings.json");
+        let projects = data.join("projects.json");
+
+        let mut settings = Settings::default();
+        settings.maintenance.enabled = true;
+        settings.maintenance.message = "  Deploy window  ".into();
+
+        let saved = save_settings_at(&settings_file, settings).unwrap();
+        assert!(saved.maintenance.enabled);
+        assert_eq!(saved.maintenance.message, "Deploy window");
+
+        let (loaded, legacy_fallback) = load_settings_at(&settings_file, &projects).unwrap();
+        assert!(!legacy_fallback);
+        assert!(loaded.maintenance.enabled);
+        assert_eq!(loaded.maintenance.message, "Deploy window");
+    }
+
+    #[test]
+    fn maintenance_status_reports_effective_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        let settings_file = settings_path_for(&paths.projects_path());
+
+        let initial = maintenance_status_at(&settings_file, &paths.projects_path()).unwrap();
+        assert!(!initial.enabled);
+        assert!(initial.message.is_empty());
+
+        let mut settings = Settings::default();
+        settings.maintenance.enabled = true;
+        settings.maintenance.message = "Deploy window".into();
+        save_settings_at(&settings_file, settings).unwrap();
+
+        let view = maintenance_status_at(&settings_file, &paths.projects_path()).unwrap();
+        assert!(view.enabled);
+        assert_eq!(view.message, "Deploy window");
+    }
+
+    #[test]
+    fn export_and_load_settings_roundtrip_without_runtime_writes() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        let settings_file = settings_path_for(&paths.projects_path());
+        let mut settings = Settings::default();
+        settings.maintenance.enabled = true;
+        settings.maintenance.message = "Deploy window".into();
+        settings.updater.log_retention_days = 14;
+        save_settings_at(&settings_file, settings).unwrap();
+        write_projects(&paths.projects_path());
+
+        let settings_before = std::fs::read_to_string(&settings_file).unwrap();
+        let projects_before = std::fs::read_to_string(paths.projects_path()).unwrap();
+        let mut data_before: Vec<String> = std::fs::read_dir(paths.data_dir())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        data_before.sort();
+
+        let destination = temp.path().join("exports/settings-export-20261117.json");
+        export_settings_at(&settings_file, &paths.projects_path(), &destination).unwrap();
+
+        assert!(destination.is_file());
+        let exported = std::fs::read_to_string(&destination).unwrap();
+        assert!(exported.contains("\"maintenance\""));
+        assert!(exported.contains("\"message\": \"Deploy window\""));
+        assert!(!exported.to_ascii_lowercase().contains("password"));
+        assert!(!exported.to_ascii_lowercase().contains("token"));
+
+        assert_eq!(
+            std::fs::read_to_string(&settings_file).unwrap(),
+            settings_before,
+            "export must not modify settings.json"
+        );
+        assert_eq!(
+            std::fs::read_to_string(paths.projects_path()).unwrap(),
+            projects_before,
+            "export must not modify projects.json"
+        );
+        let mut data_after: Vec<String> = std::fs::read_dir(paths.data_dir())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        data_after.sort();
+        assert_eq!(data_after, data_before, "export wrote into data/");
+
+        let loaded = load_settings_from_file_at(&destination).unwrap();
+        assert!(loaded.maintenance.enabled);
+        assert_eq!(loaded.maintenance.message, "Deploy window");
+        assert_eq!(loaded.updater.log_retention_days, 14);
+        assert_eq!(
+            std::fs::read_to_string(&settings_file).unwrap(),
+            settings_before,
+            "load must not modify the live settings.json"
+        );
+    }
+
+    #[test]
+    fn export_uses_legacy_fallback_without_creating_settings_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = ConfigPaths::new(temp.path());
+        std::fs::create_dir_all(paths.data_dir()).unwrap();
+        write_projects(&paths.projects_path());
+        let settings_file = settings_path_for(&paths.projects_path());
+        assert!(!settings_file.exists());
+
+        let destination = temp.path().join("settings-export.json");
+        export_settings_at(&settings_file, &paths.projects_path(), &destination).unwrap();
+
+        assert!(destination.is_file());
+        assert!(
+            !settings_file.exists(),
+            "export must not create the live settings.json"
+        );
+        let loaded = load_settings_from_file_at(&destination).unwrap();
+        assert_eq!(loaded.tools.git.path, r"C:\legacy\git.exe");
+        assert!(!loaded.maintenance.enabled);
+    }
+
+    #[test]
+    fn load_settings_file_rejects_invalid_json_and_invalid_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let invalid_json = temp.path().join("invalid.json");
+        std::fs::write(&invalid_json, "{not-json").unwrap();
+        let error = load_settings_from_file_at(&invalid_json).unwrap_err();
+        assert!(error.contains("JSON"), "{error}");
+
+        let invalid_settings = temp.path().join("invalid-settings.json");
+        let mut settings = Settings::default();
+        settings.updater.max_concurrent_updates = 0;
+        std::fs::write(
+            &invalid_settings,
+            serde_json::to_string_pretty(&settings).unwrap(),
+        )
+        .unwrap();
+        let error = load_settings_from_file_at(&invalid_settings).unwrap_err();
+        assert!(error.contains("maxConcurrentUpdates"), "{error}");
+
+        let empty = temp.path().join("empty.json");
+        std::fs::write(&empty, "   ").unwrap();
+        let error = load_settings_from_file_at(&empty).unwrap_err();
+        assert!(error.contains("empty"), "{error}");
+    }
+
+    #[test]
+    fn load_settings_file_rejects_control_characters_in_maintenance_message() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("control.json");
+        let mut settings = Settings::default();
+        settings.maintenance.enabled = true;
+        settings.maintenance.message = "line\nbreak".into();
+        std::fs::write(&path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+
+        let error = load_settings_from_file_at(&path).unwrap_err();
+        assert!(error.contains("kontrol"), "{error}");
+    }
+
+    #[test]
+    fn settings_file_helpers_require_json_extension() {
+        let temp = tempfile::tempdir().unwrap();
+        let text_file = temp.path().join("settings.txt");
+        std::fs::write(
+            &text_file,
+            serde_json::to_string(&Settings::default()).unwrap(),
+        )
+        .unwrap();
+
+        let error = load_settings_from_file_at(&text_file).unwrap_err();
+        assert!(error.contains(".json"), "{error}");
+
+        let destination = temp.path().join("export.txt");
+        let error = export_settings_at(
+            &temp.path().join("data/settings.json"),
+            &temp.path().join("data/projects.json"),
+            &destination,
+        )
+        .unwrap_err();
+        assert!(error.contains(".json"), "{error}");
+        assert!(!destination.exists());
     }
 
     #[test]

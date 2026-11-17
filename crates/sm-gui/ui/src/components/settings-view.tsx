@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ClipboardCopy,
   Clock,
+  Download,
   FlaskConical,
   FolderOpen,
   Loader2,
@@ -19,6 +20,7 @@ import {
   Stethoscope,
   Terminal,
   Trash2,
+  Upload,
   Wrench,
   XCircle,
 } from "lucide-react";
@@ -511,6 +513,7 @@ const DOCTOR_CATEGORY_LABELS: Record<string, string> = {
   remote: "Remote access",
   task: "Scheduled Task",
   ssh: "SSH",
+  maintenance: "Maintenance",
   storage: "Storage",
   pending: "Pending changes",
   php: "PHP references",
@@ -1049,6 +1052,9 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const [pruning, setPruning] = useState(false);
   const [pruneResult, setPruneResult] = useState<PruneResult | null>(null);
   const [pruneError, setPruneError] = useState<string | null>(null);
+  const [settingsFileBusy, setSettingsFileBusy] = useState<"export" | "load" | null>(
+    null,
+  );
   const [busyTools, setBusyTools] = useState<Partial<Record<ToolKey, ToolBusy>>>({});
   const [toolMessages, setToolMessages] = useState<
     Partial<Record<ToolKey, ToolMessage>>
@@ -1195,6 +1201,52 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
     setDraft((previous) =>
       previous ? { ...previous, trigger: { ...previous.trigger, ...patch } } : previous,
     );
+  }
+
+  function updateMaintenance(patch: Partial<Settings["maintenance"]>) {
+    setDraft((previous) =>
+      previous
+        ? { ...previous, maintenance: { ...previous.maintenance, ...patch } }
+        : previous,
+    );
+  }
+
+  async function exportSettings() {
+    if (settingsFileBusy) return;
+    setSettingsFileBusy("export");
+    try {
+      const destination = await invoke<string | null>("export_settings_file");
+      if (!destination) return;
+      toast.success(`Settings exported to ${destination}. Password/token fields are not included.`, {
+        duration: 8000,
+      });
+    } catch (error) {
+      toast.error(errorMessage(error), { duration: 10000 });
+    } finally {
+      setSettingsFileBusy(null);
+    }
+  }
+
+  async function loadSettingsFile() {
+    if (settingsFileBusy) return;
+    setSettingsFileBusy("load");
+    try {
+      const loaded = await invoke<Settings | null>("load_settings_file");
+      if (!loaded) return;
+      setDraft(loaded);
+      setTriggerIpsText(loaded.trigger.allowedClientIPs.join("\n"));
+      setToolMessages({});
+      setPhpDialogOpen(false);
+      setPhpPathChange(null);
+      setPhpApplyError(null);
+      setDoctor(null);
+      setDoctorError(null);
+      toast.success("Settings loaded. Review and Save Settings.", { duration: 8000 });
+    } catch (error) {
+      toast.error(errorMessage(error), { duration: 10000 });
+    } finally {
+      setSettingsFileBusy(null);
+    }
   }
 
   function changeTriggerIps(value: string) {
@@ -1488,7 +1540,7 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   }
 
   async function save() {
-    if (!draft || saving || toolsBusy) return;
+    if (!draft || saving || toolsBusy || settingsFileBusy) return;
     setSaving(true);
     try {
       const result = await invoke<SettingsSaveResult>("save_settings_view", {
@@ -1778,13 +1830,37 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             when you click Save Settings.
           </p>
         </div>
+        <Hint label="Export the effective settings as a JSON file. Registry apps, service config, logs, history, and secrets are not included.">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void exportSettings()}
+            disabled={saving || loading || settingsFileBusy !== null || toolsBusy}
+          >
+            {settingsFileBusy === "export" ? <Loader2 className="animate-spin" /> : <Download />}
+            Export Settings…
+          </Button>
+        </Hint>
+        <Hint label="Load a settings JSON file into this form. Nothing is saved or applied until you click Save Settings.">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void loadSettingsFile()}
+            disabled={saving || loading || settingsFileBusy !== null || toolsBusy}
+          >
+            {settingsFileBusy === "load" ? <Loader2 className="animate-spin" /> : <Upload />}
+            Load Settings File…
+          </Button>
+        </Hint>
         <Hint label="Reload settings and Scheduled Task status from disk">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => void load(true)}
-            disabled={loading || saving || taskBusy !== null || toolsBusy}
+            disabled={loading || saving || taskBusy !== null || toolsBusy || settingsFileBusy !== null}
           >
             {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
             Reload
@@ -1795,7 +1871,7 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             type="button"
             size="sm"
             onClick={() => void save()}
-            disabled={saving || loading || taskBusy !== null || toolsBusy}
+            disabled={saving || loading || taskBusy !== null || toolsBusy || settingsFileBusy !== null}
           >
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
             Save Settings
@@ -2522,6 +2598,75 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card
+          className={cn(
+            draft.maintenance.enabled &&
+              "border-amber-300/70 bg-amber-50/50 dark:border-amber-500/30 dark:bg-amber-950/20",
+          )}
+        >
+          <CardHeader className="p-4 pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <ShieldAlert className="h-4 w-4" />
+                  Maintenance Mode
+                </CardTitle>
+                <CardDescription>
+                  Pause updates and the SSH trigger without stopping services or changing Apache.
+                  Check and dry-run plan still work while maintenance mode is enabled.
+                </CardDescription>
+              </div>
+              <Badge
+                variant={draft.maintenance.enabled ? "warning" : "outline"}
+                title={
+                  draft.maintenance.enabled
+                    ? "Non-check update runs and the SSH trigger are rejected"
+                    : "Updates and the SSH trigger are allowed"
+                }
+              >
+                {draft.maintenance.enabled ? "Paused" : "Active"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4 pt-0">
+            <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
+              <div className="min-w-0">
+                <Label htmlFor="settings-maintenance-enabled">Pause updates and SSH trigger</Label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, update runs are rejected before Git, state, or history are written.
+                  Check and dry-run plan remain available.
+                </p>
+              </div>
+              <Switch
+                id="settings-maintenance-enabled"
+                checked={draft.maintenance.enabled}
+                onCheckedChange={(checked) => updateMaintenance({ enabled: checked })}
+                title="Pause updates and the SSH trigger until maintenance mode is disabled here in Settings."
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs" htmlFor="settings-maintenance-message">
+                Maintenance message
+              </Label>
+              <Input
+                id="settings-maintenance-message"
+                value={draft.maintenance.message}
+                onChange={(event) => updateMaintenance({ message: event.target.value })}
+                placeholder="Deploy window / maintenance reason"
+                maxLength={500}
+                className="h-8"
+                title="Optional reason shown in Doctor and the Updater warning banner. Maximum 500 characters; control characters are rejected."
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown in Doctor and the Updater banner. Check and dry-run plan still work. Save
+                Settings to apply; disable maintenance mode here (the Updater banner has no
+                shortcut).
+              </p>
+            </div>
           </CardContent>
         </Card>
 

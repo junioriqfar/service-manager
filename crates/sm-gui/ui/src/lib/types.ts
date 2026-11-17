@@ -339,6 +339,16 @@ export interface SettingsTrigger {
   allowLocal: boolean;
 }
 
+export interface MaintenanceSettings {
+  enabled: boolean;
+  message: string;
+}
+
+export interface MaintenanceView {
+  enabled: boolean;
+  message: string;
+}
+
 export interface PrivilegedExecution {
   mode: string;
   taskName: string;
@@ -351,6 +361,7 @@ export interface Settings {
   tools: SettingsTools;
   updater: UpdaterDefaults;
   trigger: SettingsTrigger;
+  maintenance: MaintenanceSettings;
   privilegedExecution: PrivilegedExecution;
   variables: Record<string, string>;
 }

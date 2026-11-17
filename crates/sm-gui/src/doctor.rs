@@ -226,6 +226,38 @@ fn apache_settings_check(settings: &Settings) -> DoctorCheck {
     )
 }
 
+pub(crate) fn maintenance_check(enabled: bool, message: &str) -> DoctorCheck {
+    let hint =
+        "Updates and SSH trigger are paused. Disable maintenance mode in Settings when ready.";
+    if enabled {
+        let message = message.trim();
+        let detail = if message.is_empty() {
+            "Maintenance mode is enabled: updates and the SSH trigger are paused.".to_string()
+        } else {
+            format!(
+                "Maintenance mode is enabled ({message}): updates and the SSH trigger are paused."
+            )
+        };
+        check(
+            "maintenance.status",
+            "maintenance",
+            "Maintenance mode",
+            DoctorStatus::Warning,
+            detail,
+            hint,
+        )
+    } else {
+        check(
+            "maintenance.status",
+            "maintenance",
+            "Maintenance mode",
+            DoctorStatus::Ok,
+            "Maintenance mode is disabled: updates and the SSH trigger are allowed.",
+            "",
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ToolProbe {
     NotConfigured,
@@ -1383,6 +1415,10 @@ pub(crate) fn run_doctor_at(paths: &ConfigPaths) -> DoctorReport {
     // Settings
     checks.push(settings_file_check(&settings_state));
     checks.push(apache_settings_check(&settings));
+    checks.push(maintenance_check(
+        settings.maintenance.enabled,
+        &settings.maintenance.message,
+    ));
 
     // Registry
     checks.extend(registry_checks(
@@ -1662,6 +1698,27 @@ mod tests {
         let invalid = settings_file_check(&SettingsFileState::Invalid("bad JSON".into()));
         assert_eq!(invalid.status, DoctorStatus::Error);
         assert!(invalid.detail.contains("bad JSON"));
+    }
+
+    #[test]
+    fn maintenance_status_mapping() {
+        let enabled = maintenance_check(true, "Deploy window");
+        assert_eq!(enabled.id, "maintenance.status");
+        assert_eq!(enabled.category, "maintenance");
+        assert_eq!(enabled.status, DoctorStatus::Warning);
+        assert!(enabled.detail.contains("Deploy window"));
+        assert_eq!(
+            enabled.hint,
+            "Updates and SSH trigger are paused. Disable maintenance mode in Settings when ready."
+        );
+
+        let no_message = maintenance_check(true, "   ");
+        assert_eq!(no_message.status, DoctorStatus::Warning);
+        assert!(no_message.detail.contains("Maintenance mode is enabled"));
+
+        let disabled = maintenance_check(false, "ignored");
+        assert_eq!(disabled.status, DoctorStatus::Ok);
+        assert!(!disabled.detail.contains("ignored"));
     }
 
     #[test]

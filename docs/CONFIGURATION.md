@@ -20,6 +20,7 @@ Trigger.
 | Backup otomatis | `<folder config>\backup\services-*.json` |
 | Backup apply mapping | `<folder config>\backup\projects-*.json` |
 | Export backup | `<folder config>\backup\services-export-*.json` |
+| Export settings | Path pilihan user `settings-export-<tanggal>.json` (tidak memuat rahasia) |
 | Log aplikasi | `<folder config>\logs\app.log` |
 | Audit apply Apache | `<folder config>\logs\apache-apply.log` |
 | NSSM | `..\nssm\nssm.exe` atau `C:\tools\nssm\nssm.exe` |
@@ -225,6 +226,7 @@ Mode `delayed` diterapkan melalui Windows API `ChangeServiceConfig2` (`SERVICE_C
     "logRetentionDays": 30
   },
   "trigger": { "allowedClientIPs": ["127.0.0.1", "::1"], "allowLocal": true },
+  "maintenance": { "enabled": false, "message": "" },
   "privilegedExecution": {
     "mode": "scheduled-task",
     "taskName": "ServiceManager-Updater",
@@ -256,6 +258,44 @@ Catatan:
   **Migrate Trigger**.
 - **Migrate Trigger** adalah aksi eksplisit: menyalin `projects.json.trigger` ke
   `settings.json.trigger`; `projects.json` tidak diubah.
+- `maintenance.enabled = true` menjeda update non-check dan trigger SSH. Run
+  `--check` dan dry-run plan tetap diizinkan. `maintenance.message` opsional,
+  di-trim, maksimal 500 karakter, tanpa karakter kontrol, dan ditampilkan di
+  Doctor serta banner tab Updater. Maintenance tidak mengubah allowlist IP,
+  elevation, atau autentikasi.
+- Export/load settings memakai file JSON terpisah; lihat bagian berikut.
+
+### Maintenance (`maintenance`)
+
+| Field | Tipe | Default | Keterangan |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Jika `true`, update non-check dan trigger SSH ditolak sebelum app/Git dijalankan. |
+| `message` | string | `""` | Alasan/deploy window opsional; di-trim, maksimal 500 karakter, tanpa karakter kontrol. |
+
+Saat maintenance aktif, `sm-updater run` (tanpa `--check`), wrapper SSH, dan
+tombol Run/Update All di GUI gagal dengan pesan yang menyertakan `message`.
+`sm-updater run --check`, `plan`, Doctor, dan Preview Plan tetap berjalan.
+Tidak ada state/history yang ditulis untuk run yang diblokir. Disable hanya dari
+tab **Settings**; banner tab Updater tidak memiliki shortcut.
+
+### Export dan Load Settings
+
+Tab Settings menyediakan:
+
+- **Export Settings…** — menulis settings efektif dari `settings.json` (atau
+  fallback legacy) ke pretty JSON atomik di path pilihan user, default nama
+  `settings-export-<tanggal>.json`. File hanya berisi settings: **tidak** memuat
+  `projects.json`, `services.json`, log, history, password, atau token. Path wajib
+  berekstensi `.json`. Pola `settings-export-*.json` di-ignore Git.
+- **Load Settings File…** — membaca, menormalisasi, dan memvalidasi file `.json`,
+  lalu menggantinya sebagai draft di form. Tidak ada file yang ditulis dan tidak ada
+  service/Apache yang diubah. Draft ditandai **Unsaved changes** dan baru berlaku
+  setelah **Save Settings**.
+
+JSON invalid, settings yang gagal validasi (mis. required tool kosong atau
+`maxConcurrentUpdates = 0`), message dengan karakter kontrol, dan path non-`.json`
+ditolak dengan error yang jelas. File settings aktif tidak berubah selama proses
+export/load.
 
 ### Variabel command (`${NAME}`)
 

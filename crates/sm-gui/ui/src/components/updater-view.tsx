@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  AlertTriangle,
   ClipboardList,
   FileText,
   FlaskConical,
@@ -43,6 +44,7 @@ import {
 import { errorMessage, invoke } from "@/lib/tauri";
 import type {
   AppPlan,
+  MaintenanceView,
   PlanCommandGroup,
   PlanService,
   UpdaterApp,
@@ -328,6 +330,7 @@ function PlanDetails({ plan }: { plan: AppPlan }) {
 
 export function UpdaterView() {
   const [apps, setApps] = useState<UpdaterApp[]>([]);
+  const [maintenance, setMaintenance] = useState<MaintenanceView | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState<"check" | "update" | null>(null);
@@ -368,8 +371,12 @@ export function UpdaterView() {
   const refresh = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
     try {
-      const next = await invoke<UpdaterApp[]>("list_updater_apps");
+      const [next, status] = await Promise.all([
+        invoke<UpdaterApp[]>("list_updater_apps"),
+        invoke<MaintenanceView>("load_maintenance_status"),
+      ]);
       setApps(Array.isArray(next) ? next : []);
+      setMaintenance(status);
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
@@ -592,6 +599,24 @@ export function UpdaterView() {
             Update All
           </Button>
         </div>
+
+        {maintenance && maintenance.enabled && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-400/70 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">Maintenance mode is enabled</div>
+              <p className="text-sm">
+                Updates and the SSH trigger are paused. Check and dry-run plan still work.
+              </p>
+              {maintenance.message.trim() && (
+                <p className="mt-1 break-words text-sm font-medium">{maintenance.message}</p>
+              )}
+              <p className="mt-1 text-xs">
+                Disable maintenance mode in Settings when ready.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="min-h-0 flex-[3] overflow-auto rounded-lg border bg-card">
           <Table>

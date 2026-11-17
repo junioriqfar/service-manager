@@ -23,6 +23,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 const MAX_TIMEOUT_SECONDS: u64 = 24 * 60 * 60;
 const MAX_CONCURRENT_UPDATES: usize = 32;
 const MAX_LOG_RETENTION_DAYS: u32 = 3650;
+pub const MAX_MAINTENANCE_MESSAGE_CHARS: usize = 500;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
@@ -541,6 +542,38 @@ impl PrivilegedExecution {
     }
 }
 
+/// Maintenance mode. When enabled, non-check update runs and the SSH trigger
+/// are rejected before any app is touched. Check and dry-run plan remain
+/// allowed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaintenanceSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub message: String,
+}
+
+impl MaintenanceSettings {
+    fn normalize(&mut self) {
+        self.message = self.message.trim().to_string();
+    }
+
+    fn validate(&self) -> Result<(), SettingsError> {
+        if has_control_characters(&self.message) {
+            return Err(invalid(format!(
+                "Maintenance message memuat karakter kontrol (maksimal {MAX_MAINTENANCE_MESSAGE_CHARS} karakter tanpa newline/tab)."
+            )));
+        }
+        if self.message.chars().count() > MAX_MAINTENANCE_MESSAGE_CHARS {
+            return Err(invalid(format!(
+                "Maintenance message maksimal {MAX_MAINTENANCE_MESSAGE_CHARS} karakter."
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// Isi `data/settings.json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -554,6 +587,8 @@ pub struct Settings {
     #[serde(default)]
     pub trigger: SettingsTrigger,
     #[serde(default)]
+    pub maintenance: MaintenanceSettings,
+    #[serde(default)]
     pub privileged_execution: PrivilegedExecution,
     #[serde(default)]
     pub variables: BTreeMap<String, String>,
@@ -566,6 +601,7 @@ impl Default for Settings {
             tools: Tools::default(),
             updater: UpdaterDefaults::default(),
             trigger: SettingsTrigger::default(),
+            maintenance: MaintenanceSettings::default(),
             privileged_execution: PrivilegedExecution::default(),
             variables: BTreeMap::new(),
         }
@@ -577,6 +613,7 @@ impl Settings {
         self.tools.normalize();
         self.updater.log_dir = self.updater.log_dir.trim().to_string();
         self.trigger.normalize();
+        self.maintenance.normalize();
         self.privileged_execution.normalize();
         self.variables = std::mem::take(&mut self.variables)
             .into_iter()
@@ -595,6 +632,7 @@ impl Settings {
         self.tools.validate()?;
         self.updater.validate()?;
         self.trigger.validate()?;
+        self.maintenance.validate()?;
         self.privileged_execution.validate()?;
         for key in self.variables.keys() {
             if is_sensitive_key(key) {
@@ -936,6 +974,58 @@ mod tests {
         assert_eq!(effective.allowed_client_ips, ["10.0.0.1", "127.0.0.1"]);
         assert!(!effective.allow_local);
         assert!(!path.exists(), "fallback must not write settings.json");
+    }
+
+    #[test]
+    fn maintenance_defaults_disabled_and_roundtrips() {
+        let settings = Settings::default();
+        assert!(!settings.maintenance.enabled);
+        assert!(settings.maintenance.message.is_empty());
+
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        let mut settings = base_settings();
+        settings.maintenance.enabled = true;
+        settings.maintenance.message = "  Deploy window  ".into();
+        save_settings(&path, &settings).unwrap();
+
+        let loaded = load_settings(&path).unwrap().unwrap();
+        assert!(loaded.maintenance.enabled);
+        assert_eq!(loaded.maintenance.message, "Deploy window");
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(raw.contains("\"maintenance\""));
+        assert!(raw.contains("\"enabled\": true"));
+    }
+
+    #[test]
+    fn maintenance_message_validation_rejects_control_chars_and_long_text() {
+        let mut settings = base_settings();
+        settings.maintenance.enabled = true;
+        settings.maintenance.message = "line\nbreak".into();
+        let error = settings.validate().unwrap_err().to_string();
+        assert!(error.contains("kontrol"));
+
+        settings.maintenance.message = "x".repeat(MAX_MAINTENANCE_MESSAGE_CHARS + 1);
+        let error = settings.validate().unwrap_err().to_string();
+        assert!(error.contains("500"));
+
+        settings.maintenance.message = "x".repeat(MAX_MAINTENANCE_MESSAGE_CHARS);
+        settings.validate().unwrap();
+    }
+
+    #[test]
+    fn missing_maintenance_field_uses_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"tools":{"git":{"path":"C:\\git.exe"},"php":{"path":"C:\\php.exe"},"composer":{"path":"C:\\composer.bat"},"npm":{"path":"C:\\npm.cmd"}}}"#,
+        )
+        .unwrap();
+
+        let settings = load_settings(&path).unwrap().unwrap();
+        assert!(!settings.maintenance.enabled);
+        assert!(settings.maintenance.message.is_empty());
     }
 
     #[test]
