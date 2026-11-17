@@ -117,7 +117,8 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
   `C:\tools\nssm`). Apache juga mengisi `root` dan `config` bila ditemukan.
 - **Test** menjalankan versi tool (`git --version`, `php -v`, `composer --version`,
   `node --version`, `npm --version`, `pnpm --version`, `yarn --version`,
-  `bun --version`, `go version`, `httpd -v`, `nssm version`). File `.bat`/`.cmd`
+  `bun --version`, `go version`, `httpd -v`). NSSM hanya diverifikasi keberadaan
+  filenya karena `nssm version` membuka GUI dan tidak pernah selesai. File `.bat`/`.cmd`
   dijalankan melalui `cmd.exe /c` oleh `SystemRunner`.
 - **Updater defaults**: log directory, max concurrent updates, timeout
   preflight/fetch/tool/clone, dan log retention days.
@@ -135,11 +136,49 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
 - **Diagnostics**: tool wajib yang kosong, path tool yang tidak ditemukan,
   Scheduled Task yang belum terpasang, error status task, dan notice **Legacy
   fallback** saat `settings.json` belum ada.
+- **Doctor**: laporan kesiapan read-only; lihat bagian Doctor di bawah.
 - Saat `settings.json` belum ada, tab menampilkan nilai efektif dari
   `projects.json` dan **tidak** menulis file sampai **Save Settings** atau
   **Migrate Trigger** diklik.
 - Tidak ada polling. Data dimuat saat tab dibuka atau **Reload** diklik; perubahan
   hanya disimpan lewat **Save Settings** dan hasilnya ditampilkan sebagai toast.
+
+### Doctor (readiness)
+
+Kartu **Doctor** di tab Settings menjawab pertanyaan "apakah server ini siap
+di-update?" tanpa mengubah apa pun.
+
+- **Run Doctor** memanggil command `run_doctor`. Backend berjalan di
+  `spawn_blocking` dan mengembalikan `DoctorReport` berisi `generatedAt`,
+  `overall`, `checks`, `counts` (ok/warning/error/skipped), dan `basePath`.
+- Pemeriksaan dikelompokkan per kategori:
+  - **Environment**: status Administrator.
+  - **Tools**: Git/PHP/Composer/npm wajib; pnpm/yarn/Bun/Go/Apache/NSSM opsional,
+    memakai path efektif `settings.json` dan version test singkat. NSSM hanya
+    diverifikasi keberadaan filenya karena tidak punya CLI version yang aman.
+  - **Settings**: `settings.json` ada/valid, legacy fallback, Apache root/config.
+  - **Registry**: `projects.json`, app enabled + `localPath`, `webServerService`.
+  - **Services**: `services.json` dan status SCM service Apache yang direferensikan.
+  - **Remote access**: `git ls-remote --heads` per app, timeout pendek, tanpa prompt
+    credential; URL userinfo di-redaksi.
+  - **Scheduled Task**: installed, state, dan last result.
+  - **SSH**: service `sshd` dan port 22, best effort.
+  - **Storage**: `data/`, `logs/`, `backup/` writable dan disk bebas.
+  - **Pending changes**: `data/apache-pending.json`.
+  - **PHP references**: path `php.exe` hardcoded yang bukan `${PHP}`.
+- Badge overall: **Healthy** (semua ok/skipped), **Warning** (ada warning tanpa
+  error), **Error** (ada minimal satu error), **Checking** saat berjalan.
+- Badge per check: **OK**, **Warning**, **Error**, **Skipped**. `Skipped` tidak
+  pernah menaikkan overall.
+- **Copy Report** menyalin laporan plain text (overall, counts, generatedAt,
+  basePath, check + detail + hint) ke clipboard dan menampilkan toast. Jika
+  clipboard tidak tersedia, toast error ditampilkan.
+- Doctor read-only: tidak menulis `settings.json`, `projects.json`,
+  `services.json`, atau pending Apache dan tidak start/stop service. Satu-satunya
+  write adalah file probe sementara di folder storage yang sudah ada, langsung
+  dihapus; folder yang belum ada tidak dibuat.
+- Detail dan hint di-redaksi dengan `sm_core::redact_secrets`. Network/credential
+  remote yang gagal hanya warning karena bisa transien.
 
 ### Apache change preview/apply
 
@@ -241,6 +280,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log) |
 | `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
 | `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, trigger migration, Scheduled Task) |
+| `crates/sm-gui/src/doctor.rs` | Doctor read-only: status/check/report types, agregasi overall, check environment/tools/settings/registry/services/remote/task/SSH/storage/pending/PHP, command `run_doctor` |
 | `crates/sm-gui/src/apache.rs` | Pending Apache change, matching service/app, apply/rollback/audit, command `apache_change_status`/`apply_apache_change` |
 | `crates/sm-gui/src/apache_config.rs` | Parser DocumentRoot/include/variabel, saran mapping, command `detect_apache_mappings`/`apply_apache_mappings` |
 | `crates/sm-gui/src/php_paths.rs` | Scan referensi PHP hardcoded, dialog payload `phpPathChange`, command `replace_php_references` (variable/new_path, backup, selected apps) |
@@ -263,7 +303,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 350 test):
+Test GUI mencakup (total workspace 375 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
@@ -285,9 +325,17 @@ Test GUI mencakup (total workspace 350 test):
   install/build/pre/post serta `commands.*` (program/args/cwd/shell/env), skip
   `${PHP}`, normalisasi case/slash, replace mode variable/new_path hanya untuk app
   terpilih, backup `projects.json`, dan ada/tidaknya `phpPathChange` setelah save.
+- Doctor: agregasi overall (error > warning > ok, skipped tidak menaikkan),
+  counts, required vs optional tool (kosong/invalid/gagal versi), settings
+  legacy/invalid, Apache root/config dengan temp dir, registry missing/invalid,
+  `localPath`, `webServerService` Apache/non-Apache, services invalid, service SCM
+  terpasang/tidak, task status, pending Apache, SSH, storage probe temp dir,
+  disk threshold, remote sukses/gagal, scan PHP hardcoded, redaksi detail/hint,
+  dan report builder.
 - UI: label Bahasa Inggris, context menu, tooltip, tombol browse, toolbar global, tab Remote,
   tab Settings (termasuk kartu Trigger, Apache App Mapping, field web server,
-  panel Apache pending, dan dialog PHP references), serta ikon/tema.
+  panel Apache pending, dialog PHP references, dan kartu Doctor dengan Run/Copy),
+  serta ikon/tema.
 
 Verifikasi runtime GUI dapat dilakukan dengan WebView2 remote debugging (opsional):
 

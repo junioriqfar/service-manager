@@ -71,7 +71,9 @@ DPAPI **bukan** pengganti Credential Manager untuk token Git. Gunakan DPAPI hany
 
 - log aplikasi GUI (`app.log`);
 - log updater (run log + `storage/logs`);
-- pesan error credential helper.
+- pesan error credential helper;
+- seluruh `detail` dan `hint` laporan Doctor (`sm-gui/src/doctor.rs`) sebelum
+  dikirim ke UI.
 
 Pola yang di-redaksi:
 

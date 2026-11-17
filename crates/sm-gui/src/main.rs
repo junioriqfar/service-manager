@@ -4,6 +4,7 @@ mod apache;
 mod apache_config;
 mod batch;
 mod commands;
+mod doctor;
 mod php_paths;
 mod remote;
 mod settings;
@@ -71,6 +72,7 @@ fn main() {
             settings::install_task,
             settings::remove_task,
             settings::test_task,
+            doctor::run_doctor,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Service Manager");
@@ -330,6 +332,36 @@ mod ui_tests {
         assert!(APP.contains("Hint"));
         assert!(HINT.contains("TooltipTrigger"));
         assert!(TOOLTIP.contains("TooltipPrimitive"));
+    }
+
+    #[test]
+    fn settings_doctor_ui_has_run_copy_and_status_labels() {
+        for label in [
+            "Doctor",
+            "Run Doctor",
+            "Copy Report",
+            "Healthy",
+            "Warning",
+            "Error",
+            "Checking",
+            "Not run",
+            "Generated",
+            "Base path",
+            "Read-only",
+            "Skipped",
+            "Remote access",
+            "Scheduled Task",
+        ] {
+            assert!(
+                SETTINGS_VIEW.contains(label),
+                "missing Doctor label: {label}"
+            );
+        }
+        assert!(SETTINGS_VIEW.contains("run_doctor"));
+        assert!(SETTINGS_VIEW.contains("navigator.clipboard"));
+        assert!(SETTINGS_VIEW.contains("DoctorChecks"));
+        assert!(SETTINGS_VIEW.contains("doctorReportText"));
+        assert!(include_str!("main.rs").contains("doctor::run_doctor"));
     }
 
     #[test]

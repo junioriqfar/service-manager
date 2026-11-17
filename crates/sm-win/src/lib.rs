@@ -1,4 +1,5 @@
 pub mod discovery;
+pub mod disk;
 pub mod dpapi;
 pub mod elevation;
 pub mod error;
@@ -13,6 +14,7 @@ pub use discovery::{
     executable_from_path_name, find_argument, newest_log_file, split_dependencies,
     startup_from_raw, DiscoveryError, NssmValues, RawService,
 };
+pub use disk::free_space;
 pub use dpapi::{protect as dpapi_protect, unprotect as dpapi_unprotect, DpapiError};
 pub use elevation::{command_line, is_elevated, quote_argument, relaunch_elevated, ElevationError};
 pub use error::ScmError;

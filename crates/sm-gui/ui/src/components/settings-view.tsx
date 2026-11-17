@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   CheckCircle2,
+  ClipboardCopy,
   Clock,
   FlaskConical,
   FolderOpen,
@@ -15,6 +16,7 @@ import {
   Server,
   ShieldAlert,
   ShieldCheck,
+  Stethoscope,
   Terminal,
   Trash2,
   Wrench,
@@ -51,6 +53,9 @@ import type {
   ApacheChangeView,
   ApacheMappingScanView,
   ApacheToolPath,
+  DoctorCheck,
+  DoctorReport,
+  DoctorStatus,
   PhpPathChangeView,
   ServiceRow,
   Settings,
@@ -484,6 +489,233 @@ function Diagnostics({
   );
 }
 
+const DOCTOR_CATEGORY_LABELS: Record<string, string> = {
+  environment: "Environment",
+  tools: "Tools",
+  settings: "Settings",
+  registry: "Registry",
+  services: "Services",
+  remote: "Remote access",
+  task: "Scheduled Task",
+  ssh: "SSH",
+  storage: "Storage",
+  pending: "Pending changes",
+  php: "PHP references",
+};
+
+const DOCTOR_STATUS_LABELS: Record<DoctorStatus, string> = {
+  ok: "OK",
+  warning: "Warning",
+  error: "Error",
+  skipped: "Skipped",
+};
+
+function doctorStatusVariant(
+  status: DoctorStatus,
+): "success" | "warning" | "destructive" | "outline" {
+  if (status === "ok") return "success";
+  if (status === "warning") return "warning";
+  if (status === "error") return "destructive";
+  return "outline";
+}
+
+function doctorOverallLabel(report: DoctorReport | null, checking: boolean): string {
+  if (checking) return "Checking";
+  if (!report) return "Not run";
+  if (report.overall === "ok") return "Healthy";
+  if (report.overall === "warning") return "Warning";
+  return "Error";
+}
+
+function doctorOverallVariant(
+  report: DoctorReport | null,
+  checking: boolean,
+): "success" | "warning" | "destructive" | "outline" {
+  if (checking || !report) return "outline";
+  return doctorStatusVariant(report.overall);
+}
+
+function doctorCategoryLabel(category: string): string {
+  return DOCTOR_CATEGORY_LABELS[category] ?? category;
+}
+
+function doctorReportText(report: DoctorReport): string {
+  const lines: string[] = [
+    "Service Manager Doctor",
+    `Generated: ${report.generatedAt}`,
+    `Overall: ${doctorOverallLabel(report, false)}`,
+    `Base path: ${report.basePath}`,
+    `Checks: OK ${report.counts.ok} | Warning ${report.counts.warning} | Error ${report.counts.error} | Skipped ${report.counts.skipped}`,
+    "",
+  ];
+  let category = "";
+  for (const check of report.checks) {
+    if (check.category !== category) {
+      category = check.category;
+      lines.push(`[${doctorCategoryLabel(category).toUpperCase()}]`);
+    }
+    lines.push(
+      `[${DOCTOR_STATUS_LABELS[check.status]}] ${check.label}: ${check.detail}`,
+    );
+    if (check.hint.trim()) lines.push(`  Hint: ${check.hint}`);
+  }
+  return lines.join("\n");
+}
+
+function DoctorChecks({ checks }: { checks: DoctorCheck[] }) {
+  const grouped = new Map<string, DoctorCheck[]>();
+  for (const check of checks) {
+    const group = grouped.get(check.category);
+    if (group) {
+      group.push(check);
+    } else {
+      grouped.set(check.category, [check]);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {Array.from(grouped.entries()).map(([category, categoryChecks]) => (
+        <div key={category} className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {doctorCategoryLabel(category)}
+            </div>
+            <Badge variant="outline">{categoryChecks.length}</Badge>
+          </div>
+          <div className="space-y-1.5">
+            {categoryChecks.map((check) => (
+              <div
+                key={check.id}
+                className="min-w-0 rounded-md border bg-background/40 px-3 py-2"
+                title={`${check.id} · ${DOCTOR_STATUS_LABELS[check.status]}`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 text-sm font-medium break-words">{check.label}</div>
+                  <Badge variant={doctorStatusVariant(check.status)}>
+                    {DOCTOR_STATUS_LABELS[check.status]}
+                  </Badge>
+                </div>
+                <p className="mt-1 break-words text-xs text-muted-foreground">{check.detail}</p>
+                {check.hint.trim() && (
+                  <p className="mt-1 break-words text-xs text-muted-foreground">
+                    <span className="font-medium">Hint:</span> {check.hint}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DoctorCard({
+  report,
+  loading,
+  error,
+  onRun,
+  onCopy,
+}: {
+  report: DoctorReport | null;
+  loading: boolean;
+  error: string | null;
+  onRun: () => void;
+  onCopy: () => void;
+}) {
+  const overall = doctorOverallLabel(report, loading);
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Stethoscope className="h-4 w-4" />
+              Doctor
+            </CardTitle>
+            <CardDescription>
+              Read-only readiness report for this server. Doctor does not save settings or change
+              projects, services, or the pending Apache change.
+            </CardDescription>
+          </div>
+          <Badge variant={doctorOverallVariant(report, loading)}>
+            {loading && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+            {overall}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Hint label="Run read-only readiness checks. No settings, services, projects, or Windows services are changed.">
+            <Button type="button" size="sm" onClick={onRun} disabled={loading}>
+              {loading ? <Loader2 className="animate-spin" /> : <Play />}
+              Run Doctor
+            </Button>
+          </Hint>
+          <Hint label="Copy the visible Doctor report as plain text to the clipboard">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCopy}
+              disabled={loading || !report}
+            >
+              <ClipboardCopy />
+              Copy Report
+            </Button>
+          </Hint>
+          {report && (
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              <Badge variant="success" title="Checks with status OK">
+                OK {report.counts.ok}
+              </Badge>
+              <Badge variant="warning" title="Checks that need attention">
+                Warning {report.counts.warning}
+              </Badge>
+              <Badge variant="destructive" title="Checks that block updates">
+                Error {report.counts.error}
+              </Badge>
+              <Badge variant="outline" title="Checks that were not applicable or unavailable">
+                Skipped {report.counts.skipped}
+              </Badge>
+            </div>
+          )}
+        </div>
+
+        {report && (
+          <div className="grid gap-1 rounded-md border bg-background/40 px-3 py-2 text-xs sm:grid-cols-2">
+            <div>
+              <div className="text-muted-foreground">Generated</div>
+              <div className="break-words">{formatWhen(report.generatedAt)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-muted-foreground">Base path</div>
+              <div className="break-all font-mono">{report.basePath || "—"}</div>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>{error}</div>
+          </div>
+        )}
+
+        {!report && !loading && !error && (
+          <p className="text-sm text-muted-foreground">
+            Click Run Doctor to check tools, settings, registry, services, remote access, Scheduled
+            Task, SSH, storage, pending changes, and PHP references.
+          </p>
+        )}
+
+        {report && !loading && <DoctorChecks checks={report.checks} />}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ApachePathChange({
   label,
   oldValue,
@@ -797,6 +1029,9 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
   const [phpDialogOpen, setPhpDialogOpen] = useState(false);
   const [phpApplying, setPhpApplying] = useState<"variable" | "new_path" | null>(null);
   const [phpApplyError, setPhpApplyError] = useState<string | null>(null);
+  const [doctor, setDoctor] = useState<DoctorReport | null>(null);
+  const [doctorLoading, setDoctorLoading] = useState(false);
+  const [doctorError, setDoctorError] = useState<string | null>(null);
   const [busyTools, setBusyTools] = useState<Partial<Record<ToolKey, ToolBusy>>>({});
   const [toolMessages, setToolMessages] = useState<
     Partial<Record<ToolKey, ToolMessage>>
@@ -856,6 +1091,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
         setApachePending(pending);
         setApacheApplyError(null);
         setApacheApplyResult(null);
+        setDoctor(null);
+        setDoctorError(null);
         setApachePreviewOpen((previous) => (pending ? previous : false));
         await refreshTaskStatus(next.settings.privilegedExecution.taskName);
         if (showToast) toast.success("Settings reloaded.");
@@ -1168,6 +1405,43 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
     }
   }
 
+  async function runDoctor() {
+    setDoctorLoading(true);
+    setDoctorError(null);
+    try {
+      const report = await invoke<DoctorReport>("run_doctor");
+      setDoctor(report);
+      if (report.overall === "ok") {
+        toast.success("Doctor: server is ready.");
+      } else if (report.overall === "warning") {
+        toast.warning("Doctor finished with warnings.");
+      } else {
+        toast.error("Doctor found blocking errors.", { duration: 10000 });
+      }
+    } catch (error) {
+      const message = errorMessage(error);
+      setDoctorError(message);
+      toast.error(message, { duration: 10000 });
+    } finally {
+      setDoctorLoading(false);
+    }
+  }
+
+  async function copyDoctorReport() {
+    if (!doctor) return;
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard is not available.");
+      }
+      await navigator.clipboard.writeText(doctorReportText(doctor));
+      toast.success("Doctor report copied to the clipboard.");
+    } catch (error) {
+      toast.error(`Could not copy the Doctor report: ${errorMessage(error)}`, {
+        duration: 10000,
+      });
+    }
+  }
+
   async function save() {
     if (!draft || saving || toolsBusy) return;
     setSaving(true);
@@ -1184,6 +1458,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       setApachePreviewOpen(result.apachePending !== null);
       setApacheApplyResult(null);
       setApacheApplyError(null);
+      setDoctor(null);
+      setDoctorError(null);
       const reviewedPhpChange =
         result.phpPathChange && result.phpPathChange.references.length > 0
           ? result.phpPathChange
@@ -1242,6 +1518,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             } to the new PHP path. projects.json was backed up first.`,
         { duration: 8000 },
       );
+      setDoctor(null);
+      setDoctorError(null);
       dismissPhpPathChange();
     } catch (error) {
       const message = errorMessage(error);
@@ -1276,6 +1554,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
         setDraft(next.settings);
         setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
         await refreshTaskStatus(next.settings.privilegedExecution.taskName);
+        setDoctor(null);
+        setDoctorError(null);
       } catch (reloadError) {
         toast.error(`Apache apply finished, but reload failed: ${errorMessage(reloadError)}`, {
           duration: 10000,
@@ -1314,6 +1594,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       setDraft(next.settings);
       setTriggerIpsText(next.settings.trigger.allowedClientIPs.join("\n"));
       await refreshTaskStatus(next.settings.privilegedExecution.taskName);
+      setDoctor(null);
+      setDoctorError(null);
       toast.success("Trigger migrated from projects.json to settings.json.");
     } catch (error) {
       toast.error(errorMessage(error), { duration: 10000 });
@@ -1360,6 +1642,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
         });
       }
       await refreshTaskStatus(draft.privilegedExecution.taskName);
+      setDoctor(null);
+      setDoctorError(null);
     } catch (error) {
       const message = errorMessage(error);
       setTaskStatusError(message);
@@ -2160,6 +2444,14 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             )}
           </CardContent>
         </Card>
+
+        <DoctorCard
+          report={doctor}
+          loading={doctorLoading}
+          error={doctorError}
+          onRun={() => void runDoctor()}
+          onCopy={() => void copyDoctorReport()}
+        />
 
         <Card>
           <CardHeader className="p-4 pb-2">

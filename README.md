@@ -20,6 +20,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Run, Check, Test, Log, Edit, Delete.
 - GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, log, serta tampilan versi PHP/Apache efektif dan `webServerService`.
 - GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, trigger allowlist + Migrate Trigger, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
+- **Doctor** read-only di Settings: cek Administrator, tool, settings/registry, service Apache + SCM, remote Git, Scheduled Task, SSH, storage/disk, pending Apache, dan referensi PHP; hasil dikelompokkan dengan badge status dan bisa disalin lewat **Copy Report**.
 - Kartu **Apache App Mapping** mem-parsing DocumentRoot/Include/variabel config Apache dan menyarankan `webServerService`; mapping hanya ditulis setelah app dipilih dan **Apply Mappings** diklik (dengan backup `projects.json`).
 - Command app mendukung variabel `${PHP}`, `${PHP_HOME}`, `${GIT}`, `${APACHE_HOME}`, dan variabel settings lain. Jika path PHP berubah, GUI menampilkan dialog referensi PHP hardcoded dengan pilihan **Use ${PHP}**, **Use new path**, atau **Leave**; tidak ada rewrite otomatis.
 - Perubahan path/root/config Apache menampilkan preview service/app terdampak, disimpan sebagai pending, lalu di-apply eksplisit (Administrator) ke `services.json` + Windows SCM dengan backup, rollback, dan audit.
@@ -186,7 +187,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **350 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **375 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 

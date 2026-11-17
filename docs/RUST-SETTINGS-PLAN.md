@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded).
+Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only).
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -27,7 +27,8 @@ Dokumen ini menjawab revisi pengguna:
 | Propagasi PHP hardcoded/`${PHP}` | Selesai (Sprint 2.4: variabel command + scan/replace eksplisit) |
 | Migrasi trigger global ke settings.json | Selesai (Sprint 2.1, eksplisit) |
 | `webServerService` per app | Selesai (Sprint 2.1) |
-| Doctor lengkap, audit, log retention, dry-run | Belum (Phase 3) |
+| Doctor read-only (readiness report) | Selesai (Sprint 3.1) |
+| Dry-run plan, history/retention, admin tools | Belum (Sprint 3.2–3.4) |
 | Windows Service mode | Tidak diperlukan (no-login tidak dibutuhkan) |
 
 Catatan implementasi Phase 1:
@@ -83,8 +84,9 @@ Catatan implementasi Sprint 2.2:
   yang tadi berjalan dicoba di-start, dan pending tetap ada.
 - Apply sukses menghapus pending dan menulis audit ke `logs/apache-apply.log`
   (timestamp, user, aksi, service, app, path/root/config/version lama-baru, hasil).
-- Pending hanya dibuat jika path Apache baru menunjuk `httpd.exe` dan `root` baru
-  tidak kosong. Jika service berubah setelah preview, Apply ditolak dan meminta
+- Pending hanya dibuat jika path Apache baru menunjuk `httpd.exe`, `root` baru
+  tidak kosong, dan minimal satu service yang cocok benar-benar berubah
+  executable/root/config. Perubahan versi saja tidak meninggalkan pending no-op. Jika service berubah setelah preview, Apply ditolak dan meminta
   Save Settings ulang.
 - Perubahan hanya `detectedAt` tidak memicu pending. Mengosongkan path Apache juga
   tidak menulis executable kosong ke service; propagation membutuhkan path baru.
@@ -112,6 +114,26 @@ Catatan implementasi Sprint 2.4:
 - Perubahan path PHP memindai `installCommand`/`buildCommand`/`preUpdateCommand`/
   `postUpdateCommand` dan `commands.*`. User memilih **Use ${PHP}**, **Use new path**,
   atau **Leave**; tidak ada rewrite otomatis. `projects.json` dibackup sebelum replace.
+
+Catatan implementasi Sprint 3.1 (Doctor):
+
+- Kartu **Doctor** di tab Settings memanggil `run_doctor` dan menampilkan laporan
+  read-only: overall, counts, grouped checks, detail, hint, generatedAt, basePath,
+  serta tombol **Copy Report**.
+- Check: Administrator; tool wajib/opsional + version test; `settings.json` dan
+  legacy fallback; Apache root/config; `projects.json`, `localPath`, dan
+  `webServerService`; `services.json` + status SCM service Apache; `git ls-remote`
+  per app; Scheduled Task; `sshd`/port 22; storage writable + disk bebas; pending
+  Apache; dan path PHP hardcoded.
+- Status `ok`, `warning`, `error`, `skipped`; overall error jika ada error,
+  warning jika ada warning, selain itu ok. `skipped` tidak menaikkan overall.
+- Read-only: tidak menulis settings/projects/services/pending dan tidak
+  start/stop service. Probe storage hanya membuat file sementara di folder yang
+  sudah ada, lalu menghapusnya.
+- Semua detail/hint di-redaksi dengan `sm_core::redact_secrets`.
+- Batasan: check remote tidak interaktif (tidak bisa memasukkan credential saat
+  Doctor berjalan), cek port SSH hanya `127.0.0.1:22` IPv4, dan Doctor tidak
+  memperbaiki masalah otomatis.
 
 ## 1. Keputusan Arsitektur
 
@@ -405,6 +427,10 @@ Tab **Settings**:
 - `crates/sm-gui/src/settings.rs`
   - commands: `load_settings`, `save_settings`, `detect_tool`, `test_tool`,
     `migrate_settings`, `task_status`, `install_task`, `remove_task`, `test_task`.
+- `crates/sm-gui/src/doctor.rs`
+  - types: `DoctorStatus`, `DoctorCheck`, `DoctorCounts`, `DoctorReport`;
+  - command: `run_doctor` (read-only, `spawn_blocking`);
+  - helper: `run_doctor_at(ConfigPaths)` untuk report lengkap dari path config.
 - Integrasi updater:
   - `UpdaterSettings` diganti/diadapter dari `Settings`;
   - toolchain resolver memakai path dari settings.json;

@@ -123,11 +123,12 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 
 ## GUI Tauri (Phase 3 + 7)
 
-`sm-gui` menyediakan UI React + shadCN dengan tiga tab: **Services**, **Updater**, dan **Remote**. Detail ada di [RUST-GUI.md](RUST-GUI.md).
+`sm-gui` menyediakan UI React + shadCN dengan empat tab: **Services**, **Updater**, **Remote**, dan **Settings**. Detail ada di [RUST-GUI.md](RUST-GUI.md).
 
 - Tab **Services**: tabel service, form tambah/edit, import, backup/restore, log viewer.
 - Tab **Updater**: registry app, toolchain, service lifecycle, test, Check/Update, log.
 - Tab **Remote**: host/user, key atau password (DPAPI), wrapper, Preview, Test SSH, Check/Update All, app tunggal, output live.
+- Tab **Settings**: toolchain, updater defaults, trigger allowlist, Scheduled Task, Apache change preview/apply, Apache App Mapping, referensi PHP, dan **Doctor** read-only (overall/counts/checks + Copy Report).
 - UI sepenuhnya Bahasa Inggris, tema light/dark/system.
 - Tombol **Browse…** membuka file picker (Application) dan folder picker (Working Directory).
 - Toolbar atas hanya aksi global; Add/Import/Refresh ada di header Service List.
@@ -185,3 +186,4 @@ Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state,
 | 5. Security & hardening | Selesai |
 | 6. Release | Selesai |
 | 7. Registry + SSH trigger + GUI Remote | Selesai |
+| 8. Operasional (Phase 3) | Doctor 3.1 selesai; Plan/History/Admin tools belum |

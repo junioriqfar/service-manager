@@ -411,3 +411,29 @@ export interface TaskOperation {
   output: string;
 }
 
+export type DoctorStatus = "ok" | "warning" | "error" | "skipped";
+
+export interface DoctorCheck {
+  id: string;
+  category: string;
+  label: string;
+  status: DoctorStatus;
+  detail: string;
+  hint: string;
+}
+
+export interface DoctorCounts {
+  ok: number;
+  warning: number;
+  error: number;
+  skipped: number;
+}
+
+export interface DoctorReport {
+  generatedAt: string;
+  overall: DoctorStatus;
+  checks: DoctorCheck[];
+  counts: DoctorCounts;
+  basePath: string;
+}
+

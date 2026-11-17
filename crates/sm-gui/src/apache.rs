@@ -379,9 +379,18 @@ pub(crate) fn build_pending(
         return None;
     }
 
+    let new_root = new.root.trim();
+    let new_config = new.config.trim();
     let affected: Vec<ApacheServiceChange> = services
         .iter()
         .filter(|service| apache_service_matches(service, old.path(), &old.root))
+        .filter(|service| {
+            // A version-only change must not leave a pending service update
+            // when every matched service already points at the new values.
+            !paths_equal(&service.executable, new_path)
+                || !paths_equal(&service.apache_root, new_root)
+                || (!new_config.is_empty() && !paths_equal(&service.apache_config, new_config))
+        })
         .map(|service| ApacheServiceChange {
             name: service.name.clone(),
             old_executable: service.executable.clone(),
@@ -951,6 +960,29 @@ mod tests {
         let error = save_pending_at(&path, &pending).unwrap_err();
         assert!(error.contains("control characters"));
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn build_pending_ignores_services_already_at_new_values() {
+        let services = vec![apache_service(
+            "Apache2.4",
+            r"C:\Apache24\bin\httpd.exe",
+            r"C:\Apache24",
+        )];
+        let config = UpdaterConfig::default();
+        let old = ApacheToolPath {
+            tool: sm_updater::settings::ToolPath::new(""),
+            root: String::new(),
+            config: String::new(),
+        };
+        let mut new = ApacheToolPath {
+            tool: sm_updater::settings::ToolPath::new(r"C:\Apache24\bin\httpd.exe"),
+            root: r"C:\Apache24".into(),
+            config: "conf/httpd.conf".into(),
+        };
+        new.tool.version = "2.4.63".into();
+
+        assert!(build_pending(&old, &new, &services, &config).is_none());
     }
 
     #[test]

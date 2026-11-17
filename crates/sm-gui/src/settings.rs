@@ -23,7 +23,7 @@ const TOOL_TEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_VERSION_CHARS: usize = 128;
 const MAX_TASK_OUTPUT_CHARS: usize = 20_000;
 
-const TOOL_SPECS: &[ToolSpec] = &[
+pub(crate) const TOOL_SPECS: &[ToolSpec] = &[
     ToolSpec {
         name: "git",
         label: "Git",
@@ -98,7 +98,9 @@ const TOOL_SPECS: &[ToolSpec] = &[
         name: "nssm",
         label: "NSSM",
         binaries: &["nssm.exe"],
-        version_args: &["version"],
+        // NSSM has no CLI version flag; `nssm version` opens the GUI and never
+        // exits. An empty version args list means "verify the binary only".
+        version_args: &[],
         required: false,
     },
 ];
@@ -252,12 +254,12 @@ struct TaskStatusJson {
     last_result: i64,
 }
 
-struct ToolSpec {
-    name: &'static str,
-    label: &'static str,
-    binaries: &'static [&'static str],
-    version_args: &'static [&'static str],
-    required: bool,
+pub(crate) struct ToolSpec {
+    pub(crate) name: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) binaries: &'static [&'static str],
+    pub(crate) version_args: &'static [&'static str],
+    pub(crate) required: bool,
 }
 
 fn tool_spec(name: &str) -> Result<&'static ToolSpec, String> {
@@ -571,7 +573,30 @@ fn apache_details(spec: &ToolSpec, path: &Path) -> (String, String) {
 }
 
 fn test_tool_path(spec: &ToolSpec, path: &Path) -> ToolTestView {
+    test_tool_path_with_timeout(spec, path, TOOL_TEST_TIMEOUT)
+}
+
+pub(crate) fn test_tool_path_with_timeout(
+    spec: &ToolSpec,
+    path: &Path,
+    timeout: Duration,
+) -> ToolTestView {
     let path_text = path.to_string_lossy().to_string();
+    if spec.version_args.is_empty() {
+        // Some tools (NSSM) have no non-interactive version command. Running
+        // them just opens a GUI and times out, so only verify the binary.
+        return ToolTestView {
+            tool: spec.name.to_string(),
+            path: path_text,
+            version: "installed".to_string(),
+            success: true,
+            output: format!(
+                "{} is installed; this tool has no CLI version check.",
+                spec.label
+            ),
+            error: None,
+        };
+    }
     let cwd = path
         .parent()
         .filter(|parent| parent.is_dir())
@@ -583,7 +608,7 @@ fn test_tool_path(spec: &ToolSpec, path: &Path) -> ToolTestView {
         .collect();
     let (program, args) = wrap_command(path, &args);
 
-    match SystemRunner.run(&program, &args, cwd, TOOL_TEST_TIMEOUT) {
+    match SystemRunner.run(&program, &args, cwd, timeout) {
         Ok(output) => {
             let combined = output.combined();
             let success = output.success();
@@ -673,7 +698,7 @@ fn test_tool_at(tool: &str, path: &str) -> Result<ToolTestView, String> {
     Ok(test_tool_path(spec, candidate))
 }
 
-fn settings_tool_path<'a>(settings: &'a Settings, tool: &str) -> &'a str {
+pub(crate) fn settings_tool_path<'a>(settings: &'a Settings, tool: &str) -> &'a str {
     match tool {
         "git" => &settings.tools.git.path,
         "php" => &settings.tools.php.path,
@@ -1040,7 +1065,7 @@ fn parse_task_status_json(task_name: &str, json: &str) -> Result<TaskStatusView,
     })
 }
 
-fn task_status_blocking(task_name: &str) -> Result<TaskStatusView, String> {
+pub(crate) fn task_status_blocking(task_name: &str) -> Result<TaskStatusView, String> {
     let task_name = validate_task_name(task_name)?;
     let output = run_powershell_command(
         TASK_QUERY_COMMAND,
@@ -1588,6 +1613,20 @@ mod tests {
         assert!(result.success);
         assert_eq!(result.tool, "git");
         assert_eq!(result.version, "git version 2.45.0");
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn nssm_uses_existence_check_without_running_gui() {
+        let temp = tempfile::tempdir().unwrap();
+        let script = temp.path().join("nssm.exe");
+        std::fs::write(&script, b"stub").unwrap();
+
+        let result = test_tool_at("nssm", &script.to_string_lossy()).unwrap();
+
+        assert!(result.success);
+        assert_eq!(result.version, "installed");
+        assert!(result.output.contains("no CLI version check"));
         assert!(result.error.is_none());
     }
 

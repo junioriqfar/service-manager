@@ -6,7 +6,7 @@ Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur y
 
 - Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain)
 - Lokasi: `crates/sm-updater`
-- Test: **119 unit test** untuk crate ini; total workspace **350 test**. Config default ada di `data/projects.json`.
+- Test: **119 unit test** untuk crate ini; total workspace **375 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
