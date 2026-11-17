@@ -51,6 +51,7 @@ fn main() {
             updater::save_updater_app,
             updater::delete_updater_app,
             updater::test_updater_app,
+            updater::plan_updater_app,
             updater::run_updater,
             updater::read_updater_log,
             remote::load_remote_trigger,
@@ -238,6 +239,7 @@ mod ui_tests {
             "list_updater_apps",
             "run_updater",
             "test_updater_app",
+            "plan_updater_app",
             "delete_updater_app",
             "read_updater_log",
             "save_updater_app",
@@ -279,12 +281,23 @@ mod ui_tests {
         assert!(UPDATER_VIEW.contains("lucide-react"));
         assert!(UPDATER_FORM.contains("lucide-react"));
         assert!(UPDATER_VIEW.contains("ContextMenu"));
-        for action in ["Run", "Check", "Test", "Log", "Edit", "Delete"] {
+        for action in [
+            "Preview Plan",
+            "Run",
+            "Check",
+            "Test",
+            "Log",
+            "Edit",
+            "Delete",
+        ] {
             assert!(
                 UPDATER_VIEW.contains(action),
                 "missing updater context action: {action}"
             );
         }
+        assert!(UPDATER_VIEW.contains("Dry run"));
+        assert!(UPDATER_VIEW.contains("does not merge"));
+        assert!(include_str!("main.rs").contains("updater::plan_updater_app"));
     }
 
     #[test]

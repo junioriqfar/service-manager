@@ -180,6 +180,76 @@ export interface UpdaterLogView {
   text: string;
 }
 
+export type PlanStatus =
+  | "up-to-date"
+  | "dirty"
+  | "blocked-migration"
+  | "ready"
+  | "clone-required"
+  | "error";
+
+export interface PlanCommit {
+  sha: string;
+  subject: string;
+}
+
+export type PlanCommandGroup = "install" | "build" | "artisan";
+
+export interface PlanCommand {
+  group: PlanCommandGroup;
+  label: string;
+  description: string;
+  program: string;
+  args: string[];
+  cwd: string;
+}
+
+export interface PlanService {
+  name: string;
+  running?: boolean | null;
+  error: string;
+}
+
+export interface PlanServices {
+  stopBeforePull: string[];
+  stopBeforeBuild: string[];
+  restartAfter: string[];
+  startAfter: string[];
+  validation: string;
+  states: PlanService[];
+}
+
+export interface PlanHealth {
+  enabled: boolean;
+  url: string;
+  timeoutSeconds: number;
+}
+
+export interface PlanNotify {
+  enabled: boolean;
+  webhookUrl: string;
+  on: string[];
+}
+
+export interface AppPlan {
+  appId: string;
+  appName: string;
+  branch: string;
+  currentBranch: string;
+  headBefore: string;
+  remoteHead: string;
+  status: PlanStatus;
+  message: string;
+  incoming: PlanCommit[];
+  changedFiles: string[];
+  migrationFiles: string[];
+  commands: PlanCommand[];
+  services: PlanServices;
+  healthCheck: PlanHealth;
+  notify: PlanNotify;
+  warnings: string[];
+}
+
 export interface RemoteTriggerConfig {
   host: string;
   user: string;

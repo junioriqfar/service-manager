@@ -56,6 +56,8 @@ $env:SERVICE_MANAGER_HOME = "C:\tools\ServiceManager"
 cargo run -p sm-updater -- app list
 cargo run -p sm-updater -- run --all --check
 cargo run -p sm-updater -- run --all
+cargo run -p sm-updater -- plan --app kasirin
+cargo run -p sm-updater -- plan --all
 cargo run -p sm-updater -- status
 cargo run -p sm-updater -- logs kasirin
 
@@ -126,7 +128,7 @@ Pengujian wrapper memakai `MockRunner`: tidak menjalankan NSSM/`sc.exe` sungguha
 `sm-gui` menyediakan UI React + shadCN dengan empat tab: **Services**, **Updater**, **Remote**, dan **Settings**. Detail ada di [RUST-GUI.md](RUST-GUI.md).
 
 - Tab **Services**: tabel service, form tambah/edit, import, backup/restore, log viewer.
-- Tab **Updater**: registry app, toolchain, service lifecycle, test, Check/Update, log.
+- Tab **Updater**: registry app, toolchain, service lifecycle, test, Check/Update, Preview Plan (dry-run), log.
 - Tab **Remote**: host/user, key atau password (DPAPI), wrapper, Preview, Test SSH, Check/Update All, app tunggal, output live.
 - Tab **Settings**: toolchain, updater defaults, trigger allowlist, Scheduled Task, Apache change preview/apply, Apache App Mapping, referensi PHP, dan **Doctor** read-only (overall/counts/checks + Copy Report).
 - UI sepenuhnya Bahasa Inggris, tema light/dark/system.
@@ -186,4 +188,4 @@ Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state,
 | 5. Security & hardening | Selesai |
 | 6. Release | Selesai |
 | 7. Registry + SSH trigger + GUI Remote | Selesai |
-| 8. Operasional (Phase 3) | Doctor 3.1 selesai; Plan/History/Admin tools belum |
+| 8. Operasional (Phase 3) | Doctor 3.1 + Plan 3.2 selesai; History/Admin tools belum |

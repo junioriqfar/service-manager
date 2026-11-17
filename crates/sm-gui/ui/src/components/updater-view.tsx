@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  ClipboardList,
   FileText,
   FlaskConical,
   Loader2,
@@ -39,11 +40,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { errorMessage, invoke } from "@/lib/tauri";
-import type { UpdaterApp, UpdaterLogView, UpdaterRunOutcome } from "@/lib/types";
+import type {
+  AppPlan,
+  PlanCommandGroup,
+  PlanService,
+  UpdaterApp,
+  UpdaterLogView,
+  UpdaterRunOutcome,
+} from "@/lib/types";
 
 function statusVariant(status: string): "default" | "secondary" | "destructive" | "success" | "warning" | "outline" {
   switch (status) {
     case "updated":
+    case "ready":
       return "success";
     case "up-to-date":
       return "secondary";
@@ -51,10 +60,12 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
       return "outline";
     case "dirty":
     case "blocked-migration":
+    case "clone-required":
     case "degraded":
       return "warning";
     case "failed":
     case "forbidden":
+    case "error":
       return "destructive";
     default:
       return "outline";
@@ -74,6 +85,237 @@ function serviceSummary(app: UpdaterApp): string {
     ...app.services.startAfter,
   ];
   return names.length ? Array.from(new Set(names)).join(", ") : "—";
+}
+
+function shortSha(value: string): string {
+  return value ? value.slice(0, 12) : "—";
+}
+
+function PlanSection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count?: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-1.5">
+      <h4 className="text-sm font-medium">
+        {title}
+        {count !== undefined && (
+          <span className="ml-1 font-normal text-muted-foreground">({count})</span>
+        )}
+      </h4>
+      {children}
+    </section>
+  );
+}
+
+function PlanServiceRow({ service }: { service: PlanService }) {
+  const running = service.running;
+  return (
+    <li className="px-3 py-1.5 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">{service.name}</span>
+        <Badge
+          variant={
+            running === true ? "success" : running === false ? "secondary" : "warning"
+          }
+        >
+          {running === true ? "running" : running === false ? "stopped" : "unknown"}
+        </Badge>
+      </div>
+      {service.error && <div className="mt-1 text-destructive">{service.error}</div>}
+    </li>
+  );
+}
+
+function PlanDetails({ plan }: { plan: AppPlan }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={statusVariant(plan.status)}>{plan.status}</Badge>
+        <span className="text-sm text-muted-foreground">{plan.message}</span>
+      </div>
+
+      <div className="grid gap-2 rounded-md border px-3 py-2 text-sm sm:grid-cols-2">
+        <div>
+          <span className="text-muted-foreground">Branch: </span>
+          {plan.branch}
+          {plan.currentBranch ? ` (active ${plan.currentBranch})` : ""}
+        </div>
+        <div>
+          <span className="text-muted-foreground">Incoming: </span>
+          {plan.incoming.length} commit(s)
+        </div>
+        <div>
+          <span className="text-muted-foreground">HEAD: </span>
+          <span className="font-mono text-xs">{shortSha(plan.headBefore)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Remote HEAD: </span>
+          <span className="font-mono text-xs">{shortSha(plan.remoteHead)}</span>
+        </div>
+      </div>
+
+      {plan.warnings.length > 0 && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+          <div className="font-medium">Warnings</div>
+          <ul className="mt-1 max-h-40 list-disc space-y-1 overflow-auto pl-5 text-xs text-muted-foreground">
+            {plan.warnings.map((warning, index) => (
+              <li key={`${index}-${warning}`}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <PlanSection title="Incoming commits" count={plan.incoming.length}>
+        {plan.incoming.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No incoming commits.</p>
+        ) : (
+          <div className="max-h-40 overflow-auto rounded-md border">
+            <ul className="divide-y text-sm">
+              {plan.incoming.map((commit) => (
+                <li key={commit.sha} className="flex gap-2 px-3 py-1.5">
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {shortSha(commit.sha)}
+                  </span>
+                  <span className="min-w-0 break-words">
+                    {commit.subject || "(no subject)"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </PlanSection>
+
+      <PlanSection title="Changed files" count={plan.changedFiles.length}>
+        {plan.changedFiles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No changed files.</p>
+        ) : (
+          <div className="max-h-40 overflow-auto rounded-md border p-2 font-mono text-xs">
+            {plan.changedFiles.map((file, index) => (
+              <div key={`${index}-${file}`} className="break-all">
+                {file}
+              </div>
+            ))}
+          </div>
+        )}
+      </PlanSection>
+
+      <PlanSection title="Migration blockers" count={plan.migrationFiles.length}>
+        {plan.migrationFiles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No migration changes.</p>
+        ) : (
+          <div className="max-h-40 overflow-auto rounded-md border border-amber-500/40 bg-amber-500/10 p-2 font-mono text-xs">
+            {plan.migrationFiles.map((file, index) => (
+              <div key={`${index}-${file}`} className="break-all">
+                {file}
+              </div>
+            ))}
+          </div>
+        )}
+      </PlanSection>
+
+      <PlanSection title="Commands" count={plan.commands.length}>
+        {plan.commands.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No toolchain commands previewed.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {(["install", "build", "artisan"] as PlanCommandGroup[]).map((group) => {
+              const commands = plan.commands.filter((command) => command.group === group);
+              if (commands.length === 0) return null;
+              return (
+                <div key={group} className="space-y-1">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">
+                    {group}
+                  </div>
+                  <div className="max-h-40 space-y-2 overflow-auto rounded-md border p-2">
+                    {commands.map((command, index) => (
+                      <div key={`${group}-${index}-${command.label}`} className="text-xs">
+                        <div className="font-medium">{command.label}</div>
+                        <div className="break-all font-mono text-muted-foreground">
+                          {command.description}
+                        </div>
+                        <div className="break-all font-mono text-muted-foreground">
+                          cwd: {command.cwd}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </PlanSection>
+
+      <PlanSection title="Services (read-only validation)">
+        <div className="space-y-1.5 text-sm">
+          <div>
+            <span className="text-muted-foreground">Validation: </span>
+            {plan.services.validation || "unknown"}
+          </div>
+          {plan.services.stopBeforePull.length > 0 && (
+            <div>
+              <span className="text-muted-foreground">Stop before pull: </span>
+              {plan.services.stopBeforePull.join(", ")}
+            </div>
+          )}
+          {plan.services.stopBeforeBuild.length > 0 && (
+            <div>
+              <span className="text-muted-foreground">Stop before build: </span>
+              {plan.services.stopBeforeBuild.join(", ")}
+            </div>
+          )}
+          {plan.services.restartAfter.length > 0 && (
+            <div>
+              <span className="text-muted-foreground">Restart after: </span>
+              {plan.services.restartAfter.join(", ")}
+            </div>
+          )}
+          {plan.services.startAfter.length > 0 && (
+            <div>
+              <span className="text-muted-foreground">Start after: </span>
+              {plan.services.startAfter.join(", ")}
+            </div>
+          )}
+          {plan.services.states.length === 0 ? (
+            <p className="text-muted-foreground">No service lifecycle configured.</p>
+          ) : (
+            <div className="max-h-40 overflow-auto rounded-md border">
+              <ul className="divide-y">
+                {plan.services.states.map((service) => (
+                  <PlanServiceRow key={service.name} service={service} />
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </PlanSection>
+
+      <PlanSection title="Health check and webhook">
+        <div className="space-y-1 text-sm">
+          <div>
+            <span className="text-muted-foreground">Health check: </span>
+            {plan.healthCheck.enabled
+              ? `${plan.healthCheck.url} (${plan.healthCheck.timeoutSeconds}s)`
+              : "disabled"}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Webhook: </span>
+            {plan.notify.enabled ? plan.notify.webhookUrl : "disabled"}
+            {plan.notify.on.length > 0 ? ` (on: ${plan.notify.on.join(", ")})` : ""}
+          </div>
+        </div>
+      </PlanSection>
+    </div>
+  );
 }
 
 export function UpdaterView() {
@@ -96,6 +338,14 @@ export function UpdaterView() {
     app: null,
   });
   const [deleteTarget, setDeleteTarget] = useState<UpdaterApp | null>(null);
+  const [planDialog, setPlanDialog] = useState<{
+    open: boolean;
+    loading: boolean;
+    appId: string;
+    plan: AppPlan | null;
+    error: string;
+  }>({ open: false, loading: false, appId: "", plan: null, error: "" });
+  const planRequest = useRef(0);
 
   const selected = apps.find((app) => app.id === selectedId) ?? null;
 
@@ -172,6 +422,42 @@ export function UpdaterView() {
         error: true,
       });
     }
+  }
+
+  async function previewPlan(app: UpdaterApp) {
+    if (planDialog.loading) return;
+    const request = planRequest.current + 1;
+    planRequest.current = request;
+    setPlanDialog({ open: true, loading: true, appId: app.id, plan: null, error: "" });
+    try {
+      const result = await invoke<AppPlan>("plan_updater_app", { appId: app.id });
+      if (planRequest.current !== request) return;
+      setPlanDialog({
+        open: true,
+        loading: false,
+        appId: app.id,
+        plan: result,
+        error: "",
+      });
+    } catch (error) {
+      if (planRequest.current !== request) return;
+      setPlanDialog({
+        open: true,
+        loading: false,
+        appId: app.id,
+        plan: null,
+        error: errorMessage(error),
+      });
+    }
+  }
+
+  function closePlanDialog() {
+    planRequest.current += 1;
+    setPlanDialog((previous) => ({
+      ...previous,
+      open: false,
+      loading: false,
+    }));
   }
 
   async function confirmDelete() {
@@ -406,6 +692,20 @@ export function UpdaterView() {
                   </ContextMenuTrigger>
                   <ContextMenuContent className="w-48">
                     <ContextMenuItem
+                      disabled={running !== null || planDialog.loading}
+                      title="Dry run: fetch remote refs and preview the plan without merging or changing services"
+                      onSelect={() => void previewPlan(app)}
+                    >
+                      {planDialog.loading && planDialog.appId === app.id ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <ClipboardList />
+                      )}
+                      {planDialog.loading && planDialog.appId === app.id
+                        ? "Planning…"
+                        : "Preview Plan"}
+                    </ContextMenuItem>
+                    <ContextMenuItem
                       disabled={running !== null}
                       onSelect={() => void run(app.id, false)}
                     >
@@ -483,6 +783,50 @@ export function UpdaterView() {
         onOpenChange={(open) => setForm((previous) => ({ ...previous, open }))}
         onSaved={handleSaved}
       />
+
+      <Dialog
+        open={planDialog.open}
+        onOpenChange={(open) => {
+          if (open) {
+            setPlanDialog((previous) => ({ ...previous, open: true }));
+          } else {
+            closePlanDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              Update plan: {planDialog.plan?.appName || planDialog.appId}
+            </DialogTitle>
+            <DialogDescription>
+              Dry run. Plan fetches remote refs but does not merge, build, install, or
+              change services.
+            </DialogDescription>
+          </DialogHeader>
+
+          {planDialog.loading && (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="animate-spin" />
+              Generating dry-run plan…
+            </div>
+          )}
+
+          {planDialog.error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {planDialog.error}
+            </div>
+          )}
+
+          {planDialog.plan && <PlanDetails plan={planDialog.plan} />}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closePlanDialog}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={outcomes !== null}

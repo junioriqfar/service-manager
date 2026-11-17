@@ -1,6 +1,6 @@
 # Rencana Fase 3 — Operasional, Doctor, Plan, History
 
-Status: **Sprint 3.1 selesai; Sprint 3.2–3.5 belum**
+Status: **Sprint 3.1–3.2 selesai; Sprint 3.3–3.5 belum**
 
 Lanjutan dari [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md). Fase 3 berfokus pada
 observability dan keselamatan operasi, bukan fitur update inti.
@@ -101,6 +101,8 @@ Catatan implementasi Sprint 3.1:
 
 ## Sprint 3.2 — Dry-run Plan
 
+Status: **Selesai**.
+
 Tujuan: menampilkan rencana update tanpa eksekusi.
 
 Isi plan:
@@ -112,7 +114,7 @@ Isi plan:
 - daftar install/build/artisan command (program + args);
 - service stop/restart/start;
 - health check dan webhook;
-- status: `up-to-date`, `dirty`, `blocked-migration`, `ready`, `error`;
+- status: `up-to-date`, `dirty`, `blocked-migration`, `ready`, `clone-required`, `error`;
 - notes/warnings.
 
 Backend:
@@ -130,6 +132,64 @@ Tests:
 - No calls to install/build/stop/restart.
 - Service validation read-only.
 - CLI parse/output smoke test.
+
+Catatan implementasi Sprint 3.2:
+
+- File `crates/sm-updater/src/plan.rs`: `PlanStatus`
+  (`up-to-date|dirty|blocked-migration|ready|clone-required|error`),
+  `PlanCommit`, `PlanCommand` (group `install|build|artisan`), `PlanService`,
+  `PlanServices`, `PlanHealth`, `PlanNotify`, dan `AppPlan` (serde camelCase).
+- `plan_app(app, settings, project, runner, services)` tidak pernah panic.
+  Kegagalan Git/toolchain/service menjadi `status=error` atau warning, bukan
+  crash. `AppPlan.status` juga dipakai untuk `clone-required` dan
+  `blocked-migration`.
+- Urutan Git read-only: validasi branch/path/git → `git status --porcelain` →
+  branch aktif (`rev-parse --abbrev-ref HEAD`) → `rev-parse HEAD` →
+  `git ls-remote --heads origin` (timeout 20 detik, prompt dinonaktifkan) →
+  `git fetch --prune origin` (timeout 120 detik) →
+  `rev-parse --verify origin/<branch>` → `rev-list --count HEAD..origin/<branch>`
+  → `git log --format=%H%x09%s` → `git diff --name-only`.
+- Working tree kotor: status `dirty`, maksimal 30 entri pertama masuk warnings,
+  `git fetch` dan merge tidak dijalankan. Branch mismatch dan Git tidak ada:
+  status `error` dengan pesan jelas. Local path tidak ada: `clone-required`
+  tanpa clone. Tidak ada commit masuk: `up-to-date`.
+- Migration dideteksi dengan `sm_core::update::is_migration_change`; status
+  menjadi `blocked-migration`, tetapi file migration dan command toolchain tetap
+  ditampilkan agar operator bisa menilai dampaknya.
+- `toolchain::resolve_plan` hanya menyusun command (tidak mengeksekusi). Jika
+  resolusi gagal (lockfile ambigu, tool tidak ada, folder hilang), command
+  dikosongkan dan alasan masuk warnings.
+- Service memakai `Lifecycle::validate_readonly` (hanya `exists`) dan
+  `is_running` per nama unik. Tidak ada `preflight`, `stop`, `start`, atau
+  `restart`. Hasil validasi dan state best-effort masuk `PlanServices`.
+- Health check dan webhook hanya informasi; URL di-redaksi dengan
+  `sm_core::redact_secrets`, termasuk userinfo/token pada webhook. Tidak ada HTTP
+  request.
+- **Read-only**: `git fetch --prune` memperbarui remote-tracking refs di `.git`
+  dan itu satu-satunya perubahan; tidak ada merge, clone, build, install,
+  stop/restart service, tulis log, config, atau state.
+- CLI: `sm-updater plan --app ID [--config PATH]`, `sm-updater plan --all`, dan
+  alias `--project`. Output memuat status, branch/HEAD, incoming commit, changed
+  files, migration, command per group, service, health/webhook, warnings, dan
+  catatan fetch read-only. Exit `0` untuk plan yang berhasil dibuat (termasuk
+  `ready`/`blocked-migration`/`error`), `1` untuk config/app gagal dimuat, `2`
+  untuk argumen tidak valid.
+- GUI: command Tauri `plan_updater_app` di `crates/sm-gui/src/updater.rs`
+  (spawn_blocking, `SystemRunner` + `WindowsServiceControl`), aksi context menu
+  **Preview Plan** sebelum **Run**, dan dialog plan dengan badge status, commit,
+  file, migration, command per group, service, health/webhook, warnings, serta
+  daftar panjang yang bisa di-scroll.
+- Test: 13 test `plan` (up-to-date, ready + command/service, dirty,
+  blocked-migration, clone-required, Git hilang, branch mismatch, toolchain
+  gagal, service hilang, auth remote gagal, parsing commit, serialisasi status),
+  test parse CLI + smoke `collect_plans_at` tanpa SCM/network, test command GUI +
+  UI source test.
+- Batasan: plan tidak melakukan clone; command yang ditampilkan adalah preview
+  untuk perubahan yang terdeteksi saat itu dan bisa berbeda bila remote bergerak;
+  health check/webhook tidak dieksekusi; state service best-effort; plan tidak
+  menulis history (Sprint 3.3); plan belum memeriksa ancestry/fast-forwardability
+  (`merge-base`), jadi `ready` mengasumsikan `git merge --ff-only` akan berhasil;
+  CLI membatasi tampilan 30 commit/40 file tetapi payload API tetap lengkap.
 
 ---
 
@@ -189,7 +249,7 @@ Tests:
 ## Acceptance Fase 3 inti
 
 - [x] Doctor report lengkap, read-only, redacted.
-- [ ] Plan preview tanpa side effect.
+- [x] Plan preview tanpa side effect.
 - [ ] History JSONL dan UI history.
 - [ ] Retention manual + tombol Settings.
 - [ ] Audit trigger IP/action.

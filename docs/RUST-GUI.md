@@ -69,7 +69,7 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
   Untuk preset Laravel ditampilkan versi PHP efektif; app dengan `webServerService`
   menampilkan nama service Apache dan versi Apache dari settings efektif.
 - Tombol **Refresh**, **Add App**, **Check All**, **Update All**.
-- Aksi per app: Run, Check, Test, Log, Edit, Delete.
+- Aksi per app: Preview Plan, Run, Check, Test, Log, Edit, Delete.
 - Form registrasi/edit: repo URL, local path (Browse…), branch, preset, package manager,
   composer/artisan/package-install/build, install/build command, queue restart,
   web server Apache opsional, allowlist IP per app, service lifecycle, clone-on-first-run,
@@ -78,9 +78,18 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
   `data/services.json`; kosong berarti app tidak terhubung eksplisit ke Apache.
 - **Test** menjalankan `git rev-parse` + `git ls-remote`, lalu menampilkan preset dan
   package manager hasil deteksi.
+- **Preview Plan** (dry run) memanggil `plan_updater_app` dan menampilkan dialog:
+  badge status (`up-to-date`, `dirty`, `blocked-migration`, `ready`,
+  `clone-required`, `error`), branch/HEAD/remote HEAD, incoming commit, changed
+  files, migration blocker, command per group (install/build/artisan), service
+  stop/restart/start + state running, health check, webhook (redacted), dan
+  warnings. Daftar panjang memakai area scroll dengan tinggi maksimum.
+- Dialog plan menampilkan catatan bahwa plan hanya fetch remote refs dan
+  **does not merge, build, install, or change services**. Loading state terlihat
+  saat fetch/inspeksi berjalan; error ditampilkan di dialog.
 - **Check All/Update All** berjalan di `spawn_blocking`, jadi UI tidak freeze.
 - Dialog hasil menampilkan status per app; log terbaru tampil di panel bawah.
-- Klik kanan baris app: Run, Check, Test, Log, Edit, Delete.
+- Klik kanan baris app: Preview Plan, Run, Check, Test, Log, Edit, Delete.
 - Tooltip tersedia pada tab, tombol aksi, dan field penting.
 - Tidak ada polling/auto-update. Aksi hanya dipicu tombol atau `sm-trigger` via SSH.
 - Service lifecycle membutuhkan GUI/task elevated; tanpa Administrator, update dengan
@@ -277,7 +286,7 @@ Tombol **Start All / Stop All / Restart All** tidak berjalan di UI thread.
 | --- | --- |
 | `crates/sm-gui/src/main.rs` | Entry point Tauri, registrasi command |
 | `crates/sm-gui/src/commands.rs` | Command IPC (CRUD, install, start/stop, import, backup/restore, batch) |
-| `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log) |
+| `crates/sm-gui/src/updater.rs` | Command IPC tab Updater (registry CRUD, test, run, log, plan read-only) |
 | `crates/sm-gui/src/remote.rs` | Command IPC tab Remote (config, preview, test SSH, run streaming) |
 | `crates/sm-gui/src/settings.rs` | Command IPC tab Settings (toolchain detection/test, settings save/load, trigger migration, Scheduled Task) |
 | `crates/sm-gui/src/doctor.rs` | Doctor read-only: status/check/report types, agregasi overall, check environment/tools/settings/registry/services/remote/task/SSH/storage/pending/PHP, command `run_doctor` |
@@ -303,13 +312,16 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 375 test):
+Test GUI mencakup (total workspace 394 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
 - Util: log tail, batas baris, export JSON, app log.
 - Updater: registry CRUD, state view, preservasi field lanjutan, validasi service,
-  validasi `webServerService` (Apache vs non-Apache), dan versi PHP/Apache efektif.
+  validasi `webServerService` (Apache vs non-Apache), versi PHP/Apache efektif,
+  dan command `plan_updater_app` (plan ready tanpa perubahan service).
+- Plan: status up-to-date/ready/dirty/blocked-migration/clone-required/error,
+  command per group, service read-only, redaksi webhook, dan smoke CLI.
 - Remote: normalisasi config, save/load, preview wrapper/direct, BatchMode/askpass, DPAPI password.
 - Settings: parser JSON status Scheduled Task, validasi nama task/user/logon type,
   fallback settings lama, save/load helper, migrasi trigger eksplisit, diagnostik,

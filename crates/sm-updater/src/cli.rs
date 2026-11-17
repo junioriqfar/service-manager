@@ -7,9 +7,11 @@ use sm_core::ToggleMode;
 
 use crate::credential::{store_credential, verify_remote, CredentialRequest, GitCredentialSink};
 use crate::ip::{app_allowed_for_ip_with_trigger, client_ip_from_env, ip_allowed};
+use crate::plan::{plan_app, AppPlan, PlanCommandGroup};
 use crate::registry::{load_config, save_config, AppConfig, PackageManager, Preset, UpdaterConfig};
 use crate::runner::{Runner, SystemRunner};
 use crate::scan::{discover_projects, ProjectInfo};
+use crate::services::{ServiceControl, WindowsServiceControl};
 use crate::state::load_state;
 use crate::trigger::{run_registry, RunOptions};
 use crate::update::{update_project, UpdateOptions, UpdateStatus};
@@ -20,6 +22,7 @@ pub enum Mode {
     List,
     Check,
     Update,
+    Plan,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +30,7 @@ pub struct Args {
     pub config: Option<PathBuf>,
     pub mode: Mode,
     pub project: Option<String>,
+    pub app: Option<String>,
     pub all: bool,
     pub help: bool,
 }
@@ -37,6 +41,7 @@ impl Default for Args {
             config: None,
             mode: Mode::Menu,
             project: None,
+            app: None,
             all: false,
             help: false,
         }
@@ -57,12 +62,20 @@ pub fn parse_args(values: &[String]) -> Result<Args, String> {
             "list" => args.mode = Mode::List,
             "check" => args.mode = Mode::Check,
             "update" => args.mode = Mode::Update,
+            "plan" => args.mode = Mode::Plan,
             "--config" => {
                 index += 1;
                 let Some(path) = values.get(index) else {
                     return Err("--config membutuhkan path.".to_string());
                 };
                 args.config = Some(PathBuf::from(path));
+            }
+            "--app" => {
+                index += 1;
+                let Some(app) = values.get(index) else {
+                    return Err("--app membutuhkan app id.".to_string());
+                };
+                args.app = Some(app.clone());
             }
             "--project" => {
                 index += 1;
@@ -108,6 +121,20 @@ pub fn run(values: &[String]) -> i32 {
         .config
         .clone()
         .unwrap_or_else(|| ConfigPaths::detect().projects_path());
+
+    if args.mode == Mode::Plan {
+        let target = args.app.as_deref().or(args.project.as_deref());
+        if args.all && target.is_some() {
+            eprintln!("Gunakan --app ID atau --all, bukan keduanya.");
+            return 2;
+        }
+        if !args.all && target.is_none() {
+            eprintln!("Gunakan --app ID atau --all.");
+            return 2;
+        }
+        return run_plan_from_args(&args, &config_path);
+    }
+
     let settings = match load_projects(&config_path) {
         Ok(settings) => settings,
         Err(error) => {
@@ -126,6 +153,7 @@ pub fn run(values: &[String]) -> i32 {
         }
         Mode::Menu => run_menu(&projects, &settings, &log_dir),
         Mode::Check | Mode::Update => run_targets(&args, &projects, &settings, &log_dir),
+        Mode::Plan => run_plan_from_args(&args, &config_path),
     }
 }
 
@@ -143,6 +171,191 @@ fn apply_settings(config_path: &Path, config: &mut UpdaterConfig) -> Result<(), 
         config.settings = settings.to_updater_settings();
     }
     Ok(())
+}
+
+fn run_plan_from_args(args: &Args, config_path: &Path) -> i32 {
+    let target = args.app.as_deref().or(args.project.as_deref());
+    let plans = match collect_plans_at(
+        config_path,
+        target,
+        args.all,
+        &SystemRunner,
+        &WindowsServiceControl,
+    ) {
+        Ok(plans) => plans,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    for plan in &plans {
+        print_plan(plan);
+    }
+    0
+}
+
+fn collect_plans_at(
+    config_path: &Path,
+    app_id: Option<&str>,
+    all: bool,
+    runner: &dyn Runner,
+    services: &dyn ServiceControl,
+) -> Result<Vec<AppPlan>, String> {
+    let mut config = load_config(config_path)?;
+    apply_settings(config_path, &mut config)?;
+    let settings = config.settings.clone();
+
+    let targets: Vec<&AppConfig> = if let Some(id) = app_id {
+        let app = config
+            .find(id)
+            .ok_or_else(|| format!("App '{id}' tidak ditemukan."))?;
+        vec![app]
+    } else if all {
+        let apps: Vec<&AppConfig> = config.apps.iter().filter(|app| app.enabled).collect();
+        if apps.is_empty() {
+            return Err("Tidak ada app aktif untuk direncanakan.".to_string());
+        }
+        apps
+    } else {
+        return Err("Gunakan --app ID atau --all.".to_string());
+    };
+
+    Ok(targets
+        .into_iter()
+        .map(|app| plan_app(app, &settings, Path::new(&app.local_path), runner, services))
+        .collect())
+}
+
+fn print_plan(plan: &AppPlan) {
+    println!();
+    println!("=== {} ({}) ===", plan.app_id, plan.app_name);
+    println!("Status        : {}", plan.status.as_str());
+    if !plan.message.is_empty() {
+        println!("Message       : {}", plan.message);
+    }
+    println!(
+        "Branch        : {} (aktif: {})",
+        plan.branch,
+        if plan.current_branch.is_empty() {
+            "?"
+        } else {
+            &plan.current_branch
+        }
+    );
+    println!("HEAD          : {}", short_sha(&plan.head_before));
+    println!("Remote HEAD   : {}", short_sha(&plan.remote_head));
+    println!("Incoming      : {} commit", plan.incoming.len());
+    for commit in plan.incoming.iter().take(30) {
+        println!("  {} {}", short_sha(&commit.sha), commit.subject);
+    }
+    if plan.incoming.len() > 30 {
+        println!(
+            "  ... {} commit lain tidak ditampilkan",
+            plan.incoming.len() - 30
+        );
+    }
+
+    println!("Changed files : {}", plan.changed_files.len());
+    for file in plan.changed_files.iter().take(40) {
+        println!("  {file}");
+    }
+    if plan.changed_files.len() > 40 {
+        println!(
+            "  ... {} file lain tidak ditampilkan",
+            plan.changed_files.len() - 40
+        );
+    }
+
+    println!("Migration     : {}", plan.migration_files.len());
+    for file in &plan.migration_files {
+        println!("  {file}");
+    }
+
+    println!("Commands      : {}", plan.commands.len());
+    for group in [
+        PlanCommandGroup::Install,
+        PlanCommandGroup::Build,
+        PlanCommandGroup::Artisan,
+    ] {
+        let commands: Vec<_> = plan
+            .commands
+            .iter()
+            .filter(|command| command.group == group)
+            .collect();
+        if commands.is_empty() {
+            continue;
+        }
+        println!("  [{}]", group.as_str());
+        for command in commands {
+            println!("    {}: {}", command.label, command.description);
+            println!("      cwd: {}", command.cwd);
+        }
+    }
+
+    println!(
+        "Services      : {}",
+        if plan.services.validation.is_empty() {
+            "unknown"
+        } else {
+            &plan.services.validation
+        }
+    );
+    for (label, names) in [
+        ("stop before pull", &plan.services.stop_before_pull),
+        ("stop before build", &plan.services.stop_before_build),
+        ("restart after", &plan.services.restart_after),
+        ("start after", &plan.services.start_after),
+    ] {
+        if !names.is_empty() {
+            println!("  {label}: {}", names.join(", "));
+        }
+    }
+    for state in &plan.services.states {
+        let running = match state.running {
+            Some(true) => "running",
+            Some(false) => "stopped",
+            None => "unknown",
+        };
+        println!("  {}: {running}", state.name);
+        if !state.error.is_empty() {
+            println!("    error: {}", state.error);
+        }
+    }
+
+    if plan.health_check.enabled {
+        println!(
+            "Health check  : {} ({}s)",
+            plan.health_check.url, plan.health_check.timeout_seconds
+        );
+    } else {
+        println!("Health check  : disabled");
+    }
+    if plan.notify.enabled {
+        println!(
+            "Notify        : {} (on: {})",
+            plan.notify.webhook_url,
+            plan.notify.on.join(", ")
+        );
+    } else {
+        println!("Notify        : disabled");
+    }
+
+    if !plan.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &plan.warnings {
+            println!("  - {warning}");
+        }
+    }
+    println!(
+        "Note          : Plan fetches remote refs (git fetch --prune) but does not merge, build, install, or change services."
+    );
+}
+
+fn short_sha(value: &str) -> String {
+    if value.is_empty() {
+        return "-".to_string();
+    }
+    value.chars().take(12).collect()
 }
 
 fn take_value(values: &[String], index: &mut usize, flag: &str) -> Result<String, String> {
@@ -1461,7 +1674,8 @@ fn run_targets(
     settings: &ProjectsFile,
     log_dir: &std::path::Path,
 ) -> i32 {
-    let targets: Vec<&ProjectInfo> = if let Some(name) = &args.project {
+    let targets: Vec<&ProjectInfo> = if let Some(name) = args.project.as_ref().or(args.app.as_ref())
+    {
         let found: Vec<&ProjectInfo> = projects
             .iter()
             .filter(|project| project.name.eq_ignore_ascii_case(name))
@@ -1824,9 +2038,16 @@ Registry:
 Trigger:
   sm-updater run --all [--check]      Proses semua app aktif
   sm-updater run --app ID [--check]   Proses satu app
+  sm-updater plan --app ID            Preview plan (read-only, tanpa merge/build)
+  sm-updater plan --all               Preview semua app aktif
   sm-updater authorize [--app ID]     Validasi IP client (wrapper)
   sm-updater status                   Status update terakhir
   sm-updater logs [ID] [--tail N]     Log updater/project
+
+  Plan menjalankan git fetch --prune (remote-tracking refs diperbarui) tetapi
+  tidak merge, clone, build, install, stop/restart service, atau menulis log.
+  Exit plan: 0 plan dibuat (termasuk ready/blocked/error), 1 config/app gagal,
+  2 argumen tidak valid.
 
   sm-updater --config PATH            Path projects.json
   sm-updater credential store         Simpan PAT Git (DPAPI/Credential Manager)
@@ -1883,7 +2104,46 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_argument() {
+    fn parses_plan_app_and_config() {
+        let parsed = parse_args(&args(&[
+            "plan",
+            "--app",
+            "kasirin",
+            "--config",
+            r"C:\config\projects.json",
+        ]))
+        .unwrap();
+        assert_eq!(parsed.mode, Mode::Plan);
+        assert_eq!(parsed.app.as_deref(), Some("kasirin"));
+        assert_eq!(
+            parsed.config,
+            Some(PathBuf::from(r"C:\config\projects.json"))
+        );
+        assert!(!parsed.all);
+    }
+
+    #[test]
+    fn parses_plan_all_and_project_alias() {
+        let parsed = parse_args(&args(&["plan", "--all"])).unwrap();
+        assert_eq!(parsed.mode, Mode::Plan);
+        assert!(parsed.all);
+
+        let parsed = parse_args(&args(&["plan", "--project", "kasirin"])).unwrap();
+        assert_eq!(parsed.mode, Mode::Plan);
+        assert_eq!(parsed.project.as_deref(), Some("kasirin"));
+    }
+
+    #[test]
+    fn plan_requires_app_or_all() {
+        let parsed = parse_args(&args(&["plan"])).unwrap();
+        assert_eq!(parsed.mode, Mode::Plan);
+        assert!(parsed.app.is_none());
+        assert!(parsed.project.is_none());
+        assert!(!parsed.all);
+    }
+
+    #[test]
+    fn parse_error_rejects_unknown_argument() {
         let error = parse_args(&args(&["deploy"])).unwrap_err();
         assert!(error.contains("tidak dikenal"));
     }
@@ -1892,6 +2152,7 @@ mod tests {
     fn rejects_missing_option_value() {
         assert!(parse_args(&args(&["--config"])).is_err());
         assert!(parse_args(&args(&["--project"])).is_err());
+        assert!(parse_args(&args(&["--app"])).is_err());
     }
 
     #[test]
@@ -1990,5 +2251,150 @@ mod tests {
         apply_settings(&config_path, &mut config).unwrap();
         assert_eq!(config.settings.git_path, r"C:\legacy\git.exe");
         assert!(!crate::settings::settings_path_for(&config_path).exists());
+    }
+
+    use crate::runner::{Output, RunnerError};
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    fn ok(stdout: &str) -> Output {
+        Output {
+            exit_code: 0,
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+        }
+    }
+
+    struct PlanRunner {
+        calls: Mutex<Vec<Vec<String>>>,
+    }
+
+    impl PlanRunner {
+        fn new() -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<Vec<String>> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl Runner for PlanRunner {
+        fn run(
+            &self,
+            _program: &Path,
+            args: &[String],
+            _cwd: &Path,
+            _timeout: Duration,
+        ) -> Result<Output, RunnerError> {
+            self.calls.lock().unwrap().push(args.to_vec());
+            let first = args.first().map(String::as_str).unwrap_or("");
+            let output = match first {
+                "status" => ok(""),
+                "rev-parse" if args.get(1).map(String::as_str) == Some("--abbrev-ref") => {
+                    ok("main")
+                }
+                "rev-parse" if args.get(1).map(String::as_str) == Some("HEAD") => ok("aaaa1111"),
+                "rev-parse" if args.get(1).map(String::as_str) == Some("--verify") => {
+                    ok("bbbb2222")
+                }
+                "ls-remote" => ok("refs/heads/main"),
+                "fetch" => ok(""),
+                "rev-list" => ok("1"),
+                "log" => ok("bbbb2222\tfeat: update"),
+                "diff" => ok("index.html"),
+                _ => ok(""),
+            };
+            Ok(output)
+        }
+    }
+
+    struct NoServices;
+
+    impl ServiceControl for NoServices {
+        fn exists(&self, _name: &str) -> Result<bool, String> {
+            Ok(false)
+        }
+
+        fn is_running(&self, _name: &str) -> Result<bool, String> {
+            Ok(false)
+        }
+
+        fn stop(&self, _name: &str, _timeout: Duration) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn start(&self, _name: &str, _timeout: Duration) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn restart(&self, _name: &str, _timeout: Duration) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn collect_plans_smoke_reads_git_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let project = temp.path().join("demo");
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::write(project.join("index.html"), "hello").unwrap();
+        let tools = temp.path().join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        std::fs::write(tools.join("git.exe"), b"dummy").unwrap();
+
+        let mut config = UpdaterConfig::default();
+        config.settings.git_path = tools.join("git.exe").to_string_lossy().to_string();
+        config.settings.refresh_variables();
+        config.apps.push(AppConfig {
+            id: "demo".into(),
+            name: "Demo".into(),
+            repo_url: "https://example.test/demo.git".into(),
+            local_path: project.to_string_lossy().to_string(),
+            branch: "main".into(),
+            preset: Preset::Static,
+            composer: ToggleMode::Never,
+            artisan: ToggleMode::Never,
+            package_install: ToggleMode::Never,
+            build: ToggleMode::Never,
+            ..AppConfig::default()
+        });
+        save_config(&config_path, &config).unwrap();
+
+        let runner = PlanRunner::new();
+        let plans = collect_plans_at(&config_path, Some("demo"), false, &runner, &NoServices)
+            .expect("plan");
+
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].status, crate::plan::PlanStatus::Ready);
+        assert_eq!(plans[0].incoming.len(), 1);
+        assert_eq!(plans[0].incoming[0].subject, "feat: update");
+        assert!(plans[0].commands.is_empty());
+        assert_eq!(plans[0].services.validation, "ok");
+
+        for call in runner.calls() {
+            let first = call.first().map(String::as_str).unwrap_or("");
+            assert!(
+                matches!(
+                    first,
+                    "status" | "rev-parse" | "ls-remote" | "fetch" | "rev-list" | "log" | "diff"
+                ),
+                "unexpected command: {call:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn collect_plans_rejects_unknown_app() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        save_config(&config_path, &UpdaterConfig::default()).unwrap();
+        let runner = PlanRunner::new();
+        let error = collect_plans_at(&config_path, Some("missing"), false, &runner, &NoServices)
+            .unwrap_err();
+        assert!(error.contains("missing"));
     }
 }

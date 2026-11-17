@@ -4,9 +4,9 @@
 
 Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur yang sudah ada, serta fitur yang direncanakan berikut prioritasnya.
 
-- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain)
+- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan selesai**
 - Lokasi: `crates/sm-updater`
-- Test: **119 unit test** untuk crate ini; total workspace **375 test**. Config default ada di `data/projects.json`.
+- Test: **137 unit test** untuk crate ini; total workspace **394 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
@@ -146,9 +146,22 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 | Locking antar-run | Selesai | Lock global `data/updater.lock` + stale timeout |
 | Structured JSON output | **Belum** | Hanya teks |
 
-### 3.9 Pengujian
+### 3.9 Dry-run Plan (Sprint 3.2)
 
-- **119 unit test** crate `sm-updater`:
+| Fitur | Status | Detail |
+| --- | --- | --- |
+| `sm-updater plan --app ID` / `--all` | Selesai | Output teks, tanpa merge/build/install/service |
+| Status plan | Selesai | `up-to-date`, `dirty`, `blocked-migration`, `ready`, `clone-required`, `error` |
+| Fetch remote refs | Selesai | `git fetch --prune origin`; satu-satunya perubahan `.git` |
+| Incoming/diff/log | Selesai | Commit + subject, changed files, migration files |
+| Toolchain preview | Selesai | Command install/build/artisan; error resolusi menjadi warning |
+| Service preview | Selesai | `validate_readonly` + `is_running`; tidak stop/start/restart |
+| Health/webhook info | Selesai | Webhook di-redaksi; tidak ada HTTP request |
+| GUI Preview Plan | Selesai | Context menu + dialog status/commit/file/command/service/warnings |
+
+### 3.10 Pengujian
+
+- **137 unit test** crate `sm-updater`:
   - parsing CLI, registry, dan credential,
   - scan project/override,
   - runner nyata (exit code/timeout/timeout+env),
@@ -157,7 +170,8 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
   - deteksi toolchain dan command plan (termasuk lockfile ambigu),
   - service lifecycle dan pemulihan saat build gagal,
   - clone-on-first-run, health check, dan webhook notifikasi,
-  - matriks update: up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional.
+  - matriks update: up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional,
+  - plan dry-run: seluruh status, command per group, service read-only, redaksi webhook, parse CLI, dan smoke test tanpa SCM/network.
 - **E2E lokal** dengan repository Git bare:
   - `list` mendeteksi project,
   - `check` melaporkan up-to-date/incoming,

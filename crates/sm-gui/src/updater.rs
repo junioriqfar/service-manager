@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sm_config::ConfigPaths;
 use sm_core::{ServiceType, ToggleMode};
+use sm_updater::plan::{plan_app, AppPlan};
 use sm_updater::registry::{
     load_config, save_config, AppConfig, HealthCheck, NotifyConfig, PackageManager, Preset,
     ServicePlan,
 };
 use sm_updater::runner::{Runner, SystemRunner};
-use sm_updater::services::WindowsServiceControl;
+use sm_updater::services::{ServiceControl, WindowsServiceControl};
 use sm_updater::settings::{effective_settings, settings_path_for, Settings};
 use sm_updater::state::{load_state, AppState};
 use sm_updater::toolchain::{detect_package_manager, detect_preset};
@@ -507,6 +508,42 @@ pub fn test_updater_app(id: String) -> Result<String, String> {
     Ok(lines.join("\n"))
 }
 
+fn plan_updater_app_at(
+    config_path: &Path,
+    app_id: &str,
+    runner: &dyn Runner,
+    services: &dyn ServiceControl,
+) -> Result<AppPlan, String> {
+    let config = load_config(config_path)?;
+    let app = config
+        .find(app_id)
+        .ok_or_else(|| format!("App '{app_id}' tidak ditemukan."))?;
+    config.validate_app(app)?;
+    let settings = effective_settings(
+        &settings_path_for(config_path),
+        &config.settings,
+        &config.trigger,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(plan_app(
+        app,
+        &settings.to_updater_settings(),
+        Path::new(&app.local_path),
+        runner,
+        services,
+    ))
+}
+
+#[tauri::command]
+pub async fn plan_updater_app(app_id: String) -> Result<AppPlan, String> {
+    let path = config_path();
+    tauri::async_runtime::spawn_blocking(move || {
+        plan_updater_app_at(&path, &app_id, &SystemRunner, &WindowsServiceControl)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn run_updater(
     app: Option<String>,
@@ -614,7 +651,11 @@ pub fn read_updater_log(app: Option<String>) -> Result<UpdaterLogView, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sm_updater::plan::PlanStatus;
     use sm_updater::registry::{UpdaterConfig, UpdaterSettings};
+    use sm_updater::runner::{Output, RunnerError};
+    use std::sync::Mutex;
+    use std::time::Duration;
 
     fn app(id: &str, path: &Path) -> UpdaterAppInput {
         UpdaterAppInput {
@@ -872,5 +913,151 @@ mod tests {
         save_config(&path, &UpdaterConfig::default()).unwrap();
         let loaded = load_config(&path).unwrap();
         assert_eq!(loaded.version, 2);
+    }
+
+    fn plan_ok(stdout: &str) -> Output {
+        Output {
+            exit_code: 0,
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+        }
+    }
+
+    struct PlanRunner;
+
+    impl Runner for PlanRunner {
+        fn run(
+            &self,
+            _program: &Path,
+            args: &[String],
+            _cwd: &Path,
+            _timeout: Duration,
+        ) -> Result<Output, RunnerError> {
+            let first = args.first().map(String::as_str).unwrap_or("");
+            let output = match first {
+                "status" => plan_ok(""),
+                "rev-parse" if args.get(1).map(String::as_str) == Some("--abbrev-ref") => {
+                    plan_ok("main")
+                }
+                "rev-parse" if args.get(1).map(String::as_str) == Some("HEAD") => {
+                    plan_ok("aaaa1111")
+                }
+                "rev-parse" if args.get(1).map(String::as_str) == Some("--verify") => {
+                    plan_ok("bbbb2222")
+                }
+                "ls-remote" => plan_ok("refs/heads/main"),
+                "fetch" => plan_ok(""),
+                "rev-list" => plan_ok("1"),
+                "log" => plan_ok("bbbb2222\tfeat: update"),
+                "diff" => plan_ok("index.html"),
+                _ => plan_ok(""),
+            };
+            Ok(output)
+        }
+    }
+
+    struct PlanControl {
+        known: std::collections::BTreeSet<String>,
+        running: std::collections::BTreeSet<String>,
+        calls: Mutex<Vec<String>>,
+    }
+
+    impl PlanControl {
+        fn new(known: &[&str], running: &[&str]) -> Self {
+            Self {
+                known: known.iter().map(|value| value.to_string()).collect(),
+                running: running.iter().map(|value| value.to_string()).collect(),
+                calls: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl ServiceControl for PlanControl {
+        fn exists(&self, name: &str) -> Result<bool, String> {
+            self.calls.lock().unwrap().push(format!("exists:{name}"));
+            Ok(self.known.contains(name))
+        }
+
+        fn is_running(&self, name: &str) -> Result<bool, String> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("is_running:{name}"));
+            Ok(self.running.contains(name))
+        }
+
+        fn stop(&self, name: &str, _timeout: Duration) -> Result<(), String> {
+            self.calls.lock().unwrap().push(format!("stop:{name}"));
+            Ok(())
+        }
+
+        fn start(&self, name: &str, _timeout: Duration) -> Result<(), String> {
+            self.calls.lock().unwrap().push(format!("start:{name}"));
+            Ok(())
+        }
+
+        fn restart(&self, name: &str, _timeout: Duration) -> Result<(), String> {
+            self.calls.lock().unwrap().push(format!("restart:{name}"));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn plan_updater_app_builds_ready_plan_without_service_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::write(project.join("index.html"), "hello").unwrap();
+        let tools = temp.path().join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        std::fs::write(tools.join("git.exe"), b"dummy").unwrap();
+
+        let mut settings = UpdaterSettings {
+            git_path: tools.join("git.exe").to_string_lossy().to_string(),
+            ..UpdaterSettings::default()
+        };
+        settings.refresh_variables();
+        let mut config = UpdaterConfig {
+            settings,
+            ..UpdaterConfig::default()
+        };
+        config.apps.push(AppConfig {
+            id: "demo".into(),
+            name: "Demo".into(),
+            repo_url: "https://example.test/demo.git".into(),
+            local_path: project.to_string_lossy().to_string(),
+            branch: "main".into(),
+            preset: Preset::Static,
+            composer: ToggleMode::Never,
+            artisan: ToggleMode::Never,
+            package_install: ToggleMode::Never,
+            build: ToggleMode::Never,
+            services: ServicePlan {
+                restart_after: vec!["api".into()],
+                ..ServicePlan::default()
+            },
+            ..AppConfig::default()
+        });
+        save_config(&config_path, &config).unwrap();
+
+        let control = PlanControl::new(&["api"], &["api"]);
+        let plan = plan_updater_app_at(&config_path, "demo", &PlanRunner, &control).unwrap();
+
+        assert_eq!(plan.status, PlanStatus::Ready);
+        assert_eq!(plan.incoming.len(), 1);
+        assert_eq!(plan.incoming[0].subject, "feat: update");
+        assert_eq!(plan.services.validation, "ok");
+        assert_eq!(plan.services.states[0].running, Some(true));
+        for call in control.calls() {
+            assert!(
+                call.starts_with("exists:") || call.starts_with("is_running:"),
+                "service mutation attempted: {call}"
+            );
+        }
     }
 }

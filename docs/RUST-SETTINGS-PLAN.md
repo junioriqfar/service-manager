@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only).
+Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai; Dry-run Plan Sprint 3.2 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only + plan preview read-only).
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -28,7 +28,8 @@ Dokumen ini menjawab revisi pengguna:
 | Migrasi trigger global ke settings.json | Selesai (Sprint 2.1, eksplisit) |
 | `webServerService` per app | Selesai (Sprint 2.1) |
 | Doctor read-only (readiness report) | Selesai (Sprint 3.1) |
-| Dry-run plan, history/retention, admin tools | Belum (Sprint 3.2–3.4) |
+| Dry-run plan preview | Selesai (Sprint 3.2) |
+| History/retention, admin tools | Belum (Sprint 3.3–3.4) |
 | Windows Service mode | Tidak diperlukan (no-login tidak dibutuhkan) |
 
 Catatan implementasi Phase 1:

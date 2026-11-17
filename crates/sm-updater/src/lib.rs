@@ -4,6 +4,7 @@ pub mod credential;
 pub mod ip;
 pub mod lock;
 pub mod log;
+pub mod plan;
 pub mod registry;
 pub mod runner;
 pub mod scan;
@@ -17,6 +18,10 @@ pub mod update;
 pub mod variables;
 
 pub use log::UpdateLogger;
+pub use plan::{
+    plan_app, AppPlan, PlanCommand, PlanCommandGroup, PlanCommit, PlanHealth, PlanNotify,
+    PlanService, PlanServices, PlanStatus,
+};
 pub use registry::{AppConfig, PackageManager, Preset, UpdaterConfig};
 pub use runner::{Output, Runner, RunnerError, SystemRunner};
 pub use scan::{discover_projects, is_laravel_project, ProjectInfo};

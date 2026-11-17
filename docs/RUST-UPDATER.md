@@ -75,6 +75,59 @@ Exit code:
 `run` memakai lock `data/updater.lock`; proses kedua akan ditolak sampai lock stale
 (30 menit) atau proses pertama selesai. State terakhir disimpan di `data/updater-state.json`.
 
+### Plan (dry-run)
+
+```powershell
+sm-updater plan --app kasirin
+sm-updater plan --all
+sm-updater plan --project kasirin      # alias --app untuk konsistensi
+```
+
+`plan` menampilkan rencana update **tanpa** merge, clone, build, install,
+stop/restart service, menulis log, config, atau state. Satu-satunya perubahan
+repositori adalah `git fetch --prune origin` yang memperbarui remote-tracking refs
+di `.git`; `ls-remote` memakai timeout pendek dan tidak membuka prompt.
+
+Urutan inspeksi:
+
+1. Validasi branch/local path/Git. Folder project yang belum ada menghasilkan
+   status `clone-required` (plan tidak melakukan clone).
+2. `git status --porcelain`; working tree kotor menghasilkan `dirty` dan maksimal
+   30 entri pertama masuk warnings. Fetch tidak dijalankan.
+3. Verifikasi branch aktif sama dengan `branch` di registry, lalu baca HEAD.
+4. `git ls-remote --heads origin`, `git fetch --prune origin`, verifikasi
+   `origin/<branch>`, hitung `rev-list --count`, lalu baca `git log` dan
+   `git diff --name-only`.
+5. Tidak ada commit masuk → `up-to-date`; ada file
+   `database/migrations/**` → `blocked-migration`; selain itu `ready`.
+6. Toolchain di-resolve hanya untuk preview command; service hanya divalidasi
+   (`exists`) dan dicek `is_running`. Health check/webhook hanya informasi dan
+   webhook di-redaksi.
+
+Output memuat status, branch/HEAD/remote HEAD, incoming commit, changed files,
+migration files, command per group (`install`/`build`/`artisan`), service
+stop/restart/start + state, health check, webhook, dan warnings.
+
+Status plan: `up-to-date`, `dirty`, `blocked-migration`, `ready`,
+`clone-required`, `error`.
+
+Exit code `plan`:
+
+| Kode | Arti |
+| --- | --- |
+| `0` | Plan berhasil dibuat, termasuk `ready`, `blocked-migration`, `clone-required`, atau `error` |
+| `1` | Config/app gagal dimuat atau app tidak ditemukan |
+| `2` | Argumen tidak valid (mis. tanpa `--app`/`--all`, atau keduanya) |
+
+`plan` sengaja mengembalikan `0` untuk plan yang berisi status `error` karena
+payload plan tetap berhasil dihasilkan; periksa `Status`/warnings untuk keputusan
+operasional.
+
+Batasan: plan tidak melakukan clone, tidak mengeksekusi health check/webhook, dan
+belum memeriksa ancestry/fast-forwardability (`merge-base`). Status `ready`
+mengasumsikan `git merge --ff-only` akan berhasil; bila branch lokal diverged,
+update tetap bisa gagal meski plan menampilkan incoming commit.
+
 ### Wrapper Elevated (Scheduled Task)
 
 Jika app memakai service lifecycle, jalankan updater melalui wrapper:
@@ -101,6 +154,7 @@ Tab **Updater** di `sm-gui` menyediakan:
 
 - daftar app + status terakhir;
 - Add/Edit/Remove/Test app;
+- Preview Plan (dry-run, read-only) dengan dialog status/commit/file/command/service;
 - Check All / Update All dan run per app;
 - form toolchain, service lifecycle, allowlist per app, clone-on-first-run,
   health check, dan webhook;
@@ -116,7 +170,7 @@ Tab **Remote** menyediakan trigger SSH dari mesin client Windows:
 - output stdout/stderr live;
 - konfigurasi di `data/trigger-client.json` (password plaintext tidak disimpan).
 
-Tab **Updater** mendukung klik kanan pada baris app: Run, Check, Test, Log, Edit, Delete.
+Tab **Updater** mendukung klik kanan pada baris app: Preview Plan, Run, Check, Test, Log, Edit, Delete.
 Beberapa tombol utama memiliki tooltip.
 
 Tidak ada polling; semua aksi dipicu tombol.
@@ -504,7 +558,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Test mencakup registry v1→v2, migrasi, allowlist IP/CIDR, lock, state, deteksi toolchain
 (termasuk lockfile ambigu), custom command, service lifecycle, rollback service saat build
-gagal, dan seluruh matriks update Laravel.
+gagal, seluruh matriks update Laravel, serta plan dry-run (status up-to-date/ready/dirty/
+blocked-migration/clone-required/error, command per group, service read-only, redaksi
+webhook, parse CLI, dan smoke test tanpa SCM/network). Total workspace: 394 test.
 
 ## Task Scheduler / Elevation
 
