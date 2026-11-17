@@ -250,6 +250,10 @@ Catatan:
 - Jika `settings.json` ada, `trigger.allowedClientIPs` dan `trigger.allowLocal` dari
   file itu **mengalahkan** `projects.json.trigger`. Per-app
   `apps[].allowedClientIPs` tetap menjadi override.
+- `updater.maxConcurrentUpdates` divalidasi 1–32. Pada stage 1 nilainya hanya
+  berlaku untuk check-only (**Check All**/`run --check`); Run/Update All, trigger
+  update, install, build, dan service lifecycle tetap serial. Lihat
+  [RUST-UPDATER.md](RUST-UPDATER.md#konkurensi-check-only-sprint-35-stage-1).
 - `allowedClientIPs` menerima alamat IP dan CIDR IPv4/IPv6. Entri invalid atau kosong
   ditolak saat load/save. Daftar kosong berarti semua IP remote diizinkan; trigger
   lokal dikontrol `allowLocal`.

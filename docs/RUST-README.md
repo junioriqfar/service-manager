@@ -189,4 +189,4 @@ Fitur: registry v2, migrasi v1, allowlist IP/CIDR global + per-app, lock, state,
 | 5. Security & hardening | Selesai |
 | 6. Release | Selesai |
 | 7. Registry + SSH trigger + GUI Remote | Selesai |
-| 8. Operasional (Phase 3) | Doctor 3.1, Plan 3.2, History/Retention 3.3, Maintenance/Export 3.4a, Git credential + firewall read-only 3.4b selesai; parallel updates 3.5 belum |
+| 8. Operasional (Phase 3) | Doctor 3.1, Plan 3.2, History/Retention 3.3, Maintenance/Export 3.4a, Git credential + firewall read-only 3.4b selesai; parallel check-only 3.5 stage 1 selesai, stage 2 belum |

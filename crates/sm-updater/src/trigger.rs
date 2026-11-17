@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use std::net::IpAddr;
@@ -7,12 +9,12 @@ use crate::app_update::update_app;
 use crate::history::{append_history, HistoryEntry};
 use crate::ip::{app_allowed_for_ip_with_trigger, client_ip_from_env};
 use crate::lock::UpdateLock;
-use crate::registry::{TriggerSettings, UpdaterConfig};
+use crate::registry::{AppConfig, TriggerSettings, UpdaterConfig, UpdaterSettings};
 use crate::runner::Runner;
 use crate::services::{ServiceControl, WindowsServiceControl};
 use crate::settings::{effective_settings, effective_trigger, settings_path_for};
-use crate::state::{load_state, mark, save_state};
-use crate::update::UpdateOptions;
+use crate::state::{load_state, mark, save_state, UpdaterState};
+use crate::update::{UpdateOptions, UpdateOutcome, UpdateStatus};
 
 #[derive(Debug, Clone, Default)]
 pub struct RunOptions {
@@ -28,6 +30,11 @@ pub struct RunOutcome {
     pub status: String,
     pub message: String,
     pub forbidden: bool,
+}
+
+struct SelectedApp<'a> {
+    app: &'a AppConfig,
+    allowed: bool,
 }
 
 pub fn lock_path(config_path: &Path) -> PathBuf {
@@ -118,95 +125,130 @@ pub fn run_registry_with(
         );
     }
 
-    for app in &config.apps {
-        if !app.enabled {
-            continue;
-        }
-        if let Some(requested) = &options.app {
-            if !app.id.eq_ignore_ascii_case(requested) {
-                continue;
-            }
-        }
-
-        if !app_allowed_for_ip_with_trigger(app, &trigger, client_ip) {
-            let message = match client_ip {
-                Some(ip) => format!("IP {ip} tidak diizinkan untuk app '{}'.", app.id),
-                None => format!("Trigger lokal tidak diizinkan untuk app '{}'.", app.id),
-            };
-            mark(&mut state, &app.id, "forbidden", Some(&message), 0);
-            record_history(
-                config_path,
-                &app.id,
-                "forbidden",
-                &message,
-                "",
-                0,
-                client_ip,
-            );
-            outcomes.push(RunOutcome {
-                app_id: app.id.clone(),
-                status: "forbidden".to_string(),
-                message,
-                forbidden: true,
-            });
-            continue;
-        }
-
-        let started = Instant::now();
-        let outcome = update_app(
+    let selected: Vec<SelectedApp> = config
+        .apps
+        .iter()
+        .filter(|app| app.enabled)
+        .filter(|app| {
+            options
+                .app
+                .as_ref()
+                .map(|requested| app.id.eq_ignore_ascii_case(requested))
+                .unwrap_or(true)
+        })
+        .map(|app| SelectedApp {
             app,
+            allowed: app_allowed_for_ip_with_trigger(app, &trigger, client_ip),
+        })
+        .collect();
+
+    let allowed_count = selected.iter().filter(|app| app.allowed).count();
+    // Stage 1: hanya check-only yang boleh paralel. Update/install/build/
+    // service lifecycle tetap serial sampai desain stage 2 selesai.
+    let parallel_check =
+        options.check_only && updater_settings.max_concurrent_updates > 1 && allowed_count >= 2;
+
+    if parallel_check {
+        let allowed: Vec<(usize, &AppConfig)> = selected
+            .iter()
+            .enumerate()
+            .filter(|(_, selected_app)| selected_app.allowed)
+            .map(|(index, selected_app)| (index, selected_app.app))
+            .collect();
+        let max_concurrent = updater_settings.max_concurrent_updates.min(allowed.len());
+        let mut updates = run_check_apps_parallel(
+            &allowed,
             &updater_settings,
             &log_dir,
             runner,
             services,
-            UpdateOptions {
-                check_only: options.check_only,
-            },
+            max_concurrent,
         );
-        let status = outcome.status.as_str().to_string();
-        let duration_ms = started.elapsed().as_millis() as u64;
-        mark(
-            &mut state,
-            &app.id,
-            &status,
-            if matches!(
-                outcome.status,
-                crate::update::UpdateStatus::Failed
-                    | crate::update::UpdateStatus::Degraded
-                    | crate::update::UpdateStatus::BlockedMigration
-            ) {
-                Some(&outcome.message)
+        updates.sort_by_key(|(index, _, _)| *index);
+        let mut updates = updates.into_iter().peekable();
+
+        for (index, selected_app) in selected.iter().enumerate() {
+            if !selected_app.allowed {
+                outcomes.push(record_forbidden(
+                    selected_app.app,
+                    client_ip,
+                    &mut state,
+                    config_path,
+                ));
+                continue;
+            }
+
+            let matches_next = matches!(
+                updates.peek(),
+                Some((update_index, _, _)) if *update_index == index
+            );
+            let result = if matches_next {
+                updates
+                    .next()
+                    .map(|(_, outcome, duration)| (outcome, duration))
             } else {
                 None
-            },
-            duration_ms,
-        );
-
-        let commit = head_commit(
-            &updater_settings.git_path,
-            Path::new(&app.local_path),
-            runner,
-        );
-        if let Some(commit) = &commit {
-            if let Some(entry) = state.apps.get_mut(&app.id) {
-                entry.last_commit = commit.clone();
-            }
+            };
+            let (outcome, duration_ms) = result.unwrap_or_else(|| {
+                (
+                    UpdateOutcome {
+                        project: selected_app.app.id.clone(),
+                        status: UpdateStatus::Failed,
+                        message: format!(
+                            "Check untuk app '{}' tidak mengembalikan hasil worker; status ditandai failed.",
+                            selected_app.app.id
+                        ),
+                        log_path: None,
+                    },
+                    0,
+                )
+            });
+            outcomes.push(record_app_outcome(
+                selected_app.app,
+                outcome,
+                duration_ms,
+                &mut state,
+                config_path,
+                &updater_settings,
+                runner,
+                client_ip,
+            ));
         }
-        record_history(
-            config_path,
-            &app.id,
-            &status,
-            &outcome.message,
-            commit.as_deref().unwrap_or(""),
-            duration_ms,
-            client_ip,
-        );
-        outcomes.push(RunOutcome {
-            app_id: app.id.clone(),
-            status,
-            message: outcome.message,
-            forbidden: false,
-        });
+    } else {
+        for selected_app in &selected {
+            if !selected_app.allowed {
+                outcomes.push(record_forbidden(
+                    selected_app.app,
+                    client_ip,
+                    &mut state,
+                    config_path,
+                ));
+                continue;
+            }
+
+            let started = Instant::now();
+            let outcome = update_app(
+                selected_app.app,
+                &updater_settings,
+                &log_dir,
+                runner,
+                services,
+                UpdateOptions {
+                    check_only: options.check_only,
+                },
+            );
+            let duration_ms = started.elapsed().as_millis() as u64;
+            outcomes.push(record_app_outcome(
+                selected_app.app,
+                outcome,
+                duration_ms,
+                &mut state,
+                config_path,
+                &updater_settings,
+                runner,
+                client_ip,
+            ));
+        }
     }
 
     save_state(config_path, &state)?;
@@ -241,6 +283,153 @@ fn record_history(
     if let Err(error) = append_history(config_path, &entry) {
         eprintln!("Gagal menulis updater history untuk app '{app_id}': {error}");
     }
+}
+
+fn record_forbidden(
+    app: &AppConfig,
+    client_ip: Option<IpAddr>,
+    state: &mut UpdaterState,
+    config_path: &Path,
+) -> RunOutcome {
+    let message = match client_ip {
+        Some(ip) => format!("IP {ip} tidak diizinkan untuk app '{}'.", app.id),
+        None => format!("Trigger lokal tidak diizinkan untuk app '{}'.", app.id),
+    };
+    mark(state, &app.id, "forbidden", Some(&message), 0);
+    record_history(
+        config_path,
+        &app.id,
+        "forbidden",
+        &message,
+        "",
+        0,
+        client_ip,
+    );
+    RunOutcome {
+        app_id: app.id.clone(),
+        status: "forbidden".to_string(),
+        message,
+        forbidden: true,
+    }
+}
+
+/// Tulis state/history untuk satu app. Selalu dipanggil dari thread utama,
+/// termasuk untuk hasil worker check paralel, agar file state dan history tidak
+/// ditulis bersamaan.
+#[allow(clippy::too_many_arguments)]
+fn record_app_outcome(
+    app: &AppConfig,
+    outcome: UpdateOutcome,
+    duration_ms: u64,
+    state: &mut UpdaterState,
+    config_path: &Path,
+    settings: &UpdaterSettings,
+    runner: &dyn Runner,
+    client_ip: Option<IpAddr>,
+) -> RunOutcome {
+    let status = outcome.status.as_str().to_string();
+    mark(
+        state,
+        &app.id,
+        &status,
+        if matches!(
+            outcome.status,
+            UpdateStatus::Failed | UpdateStatus::Degraded | UpdateStatus::BlockedMigration
+        ) {
+            Some(&outcome.message)
+        } else {
+            None
+        },
+        duration_ms,
+    );
+
+    let commit = head_commit(&settings.git_path, Path::new(&app.local_path), runner);
+    if let Some(commit) = &commit {
+        if let Some(entry) = state.apps.get_mut(&app.id) {
+            entry.last_commit = commit.clone();
+        }
+    }
+    record_history(
+        config_path,
+        &app.id,
+        &status,
+        &outcome.message,
+        commit.as_deref().unwrap_or(""),
+        duration_ms,
+        client_ip,
+    );
+    RunOutcome {
+        app_id: app.id.clone(),
+        status,
+        message: outcome.message,
+        forbidden: false,
+    }
+}
+
+/// Jalankan check-only untuk app terpilih dengan worker pool terbatas.
+/// Hanya `update_app(check_only)` yang berjalan di worker; state/history
+/// ditulis setelah semua worker selesai.
+fn run_check_apps_parallel(
+    apps: &[(usize, &AppConfig)],
+    settings: &UpdaterSettings,
+    log_dir: &Path,
+    runner: &dyn Runner,
+    services: &dyn ServiceControl,
+    max_concurrent: usize,
+) -> Vec<(usize, UpdateOutcome, u64)> {
+    if apps.is_empty() {
+        return Vec::new();
+    }
+    let workers = max_concurrent.clamp(1, apps.len());
+    let next = AtomicUsize::new(0);
+    let results: Mutex<Vec<(usize, UpdateOutcome, u64)>> =
+        Mutex::new(Vec::with_capacity(apps.len()));
+
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| loop {
+                let position = next.fetch_add(1, Ordering::SeqCst);
+                if position >= apps.len() {
+                    break;
+                }
+                let (index, app) = apps[position];
+                let started = Instant::now();
+                // Satu worker yang panic tidak boleh menggagalkan seluruh run;
+                // app tersebut dicatat failed oleh thread utama.
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    update_app(
+                        app,
+                        settings,
+                        log_dir,
+                        runner,
+                        services,
+                        UpdateOptions { check_only: true },
+                    )
+                }));
+                let duration_ms = started.elapsed().as_millis() as u64;
+                let outcome = match outcome {
+                    Ok(outcome) => outcome,
+                    Err(_) => UpdateOutcome {
+                        project: app.id.clone(),
+                        status: UpdateStatus::Failed,
+                        message: format!(
+                            "Worker check untuk app '{}' berhenti tidak normal; status ditandai failed.",
+                            app.id
+                        ),
+                        log_path: None,
+                    },
+                };
+                results
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .push((index, outcome, duration_ms));
+            });
+        }
+    });
+
+    results
+        .into_inner()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn head_commit(git_path: &str, project: &Path, runner: &dyn Runner) -> Option<String> {
@@ -416,6 +605,124 @@ mod tests {
         fn is_elevated(&self) -> Result<bool, String> {
             Ok(false)
         }
+    }
+
+    /// Runner check-only dengan penghitung konkurensi. `barrier` memaksa
+    /// sejumlah panggilan `status` bertemu sebelum lanjut; `delay` memperlebar
+    /// jendela overlap untuk test serial.
+    struct CheckRunner {
+        barrier: Option<std::sync::Barrier>,
+        delay: Duration,
+        active: AtomicUsize,
+        max_active: AtomicUsize,
+        merged: Mutex<std::collections::BTreeSet<PathBuf>>,
+    }
+
+    impl CheckRunner {
+        fn barrier(parties: usize) -> Self {
+            Self {
+                barrier: Some(std::sync::Barrier::new(parties)),
+                delay: Duration::ZERO,
+                active: AtomicUsize::new(0),
+                max_active: AtomicUsize::new(0),
+                merged: Mutex::new(std::collections::BTreeSet::new()),
+            }
+        }
+
+        fn delayed(delay: Duration) -> Self {
+            Self {
+                barrier: None,
+                delay,
+                active: AtomicUsize::new(0),
+                max_active: AtomicUsize::new(0),
+                merged: Mutex::new(std::collections::BTreeSet::new()),
+            }
+        }
+
+        fn max_active(&self) -> usize {
+            self.max_active.load(Ordering::SeqCst)
+        }
+    }
+
+    impl Runner for CheckRunner {
+        fn run(
+            &self,
+            _program: &Path,
+            args: &[String],
+            cwd: &Path,
+            _timeout: Duration,
+        ) -> Result<Output, RunnerError> {
+            let first = args.first().map(String::as_str).unwrap_or("");
+            if first == "status" {
+                let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+                self.max_active.fetch_max(active, Ordering::SeqCst);
+                if let Some(barrier) = &self.barrier {
+                    barrier.wait();
+                }
+                if !self.delay.is_zero() {
+                    std::thread::sleep(self.delay);
+                }
+                self.active.fetch_sub(1, Ordering::SeqCst);
+                return Ok(Output {
+                    exit_code: 0,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                });
+            }
+
+            if first == "merge" {
+                self.merged.lock().unwrap().insert(cwd.to_path_buf());
+            }
+            let stdout = match first {
+                "rev-parse" if args.get(1).map(String::as_str) == Some("--abbrev-ref") => {
+                    "main\n".to_string()
+                }
+                "rev-parse" if args.get(1).map(String::as_str) == Some("HEAD") => {
+                    if self.merged.lock().unwrap().contains(cwd) {
+                        "def5678\n".to_string()
+                    } else {
+                        "abc1234\n".to_string()
+                    }
+                }
+                "rev-parse" => "ok\n".to_string(),
+                "ls-remote" => "refs/heads/main\n".to_string(),
+                "log" => "abc1234 fix\n".to_string(),
+                "diff" => "index.html\n".to_string(),
+                "merge" => "Fast-forward\n".to_string(),
+                _ => String::new(),
+            };
+            Ok(Output {
+                exit_code: 0,
+                stdout,
+                stderr: String::new(),
+            })
+        }
+    }
+
+    fn check_config(
+        temp: &tempfile::TempDir,
+        apps: Vec<AppConfig>,
+        max_concurrent_updates: usize,
+    ) -> (UpdaterConfig, PathBuf) {
+        std::fs::create_dir_all(temp.path().join("data")).unwrap();
+        std::fs::write(temp.path().join("git.exe"), b"fake").unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let config = UpdaterConfig {
+            settings: crate::registry::UpdaterSettings {
+                git_path: temp.path().join("git.exe").to_string_lossy().to_string(),
+                log_dir: temp.path().join("logs").to_string_lossy().to_string(),
+                max_concurrent_updates,
+                ..crate::registry::UpdaterSettings::default()
+            },
+            trigger: crate::registry::TriggerSettings {
+                allowed_client_ips: Vec::new(),
+                allow_local: true,
+            },
+            apps,
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+        (config, config_path)
     }
 
     #[test]
@@ -971,5 +1278,229 @@ mod tests {
 
         assert_eq!(outcomes.len(), 1);
         assert_ne!(outcomes[0].status, "forbidden");
+    }
+
+    #[test]
+    fn check_all_runs_two_apps_concurrently_when_max_is_two() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let (config, config_path) = check_config(
+            &temp,
+            vec![static_app("first", &first), static_app("second", &second)],
+            2,
+        );
+        let runner = CheckRunner::barrier(2);
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &runner,
+            &NoServices,
+            RunOptions {
+                check_only: true,
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcomes
+                .iter()
+                .map(|outcome| outcome.app_id.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second"]
+        );
+        assert!(outcomes.iter().all(|outcome| outcome.status == "check"));
+        assert_eq!(
+            runner.max_active(),
+            2,
+            "both check workers must be inside git status at the same time"
+        );
+    }
+
+    #[test]
+    fn check_all_stays_serial_when_max_is_one() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let (config, config_path) = check_config(
+            &temp,
+            vec![static_app("first", &first), static_app("second", &second)],
+            1,
+        );
+        let runner = CheckRunner::delayed(Duration::from_millis(25));
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &runner,
+            &NoServices,
+            RunOptions {
+                check_only: true,
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 2);
+        assert!(outcomes.iter().all(|outcome| outcome.status == "check"));
+        assert_eq!(runner.max_active(), 1);
+    }
+
+    #[test]
+    fn normal_update_stays_serial_even_when_max_is_two() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let (config, config_path) = check_config(
+            &temp,
+            vec![static_app("first", &first), static_app("second", &second)],
+            2,
+        );
+        let runner = CheckRunner::delayed(Duration::from_millis(25));
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &runner,
+            &NoServices,
+            RunOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(outcomes.len(), 2);
+        assert!(outcomes.iter().all(|outcome| outcome.status == "updated"));
+        assert_eq!(
+            runner.max_active(),
+            1,
+            "normal updates must not use the check-only worker pool"
+        );
+    }
+
+    #[test]
+    fn parallel_check_records_state_and_history_in_config_order() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        let third = temp.path().join("third");
+        for project in [&first, &second, &third] {
+            std::fs::create_dir_all(project).unwrap();
+        }
+        let mut forbidden = static_app("first", &first);
+        forbidden.allowed_client_ips = vec!["10.0.0.9".into()];
+        let (config, config_path) = check_config(
+            &temp,
+            vec![
+                forbidden,
+                static_app("second", &second),
+                static_app("third", &third),
+            ],
+            2,
+        );
+        let runner = CheckRunner::delayed(Duration::from_millis(10));
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &runner,
+            &NoServices,
+            RunOptions {
+                check_only: true,
+                client_ip: Some("10.1.2.3".parse().unwrap()),
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcomes
+                .iter()
+                .map(|outcome| (outcome.app_id.as_str(), outcome.status.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("first", "forbidden"),
+                ("second", "check"),
+                ("third", "check")
+            ]
+        );
+
+        let state = load_state(&config_path);
+        assert_eq!(state.apps.len(), 3);
+        assert_eq!(state.apps["first"].status, "forbidden");
+        assert_eq!(state.apps["second"].status, "check");
+        assert_eq!(state.apps["third"].status, "check");
+        assert_eq!(state.apps["second"].last_commit, "abc1234");
+        assert_eq!(state.apps["third"].last_commit, "abc1234");
+
+        let history = load_history(&config_path, None, 10);
+        assert_eq!(history.len(), 3);
+        let file_order: Vec<_> = history
+            .iter()
+            .rev()
+            .map(|entry| (entry.app_id.as_str(), entry.status.as_str()))
+            .collect();
+        assert_eq!(
+            file_order,
+            [
+                ("first", "forbidden"),
+                ("second", "check"),
+                ("third", "check")
+            ]
+        );
+    }
+
+    #[test]
+    fn check_only_with_forbidden_and_allowed_app_records_both() {
+        let temp = tempfile::tempdir().unwrap();
+        let denied_project = temp.path().join("denied");
+        let allowed_project = temp.path().join("allowed");
+        std::fs::create_dir_all(&denied_project).unwrap();
+        std::fs::create_dir_all(&allowed_project).unwrap();
+        let mut denied = static_app("denied", &denied_project);
+        denied.allowed_client_ips = vec!["10.0.0.9".into()];
+        let (config, config_path) = check_config(
+            &temp,
+            vec![denied, static_app("allowed", &allowed_project)],
+            4,
+        );
+
+        let outcomes = run_registry_with(
+            &config,
+            &config_path,
+            &CheckRunner::delayed(Duration::ZERO),
+            &NoServices,
+            RunOptions {
+                check_only: true,
+                client_ip: Some("10.1.2.3".parse().unwrap()),
+                ..RunOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcomes
+                .iter()
+                .map(|outcome| (outcome.app_id.as_str(), outcome.status.as_str()))
+                .collect::<Vec<_>>(),
+            [("denied", "forbidden"), ("allowed", "check")]
+        );
+        assert!(outcomes[0].forbidden);
+        assert!(!outcomes[1].forbidden);
+
+        let history = load_history(&config_path, None, 10);
+        assert_eq!(history.len(), 2);
+        assert!(history.iter().any(|entry| entry.app_id == "denied"
+            && entry.status == "forbidden"
+            && entry.client_ip == "10.1.2.3"));
+        assert!(history
+            .iter()
+            .any(|entry| entry.app_id == "allowed" && entry.status == "check"));
     }
 }

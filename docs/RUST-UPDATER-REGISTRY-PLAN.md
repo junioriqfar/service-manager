@@ -2,8 +2,8 @@
 
 Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** menjadi **registry aplikasi + update yang dipicu dari PC 143**. Fokusnya bukan polling setiap menit, tetapi satu trigger aman dari komputer Anda ke server 160.
 
-- Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle, clone-on-first-run, health check, webhook), **Phase B selesai** (`sm-trigger`, GUI Updater, GUI Remote, wrapper Scheduled Task), **Sprint 3.4a selesai** (maintenance mode + export/load settings), **Sprint 3.4b selesai untuk Git credential UI + firewall read-only**. Sisa backlog: firewall add/remove rule (write), update paralel (`maxConcurrentUpdates`), scheduler opsional, dan GUI client macOS/Linux. Test SSH sudah ada di tab Remote dan tidak diubah.
-- Basis: `sm-updater` + `sm-trigger` + GUI Updater (448 test workspace)
+- Status: **Phase A selesai** (registry, trigger, allowlist, lock, state, toolchain, service lifecycle, clone-on-first-run, health check, webhook), **Phase B selesai** (`sm-trigger`, GUI Updater, GUI Remote, wrapper Scheduled Task), **Sprint 3.4a selesai** (maintenance mode + export/load settings), **Sprint 3.4b selesai untuk Git credential UI + firewall read-only**, **Sprint 3.5 stage 1 selesai** (check-only paralel; update/install/build/service tetap serial). Sisa backlog: firewall add/remove rule (write), parallel update nyata + per-app lock (stage 2), scheduler opsional, dan GUI client macOS/Linux. Test SSH sudah ada di tab Remote dan tidak diubah.
+- Basis: `sm-updater` + `sm-trigger` + GUI Updater (457 test workspace)
 - Prinsip: trigger eksplisit, aman, idempoten, tanpa polling default
 - Config target: `data/projects.json` versi 2 (kompatibel versi 1)
 - **Server tetap Windows**; trigger client direncanakan cross-platform (Windows, macOS, Linux).
@@ -21,7 +21,7 @@ Dokumen ini merancang evolusi `sm-updater` dari **scan folder + update manual** 
 | Custom commands | Selesai | Program + args, `shell` hanya admin |
 | Health check / notify | Selesai | HTTP via curl; webhook best-effort |
 | `cloneOnFirstRun` | Selesai | `git clone --branch ... --single-branch` |
-| `maxConcurrentUpdates` | Belum | Saat ini serial |
+| `maxConcurrentUpdates` | Sebagian (stage 1) | Check-only paralel; update/install/build/service tetap serial |
 | Scheduler/polling | Tidak dipakai | Default `false` |
 | `sm-trigger` cross-platform | Selesai | Windows/macOS/Linux, shell ke `ssh` |
 | GUI tab Updater | Selesai | Registry CRUD, test, run/check, log, History (50 terbaru), Preview Plan (dry-run) |
@@ -201,7 +201,7 @@ Versi 1 tetap dibaca. `scanRoots`/`projects` lama dapat dimigrasikan menjadi `ap
 | `trigger.allowLocal` | `true` | Izinkan trigger langsung di server tanpa SSH |
 | `scheduler.enabled` | `false` | Polling hanya jika diaktifkan |
 | `scheduler.checkIntervalMinutes` | `5` | Hanya dipakai jika scheduler aktif |
-| `maxConcurrentUpdates` | `1` | Batas update paralel (jika banyak app) |
+| `maxConcurrentUpdates` | `1` | Batas app check-only paralel (stage 1); run/update nyata tetap serial |
 
 Format IP yang didukung:
 

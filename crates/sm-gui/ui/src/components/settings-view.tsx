@@ -2758,7 +2758,7 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                 Updater defaults
               </CardTitle>
               <CardDescription>
-                Log location, concurrency, command timeouts, and log retention.
+                Log location, Check All concurrency, command timeouts, and log retention.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 pt-0">
@@ -2792,7 +2792,7 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs" htmlFor="settings-max-concurrent">
-                    Max concurrent updates
+                    Max concurrent checks (stage 1)
                   </Label>
                   <Input
                     id="settings-max-concurrent"
@@ -2806,8 +2806,12 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                       })
                     }
                     className="h-8"
-                    title="Number of apps updated at the same time (1–32)."
+                    title="Stage 1: only Check All runs in parallel (1–32). Run/Update All and trigger runs remain serial to protect builds, installs, and services."
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Stage 1: applies to <span className="font-medium">Check All</span> only.
+                    Run/Update All and trigger runs stay serial.
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs" htmlFor="settings-retention">

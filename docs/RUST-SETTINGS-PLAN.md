@@ -1,6 +1,6 @@
 # Rencana Settings, Tool Paths, dan Privileged Execution
 
-Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai; Dry-run Plan Sprint 3.2 selesai; History/retention Sprint 3.3 selesai; Maintenance mode + export/load settings Sprint 3.4a selesai; Git credential UI + firewall read-only Sprint 3.4b selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only + plan preview read-only + history/audit + maintenance/export + credential/firewall read-only).
+Status: **Phase 1 selesai; Sprint 2.1–2.4 Phase 2 selesai; Doctor Sprint 3.1 selesai; Dry-run Plan Sprint 3.2 selesai; History/retention Sprint 3.3 selesai; Maintenance mode + export/load settings Sprint 3.4a selesai; Git credential UI + firewall read-only Sprint 3.4b selesai; Check All concurrency Sprint 3.5 stage 1 selesai** (fondasi trigger + webServerService + effective runtime + Apache explicit propagation + DocumentRoot suggestions + `${PHP}`/scan path PHP hardcoded + Doctor read-only + plan preview read-only + history/audit + maintenance/export + credential/firewall read-only + check-only parallel).
 
 Dokumen ini menjawab revisi pengguna:
 
@@ -33,6 +33,7 @@ Dokumen ini menjawab revisi pengguna:
 | Maintenance mode + export/load settings | Selesai (Sprint 3.4a) |
 | Git credential UI (store/test/clear) | Selesai (Sprint 3.4b) |
 | Firewall SSH read-only | Selesai (Sprint 3.4b); add/remove rule ditunda |
+| Check All concurrency (`maxConcurrentUpdates`) | Selesai (Sprint 3.5 stage 1: check-only; Run/Update tetap serial) |
 | Backup/restore penuh (bukan hanya settings) | Belum (di luar sprint) |
 | Windows Service mode | Tidak diperlukan (no-login tidak dibutuhkan) |
 

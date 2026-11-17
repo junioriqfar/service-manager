@@ -93,6 +93,9 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
   **does not merge, build, install, or change services**. Loading state terlihat
   saat fetch/inspeksi berjalan; error ditampilkan di dialog.
 - **Check All/Update All** berjalan di `spawn_blocking`, jadi UI tidak freeze.
+- **Check All** memakai `maxConcurrentUpdates` (stage 1: hanya check-only yang
+  paralel, worker pool dibatasi jumlah app allowed). **Update All**, Run, dan
+  trigger update tetap serial; tidak ada stop/start service saat check.
 - Dialog hasil menampilkan status per app; log terbaru tampil di panel bawah.
 - **History** (context menu, setelah Log) memanggil `load_updater_history` dan
   menampilkan 50 entry terbaru per app: timestamp, badge status, pesan, commit
@@ -115,7 +118,8 @@ Tab **Remote** adalah GUI client untuk memicu `sm-trigger` lewat SSH dari mesin 
 - **Preview** menampilkan perintah `ssh` yang akan dijalankan.
 - **Test SSH** menjalankan `echo sm-trigger-ok` dengan `BatchMode=yes`/`ConnectTimeout=10`
   untuk mode key, atau `SSH_ASKPASS` + `NumberOfPasswordPrompts=1` untuk mode password.
-- **Check All / Update All** memicu wrapper/task di server.
+- **Check All / Update All** memicu wrapper/task di server. Check mengikuti
+  `maxConcurrentUpdates` di server (stage 1); Update All tetap serial.
 - **Check App / Run App** untuk satu app.
 - Output stdout/stderr di-stream lewat event Tauri `remote-trigger-output`.
 - Konfigurasi disimpan di `data/trigger-client.json` (tidak di-commit). Password hanya
@@ -139,8 +143,10 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
   `bun --version`, `go version`, `httpd -v`). NSSM hanya diverifikasi keberadaan
   filenya karena `nssm version` membuka GUI dan tidak pernah selesai. File `.bat`/`.cmd`
   dijalankan melalui `cmd.exe /c` oleh `SystemRunner`.
-- **Updater defaults**: log directory, max concurrent updates, timeout
-  preflight/fetch/tool/clone, dan log retention days. Tombol **Clean Logs Now** di
+- **Updater defaults**: log directory, max concurrent checks, timeout
+  preflight/fetch/tool/clone, dan log retention days. Help text dan tooltip
+  **Max concurrent checks (stage 1)** menjelaskan stage 1: nilai 1–32 hanya berlaku untuk
+  **Check All**; Run/Update All dan trigger tetap serial. Tombol **Clean Logs Now** di
   samping retention days membuka konfirmasi
   "Delete logs older than N days? Active/recent logs are skipped." lalu memanggil
   `prune_logs_now`. Setelah selesai, toast dan teks inline menampilkan jumlah file,
@@ -377,7 +383,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 448 test):
+Test GUI mencakup (total workspace 457 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

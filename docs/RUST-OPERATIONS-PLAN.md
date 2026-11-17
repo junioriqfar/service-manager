@@ -1,6 +1,6 @@
 # Rencana Fase 3 — Operasional, Doctor, Plan, History
 
-Status: **Sprint 3.1–3.4b selesai untuk scope 3.4b (Git credential UI + firewall read-only); Sprint 3.5 belum**
+Status: **Sprint 3.1–3.4b selesai untuk scope 3.4b (Git credential UI + firewall read-only); Sprint 3.5 stage 1 (check-only paralel) selesai, stage 2 belum**
 
 Lanjutan dari [RUST-SETTINGS-PLAN.md](RUST-SETTINGS-PLAN.md). Fase 3 berfokus pada
 observability dan keselamatan operasi, bukan fitur update inti.
@@ -409,7 +409,8 @@ Catatan implementasi Sprint 3.4b:
   redaksi error sink, reject validation, redaksi `Debug`), 10 GUI credentials (parsing host, grouping,
   missing config, git path, mock sink, app/project/token rejection, test remote
   missing/unsupported, clear validation), 4 firewall parser/serialization, dan 1 UI
-  source test. Total crate `sm-updater` **164 test**, workspace **448 test**.
+  source test. Total crate `sm-updater` **164 test**, workspace **448 test** saat
+  Sprint 3.4b.
 - Batasan: firewall **write/add/remove tidak tersedia** dan tidak boleh ditambahkan
   lewat CLI/GUI tanpa desain admin baru; snapshot firewall bisa gagal pada mesin tanpa
   cmdlet/izin baca dan tidak melakukan retry. Daftar host hanya dari skema yang
@@ -418,15 +419,57 @@ Catatan implementasi Sprint 3.4b:
   dapat diakses; clear bergantung pada credential helper yang aktif dan tidak
   memverifikasi hasilnya. Tidak ada token di `settings.json`, history, log, atau nilai
   balik command; tidak ada perubahan pada eksekusi SSH, **Test SSH** Remote, atau
-  `maxConcurrentUpdates` (parallel updates tetap Sprint 3.5).
+  `maxConcurrentUpdates` (parallel updates nyata tetap stage 2 Sprint 3.5; stage 1
+  check-only selesai tanpa mengubah update).
 
-## Sprint 3.5 — Parallel updates (opsional)
+## Sprint 3.5 — Parallel updates (bertahap)
 
-- `maxConcurrentUpdates` nyata; per-app lock.
+Status: **Stage 1 selesai: check-only paralel. Stage 2 belum.**
+
+Stage 1 (selesai):
+
+- `maxConcurrentUpdates` (validasi 1–32, default 1) sekarang benar-benar dipakai
+  untuk **check-only**: GUI **Check All**, `sm-updater run --all --check`,
+  `sm-updater run --app ID --check`, dan trigger check. Mode legacy
+  `sm-updater check`/menu `update_project` tetap serial. Jalur paralel aktif hanya
+  jika nilainya > 1 dan ada minimal dua app yang lolos filter enabled + app filter
+  + allowlist IP.
+- Daftar app terpilih dibangun sekali. App forbidden dicatat tanpa memanggil
+  `update_app`; app allowed dijalankan lewat `std::thread::scope` dengan worker
+  pool `min(maxConcurrentUpdates, jumlah app allowed)`. Setiap worker memakai
+  indeks `AtomicUsize` dan hasilnya dikumpulkan di `Mutex<Vec<(usize,
+  UpdateOutcome, u64)>>`, lalu diurutkan kembali berdasarkan indeks asli.
+- Worker hanya menjalankan `update_app(..., check_only: true)`. Penulisan
+  `updater-state.json`, `lastCommit`, history JSONL, dan `RunOutcome` dilakukan
+  di thread utama setelah worker selesai, berurutan sesuai config, tepat satu
+  entry per app termasuk forbidden. Jika hasil worker hilang, app tersebut
+  mendapat status `failed` dengan pesan yang jelas.
+- Log check paralel memakai nama unik per app
+  `project-update-<stamp>-<slug>-<id>.log` (run log dan project log memakai
+  suffix sama), sehingga dua app tidak pernah menulis file yang sama. Prefix
+  retention `project-update-` tetap dikenali.
+- Jalur serial dipertahankan untuk run non-check, `maxConcurrentUpdates <= 1`,
+  dan kasus dengan kurang dari dua app allowed. Lock global, maintenance mode,
+  elevation/service preflight, dan validasi app tidak berubah. Check-only tetap
+  tidak stop/start service.
+
+Batasan stage 1 / sisa stage 2:
+
+- **Run/Update All, trigger update, install, build, clone, dan service lifecycle
+  tetap serial** berapa pun nilai `maxConcurrentUpdates`.
+- Belum ada per-app lock, batas restart service bersamaan, progress event per
+  app, atau rollback terisolasi. Parallel update nyata menunggu desain stage 2
+  agar dua app tidak berebut service, lock, dan resource build yang sama.
+- Test baru stage 1: 4 `sm-updater` log dan 5 trigger (barrier concurrency,
+  serial max=1, update non-check tetap serial, urutan state/history, forbidden +
+  allowed check-only).
+
+## Sprint 3.5 stage 2 — Rencana (belum)
+
+- `maxConcurrentUpdates` untuk run/update nyata dengan per-app lock.
 - Batas restart service bersamaan.
 - Progress per app.
 - Rollback terisolasi.
-- Ditunda sampai 3.1–3.3 stabil.
 
 ---
 
@@ -440,7 +483,7 @@ Catatan implementasi Sprint 3.4b:
 - [x] Export/load settings tanpa rahasia.
 - [x] Git credential UI store/test/clear tanpa token di settings/log.
 - [x] Firewall SSH read-only (write/add/remove ditunda).
-- [ ] Parallel updates (Sprint 3.5).
+- [~] Parallel updates (Sprint 3.5 stage 1 check-only selesai; stage 2 update/build/service belum).
 - [x] Audit trigger IP/action.
 - [x] Test/clippy/fmt hijau.
 - [x] Docs diperbarui.

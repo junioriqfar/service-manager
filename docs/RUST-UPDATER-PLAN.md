@@ -4,9 +4,9 @@
 
 Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur yang sudah ada, serta fitur yang direncanakan berikut prioritasnya.
 
-- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan, Sprint 3.3 history/retention, Sprint 3.4a maintenance/export settings, dan Sprint 3.4b Git credential UI/firewall read-only selesai**
+- Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan, Sprint 3.3 history/retention, Sprint 3.4a maintenance/export settings, Sprint 3.4b Git credential UI/firewall read-only, dan Sprint 3.5 stage 1 (check-only paralel) selesai**
 - Lokasi: `crates/sm-updater`
-- Test: **164 unit test** untuk crate ini; total workspace **448 test**. Config default ada di `data/projects.json`.
+- Test: **173 unit test** untuk crate ini; total workspace **457 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
@@ -196,11 +196,11 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 
 ### 3.12 Pengujian
 
-- **164 unit test** crate `sm-updater`:
+- **173 unit test** crate `sm-updater`:
   - parsing CLI, registry, dan credential (termasuk reject input/validasi tanpa token),
   - scan project/override,
   - runner nyata (exit code/timeout/timeout+env),
-  - log dan redaksi,
+  - log dan redaksi, termasuk nama log unik per app (`new_unique`, suffix run/project sama, sanitasi slug, prefix retention),
   - migrasi v1→v2, allowlist IP/CIDR, lock, state,
   - deteksi toolchain dan command plan (termasuk lockfile ambigu),
   - service lifecycle dan pemulihan saat build gagal,
@@ -209,7 +209,8 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
   - plan dry-run: seluruh status, command per group, service read-only, redaksi webhook, parse CLI, dan smoke test tanpa SCM/network,
   - history: roundtrip append/load, newest-first/limit, filter case-insensitive, baris rusak, file hilang, redaksi/cap, JSONL satu baris, integrasi trigger allowed+forbidden+IP, dan kegagalan tulis yang tidak menggagalkan run,
   - retention: pola file, batas hari, file aktif, folder hilang, log project, merge count, dan error delete yang tidak menghentikan file lain,
-  - maintenance mode: default/normalize/validasi message, update non-check ditolak tanpa state/history, check tetap jalan, dan fallback tanpa settings.json.
+  - maintenance mode: default/normalize/validasi message, update non-check ditolak tanpa state/history, check tetap jalan, dan fallback tanpa settings.json,
+  - konkurensi check-only: barrier dua worker saat max=2, serial saat max=1, update non-check tetap serial, urutan state/history satu entry per app, dan forbidden + allowed check-only.
 - **E2E lokal** dengan repository Git bare:
   - `list` mendeteksi project,
   - `check` melaporkan up-to-date/incoming,
@@ -241,7 +242,7 @@ Prioritas: **P0** = penting untuk operasi aman, **P1** = peningkatan, **P2** = n
 | **Rollback command** | Rollback cepat ke SHA sebelumnya | `sm-updater rollback --project X --sha <sha>` dengan konfirmasi |
 | **Configurable timeouts** | Menyesuaikan project besar/lambat | `timeouts.preflight/fetch/tool` di `projects.json` |
 | **Configurable remote** | Remote selain `origin` | `remote: origin` per project |
-| **Parallel updates** | Mempercepat banyak project | Batas concurrency, default 1-2 |
+| **Parallel updates** | Mempercepat banyak project | Check-only paralel (stage 1 selesai); update nyata stage 2 |
 | **Notifications** | Info hasil ke admin | Webhook opsional (Selesai) |
 | **Health check** | Pastikan aplikasi hidup setelah deploy | HTTP check via curl (Selesai) |
 | **Per-project env** | Build/deploy variabel khusus | `env` map per project |
@@ -290,7 +291,7 @@ Fitur berikut sengaja **tidak** dilakukan otomatis:
 
 1. Rollback command (belum).
 2. Configurable timeouts/remote (belum).
-3. Parallel update dengan batas concurrency (belum; saat ini serial).
+3. Parallel check-only dengan batas concurrency (stage 1 selesai); parallel update nyata + per-app lock (stage 2 belum).
 4. Notifications (selesai).
 5. Health check (selesai).
 6. Pre-update hook dan per-project env (pre-update selesai; env belum).

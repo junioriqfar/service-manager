@@ -155,7 +155,8 @@ Tab **Updater** di `sm-gui` menyediakan:
 - daftar app + status terakhir;
 - Add/Edit/Remove/Test app;
 - Preview Plan (dry-run, read-only) dengan dialog status/commit/file/command/service;
-- Check All / Update All dan run per app;
+- Check All / Update All dan run per app. **Check All** mengikuti
+  `maxConcurrentUpdates` (stage 1: check-only paralel); **Update All** tetap serial.
 - form toolchain, service lifecycle, allowlist per app, clone-on-first-run,
   health check, dan webhook;
 - saran `webServerService` dari DocumentRoot Apache di tab Settings, dengan
@@ -487,6 +488,27 @@ Aturan:
 
 Migration tidak pernah dijalankan otomatis.
 
+## Konkurensi Check-Only (Sprint 3.5 Stage 1)
+
+`maxConcurrentUpdates` di `settings.json.updater` (validasi 1–32, default 1)
+hanya berlaku untuk **check-only** pada stage 1:
+
+- Jalur paralel dipakai oleh GUI **Check All**, `sm-updater run --all --check`,
+  `sm-updater run --app ID --check`, dan trigger check. Tidak ada command baru.
+  Mode legacy `sm-updater check`/menu `update_project` tetap serial.
+- Syarat: nilai > 1 dan minimal dua app lolos filter enabled + filter `--app` +
+  allowlist IP. Worker pool dibatasi `min(maxConcurrentUpdates, jumlah app allowed)`.
+- App forbidden tetap dicatat sebagai `forbidden` tanpa memanggil `update_app`.
+- Worker hanya menjalankan `update_app(check_only=true)`. State, `lastCommit`,
+  history, dan urutan `RunOutcome` ditulis di thread utama setelah worker selesai,
+  berurutan sesuai config dan tepat satu entry per app. Jika hasil worker hilang,
+  app mendapat status `failed`.
+- Check-only tidak pernah stop/start service, install, build, clone, atau merge.
+- **Run/Update All, trigger update, install, build, clone, dan service lifecycle
+  tetap serial** berapa pun nilai `maxConcurrentUpdates`. Per-app lock, batas
+  restart service bersamaan, progress per app, dan rollback terisolasi menunggu
+  stage 2.
+
 ## Allowlist IP
 
 Dua lapis:
@@ -547,8 +569,14 @@ rotasi/cap ukuran file.
 
 ## Log
 
-- `logDir/project-update-YYYYMMDD-HHmmss.log`
-- `<project>/storage/logs/project-update-YYYYMMDD-HHmmss.log` (hanya jika project sudah punya folder `storage`, mis. Laravel)
+- `logDir/project-update-<stamp>-<slug>-<id>.log` untuk app registry
+  (`update_app`); mode legacy `update_project` tetap memakai
+  `project-update-YYYYMMDD-HHmmss.log`.
+- `<project>/storage/logs/project-update-<stamp>-<slug>-<id>.log` (hanya jika project
+  sudah punya folder `storage`, mis. Laravel), dengan suffix yang sama seperti run log.
+- Suffix `<slug>` adalah nama folder project yang disanitasi dan `<id>` adalah nomor
+  urut atomik, sehingga dua app yang dicek/diupdate pada detik yang sama tidak
+  berbagi file. Prefix retention `project-update-` tetap sama.
 
 `sm-updater logs` menampilkan log global terbaru; `sm-updater logs ID --tail N`
 menampilkan tail log project. Log berisi perintah, output (maksimal 60 baris per perintah),
@@ -624,7 +652,9 @@ message, penolakan update non-check tanpa state/history, dan check yang tetap be
 Export/load settings diuji untuk roundtrip, legacy fallback, penolakan JSON/settings/
 control character/non-`.json`, dan tidak ada write ke config aktif. Credential reject,
 validasi host/username/token, dan redaksi token diuji tanpa menyentuh Credential Manager
-asli. Total workspace: 448 test.
+asli. Check-only concurrency diuji dengan barrier dua worker (max=2), serial
+saat max=1, update non-check tetap serial, serta urutan state/history. Total
+workspace: 457 test.
 
 ## Task Scheduler / Elevation
 

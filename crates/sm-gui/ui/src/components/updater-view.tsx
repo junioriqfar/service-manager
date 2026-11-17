@@ -583,7 +583,7 @@ export function UpdaterView() {
             size="sm"
             onClick={() => void run(null, true)}
             disabled={running !== null || apps.length === 0}
-            title="Check all registered apps without changing files"
+            title="Check all registered apps without changing files. Uses Max concurrent updates; Update All remains serial."
           >
             {running === "check" ? <Loader2 className="animate-spin" /> : <Search />}
             Check All

@@ -22,7 +22,7 @@ pub fn update_app(
 ) -> UpdateOutcome {
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
     let project_path = Path::new(&app.local_path);
-    let logger = UpdateLogger::new(log_dir, project_path, &stamp);
+    let logger = UpdateLogger::new_unique(log_dir, project_path, &stamp);
     logger.log(&format!(
         "===== {}: {} =====",
         app.id,
