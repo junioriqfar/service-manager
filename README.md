@@ -200,6 +200,7 @@ Saat ini **350 unit test** workspace lulus. Frontend harus dibangun terlebih dah
 | [docs/RUST-UPDATER-REGISTRY-PLAN.md](docs/RUST-UPDATER-REGISTRY-PLAN.md) | Registry, toolchain, service lifecycle, SSH trigger, IP whitelist |
 | [docs/RUST-TRIGGER.md](docs/RUST-TRIGGER.md) | Client SSH cross-platform dan wrapper Scheduled Task |
 | [docs/RUST-SETTINGS-PLAN.md](docs/RUST-SETTINGS-PLAN.md) | Rencana settings.json, tool paths, propagasi PHP/Apache, privileged task |
+| [docs/RUST-OPERATIONS-PLAN.md](docs/RUST-OPERATIONS-PLAN.md) | Rencana Fase 3: Doctor, dry-run plan, history/retention/audit |
 | [docs/RUST-SECURITY.md](docs/RUST-SECURITY.md) | DPAPI, kredensial, redaksi log, SSH trigger, allowlist IP |
 | [docs/RUST-RELEASE.md](docs/RUST-RELEASE.md) | Build, installer, CI, deployment |
 | [docs/RUST-REWRITE-PLAN.md](docs/RUST-REWRITE-PLAN.md) | Catatan historis migrasi ke Rust |
