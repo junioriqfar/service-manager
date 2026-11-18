@@ -282,6 +282,7 @@ mod ui_tests {
             "buildCommand",
             "installCommand",
             "allowedClientIPs",
+            "dirtyIgnore",
             "webServerService",
             "cloneOnFirstRun",
             "healthCheck",
@@ -292,17 +293,27 @@ mod ui_tests {
                 "missing updater form field: {field}"
             );
         }
-        for label in ["Web server (Apache)", "Not linked", "PHP"] {
+        for label in [
+            "Web server (Apache)",
+            "Not linked",
+            "PHP",
+            "Working tree",
+            "Dirty ignore patterns",
+        ] {
             assert!(
                 UPDATER_FORM.contains(label) || UPDATER_VIEW.contains(label),
                 "missing updater runtime label: {label}"
             );
         }
+        assert!(UPDATER_FORM.contains("public/build/**"));
+        assert!(UPDATER_FORM.contains("resources/js/actions/**"));
+        assert!(UPDATER_FORM.contains("resources/js/routes/**"));
         assert!(UPDATER_FORM.contains("list_services"));
         assert!(UPDATER_FORM.contains("serviceType === \"apache\""));
         assert!(UPDATER_FORM.contains("pick_directory"));
         assert!(UPDATER_FORM.contains("Browse…"));
         assert!(UPDATER_FORM.contains("app.allowedClientIPs ?? []"));
+        assert!(UPDATER_FORM.contains("app.dirtyIgnore ?? []"));
         assert!(UPDATER_FORM.contains("app.services?.stopBeforePull ?? []"));
         assert!(UPDATER_VIEW.contains("lucide-react"));
         assert!(UPDATER_FORM.contains("lucide-react"));

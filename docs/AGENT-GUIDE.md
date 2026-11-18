@@ -81,7 +81,7 @@ PowerShell lama sudah dihapus dari repo.
 | Auto migration | **Tidak pernah** | `migrationPolicy` selalu `block`. |
 | Auto polling/scheduler | **Tidak ada** | Trigger manual atau SSH. |
 
-Test workspace saat ini: **462 test**. Release portable: **`dist\ServiceManager-RS-0.1.0.zip`**.
+Test workspace saat ini: **485 test**. Release portable: **`dist\ServiceManager-RS-0.1.0.zip`**.
 
 ---
 
@@ -671,8 +671,10 @@ sm-updater plan --project kasirin   # alias --app
 
 1. Validasi branch/local path/Git.
 2. Folder belum ada -> `clone-required` (plan tidak clone).
-3. `git status --porcelain` -> `dirty`; maksimal 30 entri pertama di warnings; fetch tidak
-   dijalankan.
+3. `git status --porcelain` difilter dengan `apps[].dirtyIgnore`; jika masih ada entri
+   tidak cocok -> `dirty` dan maksimal 30 entri blocking di warnings (fetch tidak
+   dijalankan). Entri ignored tetap muncul sebagai warning `dirtyIgnore: ...`; bila
+   tidak ada blocking, plan lanjut.
 4. Branch aktif harus sama dengan `branch`; mismatch -> `error`.
 5. Baca HEAD; `git ls-remote --heads origin`; `git fetch --prune origin`; verifikasi
    `origin/<branch>`; hitung `rev-list --count`; baca log/diff.
@@ -730,7 +732,7 @@ sm-updater logs kasirin --tail 100
 | `updated` | Merge/install/build/service berhasil; health check (jika ada) sukses. |
 | `up-to-date` | Tidak ada commit baru. |
 | `check` | Dry-run mendeteksi commit baru; tidak merge/install. Juga untuk project belum ada saat check. |
-| `dirty` | Working tree kotor; update dilewati. |
+| `dirty` | Working tree kotor; update dilewati. Entri artifact yang cocok `dirtyIgnore` tidak dihitung; lihat pesan jumlah blocking/ignored. |
 | `blocked-migration` | Ada file `database/migrations/**`; merge diblokir; migration manual. |
 | `degraded` | Kode ter-update tetapi service gagal dipulihkan atau health check gagal. |
 | `failed` | Error sebelum/selama update; pesan error di state/history/log. |
@@ -748,7 +750,8 @@ sm-updater logs kasirin --tail 100
 ### 9.5 Alur update nyata
 
 1. Validasi app/branch/service (termasuk hak akses); clone jika `cloneOnFirstRun`.
-2. Cek working tree bersih; dirty -> `dirty`.
+2. Cek working tree (`git status --porcelain`) dengan filter `dirtyIgnore`; bila ada
+   entri tidak cocok -> `dirty`.
 3. Validasi branch aktif.
 4. Preflight `git ls-remote --heads origin`.
 5. `git fetch --prune origin`.
@@ -763,6 +766,31 @@ sm-updater logs kasirin --tail 100
 14. Tulis log + rollback hint `git reset --hard <sha-sebelum>`.
 
 Migration tidak pernah dijalankan otomatis.
+
+### 9.5.1 Dirty ignore untuk artifact build (Wayfinder/Vite/Bun)
+
+`apps[].dirtyIgnore` hanya untuk output generated yang berubah setelah install/build,
+misalnya `public/build/**` (Vite), `resources/js/actions/**` dan
+`resources/js/routes/**` (Laravel Wayfinder), `dist/**`, atau `.output/**`.
+
+Workflow aman:
+
+1. Jalankan `plan`/`run --check`; baca warning `dirtyIgnore: ...` dan daftar entri dirty.
+2. Pastikan setiap entri yang akan diabaikan benar-benar artifact generated, bukan
+   source/config/migration. Cek path dan isi file; jangan menebak.
+3. Tambahkan pola paling sempit yang menutup path tersebut (contoh
+   `public/build/**`), lewat GUI field **Dirty ignore patterns**, `app add/edit
+   --dirty-ignore`, atau JSON `dirtyIgnore`.
+4. Jalankan `plan` lagi. Status harus `ready`/`up-to-date` dan tidak boleh ada entri
+   blocking tersisa.
+5. Baru jalankan update nyata setelah review; update tetap diblokir bila satu entri
+   tidak cocok (all-or-nothing).
+
+Jangan memakai `dirtyIgnore` untuk menghilangkan perubahan source, `database/migrations/**`,
+`.env`, config, atau file di luar repo. Updater tidak pernah mengedit `.gitignore` dan
+tidak punya daftar ignore hardcoded. Pola invalid (absolut, drive letter, `..`, kosong,
+kontrol, >32 pola/>200 karakter) ditolak saat validasi/save app; pola invalid tidak
+pernah dipakai untuk mengabaikan entri.
 
 ### 9.6 Parallel check-only vs serial update
 
@@ -1886,7 +1914,7 @@ daftar service + status SCM. Exit 1 jika config service punya warning; bukan pen
 | NSSM “not found” padahal path Settings diisi | Service manager memakai `ConfigPaths::nssm_path()`, bukan `settings.tools.nssm.path` | Letakkan `nssm.exe` di `C:\tools\nssm\nssm.exe` atau `<home>\..\nssm\nssm.exe`; Settings NSSM hanya test. |
 | Doctor warning “Task action is not hidden” | Task terpasang sebelum perubahan hidden, `windowHidden=false` | Repair Task; verifikasi `Hidden` + `-WindowStyle Hidden`. |
 | Pending Apache hilang / apply no-op | Save Settings tidak menghasilkan pending baru (version-only/no affected/empty new path) lalu pending lama dihapus; atau service sudah menunjuk nilai baru | Apply pending sebelum save ulang; ubah path/root/config yang benar; cek affected services; jangan menghapus pending manual. |
-| Status `dirty` | Working tree kotor | Commit/stash/backup perubahan yang disengaja; jangan reset paksa. Update akan dilewati. |
+| Status `dirty` | Working tree kotor, atau entri dirty tidak cocok dengan `dirtyIgnore` | Commit/stash/backup perubahan yang disengaja; jangan reset paksa. Jika entri adalah artifact build yang sah, tambahkan pola repo-relative yang sempit (mis. `public/build/**`) hanya untuk path generated; jangan memakai `*`/`**` untuk menyembunyikan source. |
 | Status `blocked-migration` | Ada file `database/migrations/**` | Jalankan migration manual dengan persetujuan + backup, atau tangani migration; jangan menambahkan auto-migrate. |
 | Auth/credential gagal | Token tidak ada/expired, host/username salah, Git path salah, DPAPI user berbeda | Store ulang PAT dengan scope minimum; Test Remote; jalankan sebagai user yang sama; cek Git path efektif. |
 | Maintenance aktif | `maintenance.enabled=true` | Update non-check/trigger ditolak; check/plan tetap. Disable hanya dari Settings dengan persetujuan. |
@@ -1960,7 +1988,7 @@ cargo fmt --all -- --check
 git diff --check
 ```
 
-Baseline saat dokumen ini dibuat: **462 test** (16 + 38 + 2 + 166 + 8 + 173 + 59). Test GUI
+Baseline saat dokumen ini dibuat: **485 test** (16 + 38 + 2 + 167 + 8 + 195 + 59). Test GUI
 memerlukan `ui/dist`; jalankan frontend build dulu.
 
 Smoke CLI:
@@ -2002,7 +2030,7 @@ Isi portable (setelah perubahan dokumen ini):
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --workspace` (462 atau angka terbaru)
+- [ ] `cargo test --workspace` (485 atau angka terbaru)
 - [ ] `git diff --check`
 - [ ] `Build-Release.ps1` sukses; ZIP berisi `AGENTS.md` + `docs/AGENT-GUIDE.md`
 - [ ] `sm-gui.exe` release terbuka, Services/Updater/Settings/Remote berfungsi
@@ -2020,7 +2048,7 @@ Isi portable (setelah perubahan dokumen ini):
 Sebelum menyerahkan pekerjaan:
 
 1. **Ringkas perubahan** dan file yang disentuh; bedakan dokumentasi vs kode vs config.
-2. **Status test**: `cargo test --workspace` (462/angka terbaru), clippy, fmt, `git diff --check`.
+2. **Status test**: `cargo test --workspace` (485/angka terbaru), clippy, fmt, `git diff --check`.
 3. **Runtime aman**: tidak ada perubahan `data/*.json`, history, log, backup, atau `dist/`.
 4. **Secret**: grep diff untuk token/password (`git diff | Select-String ...`); tidak ada
    plaintext.

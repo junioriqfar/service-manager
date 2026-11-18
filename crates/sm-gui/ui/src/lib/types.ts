@@ -131,6 +131,7 @@ export interface UpdaterApp {
   queueRestart: boolean;
   cloneOnFirstRun: boolean;
   allowedClientIPs: string[];
+  dirtyIgnore: string[];
   webServerService: string;
   phpVersion: string;
   apacheVersion: string;
@@ -162,6 +163,7 @@ export interface UpdaterAppInput {
   queueRestart: boolean;
   cloneOnFirstRun: boolean;
   allowedClientIPs: string[];
+  dirtyIgnore: string[];
   webServerService: string;
   services: UpdaterServicePlan;
   healthCheck: UpdaterHealthCheck;

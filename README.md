@@ -22,6 +22,7 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - **Check All** paralel mengikuti `maxConcurrentUpdates` (stage 1: check-only; Update All, Run, dan trigger tetap serial). Log check memakai nama unik per app agar tidak bertabrakan.
 - **Preview Plan** dry-run di tab Updater: status, branch/HEAD, incoming commit, changed/migration files, command install/build/artisan, service stop/restart/start + state, health/webhook (redacted), dan warnings. Plan hanya fetch remote refs; tidak merge, build, install, atau mengubah service.
 - **History** append-only di `data/updater-history.jsonl`: satu entry per app per run (termasuk forbidden/check-only/failed) dengan status, pesan redacted, commit, durasi, dan IP trigger. Dialog History menampilkan 50 entry terbaru per app.
+- **Dirty ignore per app** (`dirtyIgnore`): pola repo-relative untuk artifact hasil build (Vite `public/build/**`, Wayfinder `resources/js/actions/**`, Bun `dist/**`) agar tidak memblokir update. Hanya entri yang cocok pola eksplisit yang diabaikan; satu entri lain tetap membuat status `dirty`, dan `.gitignore` tidak pernah diubah.
 - **Clean Logs Now** manual di Settings: konfirmasi, lalu hapus log updater/project lebih lama dari retention days (file 5 menit terakhir selalu dilewati) dan tampilkan jumlah file/byte/error. History dan audit Apache tidak dipangkas.
 - GUI tab **Settings**: path toolchain dengan Browse/Auto-detect/Test, default updater, trigger allowlist + Migrate Trigger, status dan Install/Repair/Remove/Test Scheduled Task, serta diagnostik.
 - **Git Credentials** di Settings: host dari `repoUrl` app, username/token, dan tombol **Store Token** / **Test Remote** / **Clear**. Token disimpan Git Credential Manager (DPAPI), tidak pernah masuk `settings.json`, log, history, atau nilai balik command.
@@ -156,6 +157,7 @@ sm-updater app add --id kasirin --name Kasirin `
 sm-updater app list
 sm-updater app show kasirin
 sm-updater app edit kasirin --branch develop
+sm-updater app edit kasirin --dirty-ignore "public/build/**" --dirty-ignore "resources/js/actions/**"
 sm-updater app test kasirin
 
 # Trigger manual (bukan polling)
@@ -198,7 +200,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **462 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **485 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Untuk Agent
 

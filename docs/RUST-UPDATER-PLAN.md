@@ -6,7 +6,7 @@ Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur y
 
 - Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan, Sprint 3.3 history/retention, Sprint 3.4a maintenance/export settings, Sprint 3.4b Git credential UI/firewall read-only, dan Sprint 3.5 stage 1 (check-only paralel) selesai**
 - Lokasi: `crates/sm-updater`
-- Test: **173 unit test** untuk crate ini; total workspace **462 test**. Config default ada di `data/projects.json`.
+- Test: **195 unit test** untuk crate ini; total workspace **485 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---
@@ -196,7 +196,7 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
 
 ### 3.12 Pengujian
 
-- **173 unit test** crate `sm-updater`:
+- **195 unit test** crate `sm-updater`:
   - parsing CLI, registry, dan credential (termasuk reject input/validasi tanpa token),
   - scan project/override,
   - runner nyata (exit code/timeout/timeout+env),
@@ -207,6 +207,7 @@ Catatan: `.bat`/`.cmd` (composer/npm) dijalankan via `cmd.exe /c` dengan path ek
   - clone-on-first-run, health check, dan webhook notifikasi,
   - matriks update: up-to-date, check, dirty, branch mismatch, auth failure, migration block, composer failure, post-update command, langkah kondisional,
   - plan dry-run: seluruh status, command per group, service read-only, redaksi webhook, parse CLI, dan smoke test tanpa SCM/network,
+  - dirty ignore: tanpa pola semua blocking, all-ignored, mixed, literal/directory prefix, `**`, `*`/`?`, rename dua sisi, spasi/quoted, backslash/case, validasi pola invalid, dan integrasi plan/run,
   - history: roundtrip append/load, newest-first/limit, filter case-insensitive, baris rusak, file hilang, redaksi/cap, JSONL satu baris, integrasi trigger allowed+forbidden+IP, dan kegagalan tulis yang tidak menggagalkan run,
   - retention: pola file, batas hari, file aktif, folder hilang, log project, merge count, dan error delete yang tidak menghentikan file lain,
   - maintenance mode: default/normalize/validasi message, update non-check ditolak tanpa state/history, check tetap jalan, dan fallback tanpa settings.json,

@@ -203,6 +203,10 @@ pub struct AppConfig {
     pub credential_profile: String,
     #[serde(default, rename = "allowedClientIPs", alias = "allowedClientIps")]
     pub allowed_client_ips: Vec<String>,
+    /// Pola repo-relative untuk artifact build yang boleh diabaikan saat
+    /// memeriksa working tree. Entri lain tetap memblokir update.
+    #[serde(default)]
+    pub dirty_ignore: Vec<String>,
     /// Nama service Apache di `services.json` yang menyajikan app ini.
     /// Kosong berarti tidak terhubung eksplisit ke web server.
     #[serde(default)]
@@ -258,6 +262,7 @@ impl Default for AppConfig {
             branch: default_branch(),
             credential_profile: String::new(),
             allowed_client_ips: Vec::new(),
+            dirty_ignore: Vec::new(),
             web_server_service: String::new(),
             clone_on_first_run: false,
             preset: Preset::Auto,
@@ -289,6 +294,7 @@ impl AppConfig {
         self.branch = self.branch.trim().to_string();
         self.credential_profile = self.credential_profile.trim().to_string();
         self.allowed_client_ips = normalize_list(&self.allowed_client_ips);
+        self.dirty_ignore = normalize_list(&self.dirty_ignore);
         self.web_server_service = self.web_server_service.trim().to_string();
         self.install_command = self.install_command.trim().to_string();
         self.build_command = self.build_command.trim().to_string();
@@ -625,6 +631,8 @@ impl UpdaterConfig {
         if app.branch.trim().is_empty() {
             return Err(format!("Branch app '{}' wajib diisi.", app.id));
         }
+        crate::dirty::validate_patterns(&app.dirty_ignore)
+            .map_err(|error| format!("dirtyIgnore app '{}': {error}", app.id))?;
         if self.find(&app.id).is_some() {
             // Caller can use this for add; editing should bypass this check.
         }
@@ -747,7 +755,8 @@ mod tests {
                 "branch": "main",
                 "preset": "laravel",
                 "packageManager": "npm",
-                "webServerService": " Apache2.4 "
+                "webServerService": " Apache2.4 ",
+                "dirtyIgnore": [" public/build/** ", ""]
             }]
         }"#;
         let config: UpdaterConfig = serde_json::from_str(raw).unwrap();
@@ -757,6 +766,10 @@ mod tests {
         assert_eq!(config.apps[0].package_manager, PackageManager::Npm);
         assert_eq!(config.apps[0].web_server_service, " Apache2.4 ");
         assert_eq!(
+            config.apps[0].dirty_ignore,
+            [" public/build/** ".to_string(), String::new()]
+        );
+        assert_eq!(
             config.trigger.allowed_client_ips,
             ["10.255.240.143", "10.255.240.0/24"]
         );
@@ -764,6 +777,7 @@ mod tests {
         let mut config = config;
         config.normalize();
         assert_eq!(config.apps[0].web_server_service, "Apache2.4");
+        assert_eq!(config.apps[0].dirty_ignore, ["public/build/**"]);
     }
 
     #[test]
@@ -838,6 +852,23 @@ mod tests {
         assert_eq!(settings.variables["PROJECT_ROOT"], r"D:\Projects");
         assert_eq!(settings.variables["PHP"], r"C:\custom\php.exe");
         assert_eq!(settings.variables["PHP_HOME"], r"C:\custom");
+    }
+
+    #[test]
+    fn validate_app_rejects_invalid_dirty_ignore_patterns() {
+        let config = UpdaterConfig::default();
+        let app = AppConfig {
+            id: "demo".into(),
+            repo_url: "https://example.com/demo.git".into(),
+            local_path: r"C:\demo".into(),
+            branch: "main".into(),
+            dirty_ignore: vec!["../outside".into()],
+            ..AppConfig::default()
+        };
+
+        let error = config.validate_app(&app).unwrap_err();
+        assert!(error.contains("dirtyIgnore app 'demo'"), "{error}");
+        assert!(error.contains(".."), "{error}");
     }
 
     #[test]

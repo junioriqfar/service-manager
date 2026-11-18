@@ -77,8 +77,14 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
 - Aksi per app: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
 - Form registrasi/edit: repo URL, local path (Browse…), branch, preset, package manager,
   composer/artisan/package-install/build, install/build command, queue restart,
-  web server Apache opsional, allowlist IP per app, service lifecycle, clone-on-first-run,
-  health check, dan webhook.
+  **Dirty ignore patterns**, web server Apache opsional, allowlist IP per app, service
+  lifecycle, clone-on-first-run, health check, dan webhook.
+- Section **Working tree** berisi field **Dirty ignore patterns** (dipisah koma atau
+  newline). Nilai dikirim sebagai `dirtyIgnore` dan hanya boleh berisi artifact build
+  repo-relative (mis. `public/build/**`, `resources/js/actions/**`,
+  `resources/js/routes/**`). Semua entri dirty harus cocok atau update tetap diblokir;
+  pola invalid ditolak backend dengan pesan error di form. Form tidak mengubah
+  `.gitignore` atau file repo.
 - Pilihan **Web server (Apache)** hanya berisi service `serviceType=apache` dari
   `data/services.json`; kosong berarti app tidak terhubung eksplisit ke Apache.
 - **Test** menjalankan `git rev-parse` + `git ls-remote`, lalu menampilkan preset dan
@@ -88,7 +94,9 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
   `clone-required`, `error`), branch/HEAD/remote HEAD, incoming commit, changed
   files, migration blocker, command per group (install/build/artisan), service
   stop/restart/start + state running, health check, webhook (redacted), dan
-  warnings. Daftar panjang memakai area scroll dengan tinggi maksimum.
+  warnings. Daftar panjang memakai area scroll dengan tinggi maksimum. Entri yang
+  diabaikan `dirtyIgnore` tampil sebagai warning; plan hanya berstatus `dirty` bila
+  masih ada entri yang tidak cocok.
 - Dialog plan menampilkan catatan bahwa plan hanya fetch remote refs dan
   **does not merge, build, install, or change services**. Loading state terlihat
   saat fetch/inspeksi berjalan; error ditampilkan di dialog.
@@ -388,15 +396,15 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 462 test):
+Test GUI mencakup (total workspace 485 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
 - Util: log tail, batas baris, export JSON, app log.
 - Updater: registry CRUD, state view, preservasi field lanjutan, validasi service,
   validasi `webServerService` (Apache vs non-Apache), versi PHP/Apache efektif,
-  command `plan_updater_app` (plan ready tanpa perubahan service), dan
-  `load_updater_history` (filter case-insensitive + default limit 50).
+  serialisasi/roundtrip `dirtyIgnore`, command `plan_updater_app` (plan ready tanpa
+  perubahan service), dan `load_updater_history` (filter case-insensitive + default limit 50).
 - Retention: `prune_logs_at` menghapus log updater/project lama, menolak
   `days = 0` dengan pesan jelas, dan `prune_logs_now_at` memakai `logDir` efektif
   dari `settings.json`.

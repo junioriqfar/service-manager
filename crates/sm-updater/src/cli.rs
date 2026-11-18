@@ -450,6 +450,7 @@ fn app_add(values: &[String]) -> i32 {
     let mut start_after: Vec<String> = Vec::new();
     let mut wait_timeout_seconds = 60u64;
     let mut allowed_ips: Vec<String> = Vec::new();
+    let mut dirty_ignore: Vec<String> = Vec::new();
     let mut enabled = true;
     let mut index = 0usize;
 
@@ -641,6 +642,13 @@ fn app_add(values: &[String]) -> i32 {
                     return 2;
                 }
             },
+            "--dirty-ignore" => match take_value(values, &mut index, "--dirty-ignore") {
+                Ok(value) => dirty_ignore.push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
             "--disabled" => enabled = false,
             other => {
                 eprintln!("Argumen app add tidak dikenal: {other}");
@@ -657,6 +665,10 @@ fn app_add(values: &[String]) -> i32 {
     if !Path::new(&local_path).is_dir() {
         eprintln!("Local path tidak ditemukan: {local_path}");
         return 1;
+    }
+    if let Err(error) = crate::dirty::validate_patterns(&dirty_ignore) {
+        eprintln!("{error}");
+        return 2;
     }
     if name.trim().is_empty() {
         name = id.clone();
@@ -709,6 +721,7 @@ fn app_add(values: &[String]) -> i32 {
             wait_timeout_seconds,
         },
         allowed_client_ips: allowed_ips,
+        dirty_ignore,
         ..AppConfig::default()
     };
     if let Err(error) = config.validate_app(&app) {
@@ -743,6 +756,8 @@ struct EditOptions {
     post_update_command: Option<String>,
     allowed_ips: Option<Vec<String>>,
     clear_allow_ips: bool,
+    dirty_ignore: Option<Vec<String>>,
+    clear_dirty_ignore: bool,
     stop_before_pull: Option<Vec<String>>,
     stop_before_build: Option<Vec<String>>,
     restart_after: Option<Vec<String>>,
@@ -898,6 +913,17 @@ fn app_edit(values: &[String]) -> i32 {
                 }
             },
             "--clear-allow-ips" => options.clear_allow_ips = true,
+            "--dirty-ignore" => match take_value(values, &mut index, "--dirty-ignore") {
+                Ok(value) => options
+                    .dirty_ignore
+                    .get_or_insert_with(Vec::new)
+                    .push(value),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 2;
+                }
+            },
+            "--clear-dirty-ignore" => options.clear_dirty_ignore = true,
             "--stop-before-pull" => match take_value(values, &mut index, "--stop-before-pull") {
                 Ok(value) => options
                     .stop_before_pull
@@ -1026,6 +1052,12 @@ fn app_edit(values: &[String]) -> i32 {
     }
     if let Some(value) = options.allowed_ips {
         app.allowed_client_ips = value;
+    }
+    if options.clear_dirty_ignore {
+        app.dirty_ignore.clear();
+    }
+    if let Some(value) = options.dirty_ignore {
+        app.dirty_ignore = value;
     }
     if let Some(value) = options.stop_before_pull {
         app.services.stop_before_pull = value;
@@ -2029,7 +2061,9 @@ Registry:
       [--restart-after SERVICE] [--start-after SERVICE]
       [--wait-timeout DETIK] [--no-queue-restart]
       [--allow-ip IP|CIDR] [--disabled]
+      [--dirty-ignore PATTERN] (ulangi untuk beberapa pola artifact build)
   sm-updater app edit ID [opsi yang sama]
+      [--clear-dirty-ignore] (kosongkan semua pola dirtyIgnore)
   sm-updater app list [--config PATH]
   sm-updater app show ID [--config PATH]
   sm-updater app remove ID [--config PATH]
@@ -2385,6 +2419,69 @@ mod tests {
                 "unexpected command: {call:?}"
             );
         }
+    }
+
+    #[test]
+    fn app_add_and_edit_dirty_ignore_patterns() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let project = temp.path().join("demo");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let code = app_add(&args(&[
+            "--config",
+            config_path.to_str().unwrap(),
+            "--id",
+            "demo",
+            "--repo",
+            "https://example.test/demo.git",
+            "--path",
+            project.to_str().unwrap(),
+            "--dirty-ignore",
+            "public/build/**",
+        ]));
+        assert_eq!(code, 0);
+        let config = load_config(&config_path).unwrap();
+        assert_eq!(
+            config.find("demo").unwrap().dirty_ignore,
+            ["public/build/**"]
+        );
+
+        let code = app_edit(&args(&[
+            "demo",
+            "--config",
+            config_path.to_str().unwrap(),
+            "--dirty-ignore",
+            "dist/**",
+        ]));
+        assert_eq!(code, 0);
+        let config = load_config(&config_path).unwrap();
+        assert_eq!(config.find("demo").unwrap().dirty_ignore, ["dist/**"]);
+
+        let code = app_edit(&args(&[
+            "demo",
+            "--config",
+            config_path.to_str().unwrap(),
+            "--clear-dirty-ignore",
+        ]));
+        assert_eq!(code, 0);
+        let config = load_config(&config_path).unwrap();
+        assert!(config.find("demo").unwrap().dirty_ignore.is_empty());
+
+        let code = app_add(&args(&[
+            "--config",
+            config_path.to_str().unwrap(),
+            "--id",
+            "invalid",
+            "--repo",
+            "https://example.test/invalid.git",
+            "--path",
+            project.to_str().unwrap(),
+            "--dirty-ignore",
+            "/absolute",
+        ]));
+        assert_eq!(code, 2);
+        assert!(load_config(&config_path).unwrap().find("invalid").is_none());
     }
 
     #[test]

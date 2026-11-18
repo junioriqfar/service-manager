@@ -44,6 +44,7 @@ interface UpdaterFormValues {
   build: string;
   installCommand: string;
   buildCommand: string;
+  dirtyIgnore: string;
   queueRestart: boolean;
   cloneOnFirstRun: boolean;
   allowedClientIPs: string;
@@ -76,6 +77,7 @@ function emptyValues(): UpdaterFormValues {
     build: "auto",
     installCommand: "",
     buildCommand: "",
+    dirtyIgnore: "",
     queueRestart: true,
     cloneOnFirstRun: false,
     allowedClientIPs: "",
@@ -110,6 +112,7 @@ function valuesFromApp(app: UpdaterApp | null): UpdaterFormValues {
     build: app.build,
     installCommand: app.installCommand,
     buildCommand: app.buildCommand,
+    dirtyIgnore: (app.dirtyIgnore ?? []).join(", "),
     queueRestart: app.queueRestart,
     cloneOnFirstRun: app.cloneOnFirstRun,
     allowedClientIPs: (app.allowedClientIPs ?? []).join(", "),
@@ -150,6 +153,7 @@ function toInput(values: UpdaterFormValues): UpdaterAppInput {
     build: values.build,
     installCommand: values.installCommand.trim(),
     buildCommand: values.buildCommand.trim(),
+    dirtyIgnore: splitList(values.dirtyIgnore),
     queueRestart: values.queueRestart,
     cloneOnFirstRun: values.cloneOnFirstRun,
     allowedClientIPs: splitList(values.allowedClientIPs),
@@ -460,6 +464,25 @@ export function UpdaterFormDialog({
               onCheckedChange={(checked) => set("queueRestart", checked)}
             />
           </div>
+
+          <SectionHeading>Working tree</SectionHeading>
+          <FormField
+            label="Dirty ignore patterns"
+            htmlFor="updater-app-dirty-ignore"
+            className="sm:col-span-2"
+          >
+            <Input
+              id="updater-app-dirty-ignore"
+              value={values.dirtyIgnore}
+              onChange={(event) => set("dirtyIgnore", event.target.value)}
+              placeholder="public/build/**, resources/js/actions/**, resources/js/routes/**"
+            />
+            <p className="text-xs text-muted-foreground">
+              Generated build artifacts only. Every dirty entry must match a pattern or the update
+              remains blocked. Patterns are repo-relative; separate multiple patterns with commas
+              or newlines.
+            </p>
+          </FormField>
 
           <SectionHeading>Service lifecycle</SectionHeading>
           <FormField label="Stop before pull" htmlFor="updater-stop-pull">

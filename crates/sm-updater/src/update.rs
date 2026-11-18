@@ -104,6 +104,7 @@ fn execute(
         runner,
         logger,
         options,
+        &[],
         |_| Ok(()),
     )?;
 

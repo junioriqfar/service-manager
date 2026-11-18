@@ -92,6 +92,12 @@ adalah aturan minimum; panduan mendetail tetap wajib dibaca untuk pekerjaan apa 
     `ServiceManager-Updater` bukan Windows Service dan tidak boleh memiliki trigger otomatis.
 11. **Jangan commit/push tanpa instruksi eksplisit.**
     Perubahan harus direview; jangan menyentuh riwayat Git, tag, atau release tanpa diminta.
+12. **`dirtyIgnore` hanya untuk artifact generated.**
+    Pola `apps[].dirtyIgnore` dipakai untuk output build (mis. `public/build/**`,
+    Wayfinder, `dist/**`), bukan untuk menyembunyikan perubahan source, migration,
+    config, atau file di luar repo. Semantiknya all-or-nothing: satu entri tidak cocok
+    tetap membuat status `dirty`. Jangan mengubah `.gitignore` atau menambah ignore
+    hardcoded untuk melewati pemeriksaan working tree.
 
 ## 4. Build, test, dan definition of done
 
@@ -110,7 +116,7 @@ cargo fmt --all -- --check
 git diff --check
 ```
 
-- Test workspace saat ini: **462 test lulus** (angka ini harus diperbarui jika test berubah).
+- Test workspace saat ini: **485 test lulus** (angka ini harus diperbarui jika test berubah).
 - Test default tidak memerlukan Administrator. Test yang mengubah service Windows hanya untuk
   server uji dan dijalankan manual: `cargo test -p sm-win -- --ignored` sebagai Administrator.
 - `Build-Release.ps1` menjalankan frontend build, cargo release build, menyusun folder portable,

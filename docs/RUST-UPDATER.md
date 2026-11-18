@@ -92,8 +92,10 @@ Urutan inspeksi:
 
 1. Validasi branch/local path/Git. Folder project yang belum ada menghasilkan
    status `clone-required` (plan tidak melakukan clone).
-2. `git status --porcelain`; working tree kotor menghasilkan `dirty` dan maksimal
-   30 entri pertama masuk warnings. Fetch tidak dijalankan.
+2. `git status --porcelain`; entri difilter dengan `apps[].dirtyIgnore`. Jika masih ada
+   entri yang tidak cocok, working tree `dirty` dan maksimal 30 entri blocking masuk
+   warnings (fetch tidak dijalankan). Entri yang diabaikan tetap muncul sebagai warning
+   `dirtyIgnore: ...`; bila tidak ada blocking, plan lanjut ke langkah berikutnya.
 3. Verifikasi branch aktif sama dengan `branch` di registry, lalu baca HEAD.
 4. `git ls-remote --heads origin`, `git fetch --prune origin`, verifikasi
    `origin/<branch>`, hitung `rev-list --count`, lalu baca `git log` dan
@@ -103,7 +105,6 @@ Urutan inspeksi:
 6. Toolchain di-resolve hanya untuk preview command; service hanya divalidasi
    (`exists`) dan dicek `is_running`. Health check/webhook hanya informasi dan
    webhook di-redaksi.
-
 Output memuat status, branch/HEAD/remote HEAD, incoming commit, changed files,
 migration files, command per group (`install`/`build`/`artisan`), service
 stop/restart/start + state, health check, webhook, dan warnings.
@@ -127,6 +128,32 @@ Batasan: plan tidak melakukan clone, tidak mengeksekusi health check/webhook, da
 belum memeriksa ancestry/fast-forwardability (`merge-base`). Status `ready`
 mengasumsikan `git merge --ff-only` akan berhasil; bila branch lokal diverged,
 update tetap bisa gagal meski plan menampilkan incoming commit.
+
+### Dirty ignore (`apps[].dirtyIgnore`)
+
+Pemeriksaan working tree memakai `git status --porcelain` yang difilter lewat
+`sm_updater::dirty::filter_status`. Setiap entri dibandingkan dengan pola eksplisit
+milik app (`apps[].dirtyIgnore`); tidak ada direktori artifact yang di-hardcode dan
+`.gitignore` tidak diubah.
+
+- Pola repo-relative, `/` dinormalisasi (Windows `\` diterima), case-insensitive.
+- `*` dalam satu segmen, `**` lintas segmen, `?` satu karakter.
+- Pola literal cocok dengan path itu sendiri dan turunannya; trailing `/` berarti
+  direktori. Detail validasi ada di
+  [CONFIGURATION.md](CONFIGURATION.md#dirty-ignore-appsdirtyignore).
+- **All-or-nothing**: entri yang tidak cocok tetap memblokir. Run/check berhenti
+  `dirty`, plan berstatus `dirty`, dan merge/install/build tidak dijalankan.
+- Run/check menulis `INFO: N perubahan diabaikan oleh dirtyIgnore: ...` (maksimal
+  10 entri ditampilkan) lalu daftar blocking (maksimal 10). Pesan `dirty` menyertakan
+  jumlah blocking dan ignored. Tanpa pola, pesan lama
+  `Working tree tidak bersih; project dilewati.` dipertahankan.
+- Plan menambahkan warning `dirtyIgnore: <entry>` (maksimal 10 + jumlah sisanya).
+  Bila hanya ada entri ignored, plan lanjut ke pengecekan branch/HEAD/fetch dan
+  berstatus `up-to-date` atau `ready` sesuai commit masuk.
+- Pola invalid ditolak oleh `validate_app` (GUI Save/Test/Preview Plan, serta CLI
+  `app add/edit/test`). Filter runtime mengabaikan pola invalid secara defensif,
+  sehingga pola tersebut tidak pernah menyembunyikan entri. Jangan memakai pola untuk
+  menyembunyikan perubahan source, migration, config, atau file di luar repository.
 
 ### Wrapper Elevated (Scheduled Task)
 
@@ -472,7 +499,8 @@ Aturan:
 ## Alur Update
 
 1. Validasi app, branch, service (termasuk hak akses); clone jika `cloneOnFirstRun`.
-2. Cek working tree bersih (`git status --porcelain`). Dirty → `dirty`.
+2. Cek working tree (`git status --porcelain`) dengan filter `dirtyIgnore`. Entri
+   yang tidak cocok membuat status `dirty`; bila semua entri cocok, update lanjut.
 3. Validasi branch aktif.
 4. Preflight `git ls-remote --heads origin`.
 5. `git fetch --prune origin`.
@@ -654,7 +682,7 @@ control character/non-`.json`, dan tidak ada write ke config aktif. Credential r
 validasi host/username/token, dan redaksi token diuji tanpa menyentuh Credential Manager
 asli. Check-only concurrency diuji dengan barrier dua worker (max=2), serial
 saat max=1, update non-check tetap serial, serta urutan state/history. Total
-workspace: 462 test.
+workspace: 485 test.
 
 ## Task Scheduler / Elevation
 

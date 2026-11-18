@@ -483,6 +483,11 @@ di memori. Contoh lengkap: [projects.example.json](../projects.example.json) dan
       "build": "auto",
       "queueRestart": true,
       "webServerService": "Apache2.4",
+      "dirtyIgnore": [
+        "public/build/**",
+        "resources/js/actions/**",
+        "resources/js/routes/**"
+      ],
       "services": {
         "stopBeforePull": [],
         "stopBeforeBuild": [],
@@ -503,6 +508,7 @@ Field penting:
 | --- | --- |
 | `trigger.allowedClientIPs` | Allowlist global IP/CIDR; `settings.json` menang bila ada |
 | `apps[].allowedClientIPs` | Override allowlist untuk satu app |
+| `apps[].dirtyIgnore` | Pola repo-relative artifact build yang boleh diabaikan saat cek working tree; entri lain tetap memblokir |
 | `apps[].webServerService` | Nama service Apache opsional di `services.json`; divalidasi `serviceType=apache` |
 | `preset` | `auto`, `laravel`, `node`, `bun`, `go`, `static`, `custom` |
 | `packageManager` | `auto`, `npm`, `pnpm`, `yarn`, `bun`, `none` |
@@ -511,6 +517,49 @@ Field penting:
 | `services.*` | Lifecycle stop/restart/start service Windows |
 | `healthCheck` | HTTP check setelah deploy; gagal → `degraded` |
 | `notify` | Webhook best-effort untuk status di `on` |
+
+### Dirty ignore (`apps[].dirtyIgnore`)
+
+`dirtyIgnore` adalah daftar pola repo-relative untuk **artifact hasil build** yang
+sering muncul sebagai perubahan working tree setelah install/build (mis.
+`public/build/**` Vite, output Wayfinder Laravel, `dist/**` Node/Bun). Default
+kosong; app lama tanpa field ini berperilaku sama seperti sebelumnya.
+
+Aturan pola:
+
+- Path relatif terhadap root repository, separator `/` (Windows `\` diterima),
+  pencocokan case-insensitive.
+- `*` cocok dalam satu segmen path, `**` cocok lintas segmen, `?` cocok satu karakter.
+- Pola literal tanpa wildcard cocok dengan path itu sendiri **dan** turunannya;
+  `public/build` juga mencocokkan `public/build/assets/app.js`.
+- Trailing `/` diperlakukan sebagai direktori (mis. `public/build/`).
+- Ditolak oleh validasi app saat simpan (GUI/CLI), Test, Preview Plan, atau CLI
+  `app add/edit/test`: pola kosong, karakter kontrol, path absolut, drive letter
+  (`C:\...`), segmen `..`, lebih dari 32 pola, atau lebih dari 200 karakter. Runtime
+  tidak pernah memakai pola invalid untuk mengabaikan entri.
+
+Semantik keamanan bersifat **all-or-nothing**: satu entri `git status --porcelain`
+hanya diabaikan jika cocok dengan pola eksplisit. Jika masih ada satu entri yang
+tidak cocok, working tree tetap `dirty` dan update/plan diblokir. Tidak ada daftar
+direktori hardcoded, `.gitignore` tidak pernah diubah, dan perubahan source yang
+disengaja tidak boleh "dibersihkan" dengan pola ini.
+
+Contoh:
+
+```json
+"dirtyIgnore": [
+  "public/build/**",
+  "resources/js/actions/**",
+  "resources/js/routes/**",
+  "dist/**",
+  ".output/**"
+]
+```
+
+Jangan memakai pola seperti `*`, `**`, `src/**`, `app/**`, `database/migrations/**`,
+atau `.env*` untuk menyembunyikan perubahan source/config. Entri yang diabaikan
+tetap ditampilkan di warnings plan dan log run (`INFO: N perubahan diabaikan oleh
+dirtyIgnore: ...`).
 
 ## Remote Trigger (`trigger-client.json`)
 

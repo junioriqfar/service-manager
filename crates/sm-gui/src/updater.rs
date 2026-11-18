@@ -64,6 +64,7 @@ pub struct UpdaterAppView {
     /// produce `allowedClientIps` and make the edit form crash on `.join()`.
     #[serde(rename = "allowedClientIPs", alias = "allowedClientIps")]
     pub allowed_client_ips: Vec<String>,
+    pub dirty_ignore: Vec<String>,
     /// Service Apache di `services.json`; kosong berarti tidak terhubung eksplisit.
     pub web_server_service: String,
     /// Versi PHP efektif dari settings.json, diisi untuk preset Laravel.
@@ -132,6 +133,8 @@ pub struct UpdaterAppInput {
     pub clone_on_first_run: Option<bool>,
     #[serde(default, rename = "allowedClientIPs", alias = "allowedClientIps")]
     pub allowed_client_ips: Vec<String>,
+    #[serde(default)]
+    pub dirty_ignore: Vec<String>,
     #[serde(default)]
     pub web_server_service: String,
     #[serde(default)]
@@ -218,6 +221,7 @@ fn view(app: &AppConfig, state: Option<&AppState>, settings: &Settings) -> Updat
         queue_restart: app.queue_restart,
         clone_on_first_run: app.clone_on_first_run,
         allowed_client_ips: app.allowed_client_ips.clone(),
+        dirty_ignore: app.dirty_ignore.clone(),
         web_server_service: app.web_server_service.clone(),
         php_version,
         apache_version,
@@ -364,6 +368,7 @@ fn save_app_at(
         app.clone_on_first_run = value;
     }
     app.allowed_client_ips = input.allowed_client_ips;
+    app.dirty_ignore = input.dirty_ignore;
     app.web_server_service = input.web_server_service;
     app.services = input.services;
     if let Some(value) = input.health_check {
@@ -708,6 +713,7 @@ mod tests {
             queue_restart: true,
             clone_on_first_run: None,
             allowed_client_ips: Vec::new(),
+            dirty_ignore: Vec::new(),
             web_server_service: String::new(),
             services: ServicePlan::default(),
             health_check: None,
@@ -907,6 +913,36 @@ mod tests {
             Some(&serde_json::json!(["10.0.0.1", "10.0.0.0/24"]))
         );
         assert!(json.get("allowedClientIps").is_none());
+    }
+
+    #[test]
+    fn dirty_ignore_roundtrips_and_serializes_camel_case() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("data/projects.json");
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut input = app("demo", &project);
+        input.dirty_ignore = vec![" public/build/** ".into(), String::new()];
+        let views = save_app_at(&config_path, None, input).unwrap();
+        assert_eq!(views[0].dirty_ignore, ["public/build/**"]);
+
+        let json = serde_json::to_value(&views[0]).unwrap();
+        assert_eq!(
+            json.get("dirtyIgnore"),
+            Some(&serde_json::json!(["public/build/**"]))
+        );
+
+        let loaded = load_config(&config_path).unwrap();
+        assert_eq!(
+            loaded.find("demo").unwrap().dirty_ignore,
+            ["public/build/**"]
+        );
+
+        let mut invalid = app("demo", &project);
+        invalid.dirty_ignore = vec!["/absolute".into()];
+        let error = save_app_at(&config_path, None, invalid).unwrap_err();
+        assert!(error.contains("dirtyIgnore"), "{error}");
     }
 
     #[test]

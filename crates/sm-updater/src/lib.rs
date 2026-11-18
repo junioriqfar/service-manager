@@ -1,6 +1,7 @@
 pub mod app_update;
 pub mod cli;
 pub mod credential;
+pub mod dirty;
 pub mod history;
 pub mod ip;
 pub mod lock;
@@ -19,6 +20,7 @@ pub mod trigger;
 pub mod update;
 pub mod variables;
 
+pub use dirty::{filter_status, validate_patterns, DirtyScan};
 pub use history::{append_history, history_path, load_history, HistoryEntry};
 pub use log::UpdateLogger;
 pub use plan::{

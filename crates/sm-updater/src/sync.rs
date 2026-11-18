@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::dirty::filter_status;
 use crate::log::UpdateLogger;
 use crate::runner::{wrap_command, Output, Runner};
 use crate::update::UpdateOptions;
@@ -28,6 +29,7 @@ pub(crate) enum SyncResult {
 
 /// Jalankan seluruh tahap Git sampai merge. Hook `before_merge` hanya dipanggil
 /// jika ada commit baru, bukan dry-run, dan tidak ada migration yang diblokir.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_project(
     path: &Path,
     branch: &str,
@@ -35,6 +37,7 @@ pub(crate) fn sync_project(
     runner: &dyn Runner,
     logger: &UpdateLogger,
     options: UpdateOptions,
+    dirty_ignore: &[String],
     before_merge: impl FnOnce(&[String]) -> Result<(), String>,
 ) -> Result<SyncResult, String> {
     if !git_path.is_file() {
@@ -49,14 +52,42 @@ pub(crate) fn sync_project(
         &["status", "--porcelain"],
         PREFLIGHT_TIMEOUT,
     )?;
-    let status_text = status.stdout.trim();
-    if !status_text.is_empty() {
-        for line in status_text.lines().take(10) {
+    let scan = filter_status(&status.stdout, dirty_ignore);
+    if !scan.ignored.is_empty() {
+        let shown = scan
+            .ignored
+            .iter()
+            .take(10)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("; ");
+        let remaining = scan.ignored.len().saturating_sub(10);
+        if remaining > 0 {
+            logger.log(&format!(
+                "INFO: {} perubahan diabaikan oleh dirtyIgnore: {shown} (+{remaining} entri lain)",
+                scan.ignored.len()
+            ));
+        } else {
+            logger.log(&format!(
+                "INFO: {} perubahan diabaikan oleh dirtyIgnore: {shown}",
+                scan.ignored.len()
+            ));
+        }
+    }
+    if scan.is_blocking() {
+        for line in scan.blocking.iter().take(10) {
             logger.log(line);
         }
-        return Ok(SyncResult::Dirty(
-            "Working tree tidak bersih; project dilewati.".to_string(),
-        ));
+        let message = if scan.ignored.is_empty() {
+            "Working tree tidak bersih; project dilewati.".to_string()
+        } else {
+            format!(
+                "Working tree tidak bersih ({} perubahan; {} diabaikan oleh dirtyIgnore); project dilewati.",
+                scan.blocking.len(),
+                scan.ignored.len()
+            )
+        };
+        return Ok(SyncResult::Dirty(message));
     }
 
     let branch_output = ensure_git(

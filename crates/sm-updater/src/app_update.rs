@@ -98,6 +98,7 @@ fn execute_app(
         runner,
         logger,
         options,
+        &app.dirty_ignore,
         |preview| {
             let plan = toolchain::resolve_plan(app, project, preview, settings)?;
             for note in &plan.notes {
@@ -859,6 +860,106 @@ mod tests {
         assert_eq!(outcome.status, UpdateStatus::Check);
         assert!(services.calls().is_empty());
         assert!(!runner.has_call("merge"));
+    }
+
+    #[test]
+    fn dirty_ignore_allows_matching_generated_artifacts() {
+        let mut fixture = fixture();
+        fixture.app.dirty_ignore = vec!["public/build/**".into()];
+        let services = FakeServices::new(&["api"], &["api"]);
+        let inner = standard_handler("abc1234 fix\n", "src/app.ts\n", "src/app.ts\n");
+        let runner = FakeRunner::new(move |program, args| {
+            if args.first().map(String::as_str) == Some("status") {
+                return ok("?? public/build/app.js\n");
+            }
+            inner(program, args)
+        });
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
+        let log = std::fs::read_to_string(outcome.log_path.as_ref().unwrap()).unwrap();
+        assert!(
+            log.contains("INFO: 1 perubahan diabaikan oleh dirtyIgnore"),
+            "{log}"
+        );
+        assert!(runner.has_call("merge"));
+    }
+
+    #[test]
+    fn dirty_ignore_keeps_unmatched_source_change_blocking() {
+        let mut fixture = fixture();
+        fixture.app.dirty_ignore = vec!["public/build/**".into()];
+        let services = FakeServices::new(&["api"], &["api"]);
+        let inner = standard_handler("abc1234 fix\n", "src/app.ts\n", "src/app.ts\n");
+        let runner = FakeRunner::new(move |program, args| {
+            if args.first().map(String::as_str) == Some("status") {
+                return ok("?? public/build/app.js\n M src/app.ts\n");
+            }
+            inner(program, args)
+        });
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Dirty);
+        assert!(
+            outcome.message.contains("1 perubahan"),
+            "{}",
+            outcome.message
+        );
+        assert!(
+            outcome.message.contains("1 diabaikan oleh dirtyIgnore"),
+            "{}",
+            outcome.message
+        );
+        let log = std::fs::read_to_string(outcome.log_path.as_ref().unwrap()).unwrap();
+        assert!(log.contains("M src/app.ts"), "{log}");
+        assert!(log.contains("INFO: 1 perubahan diabaikan oleh dirtyIgnore"));
+        assert!(!runner.has_call("fetch"));
+        assert!(!runner.has_call("merge"));
+        assert!(services.calls().is_empty());
+    }
+
+    #[test]
+    fn dirty_without_patterns_keeps_previous_message() {
+        let fixture = fixture();
+        let services = FakeServices::new(&["api"], &["api"]);
+        let inner = standard_handler("abc1234 fix\n", "src/app.ts\n", "src/app.ts\n");
+        let runner = FakeRunner::new(move |program, args| {
+            if args.first().map(String::as_str) == Some("status") {
+                return ok(" M src/app.ts\n");
+            }
+            inner(program, args)
+        });
+
+        let outcome = update_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.log_dir,
+            &runner,
+            &services,
+            UpdateOptions::default(),
+        );
+
+        assert_eq!(outcome.status, UpdateStatus::Dirty);
+        assert_eq!(
+            outcome.message,
+            "Working tree tidak bersih; project dilewati."
+        );
     }
 
     #[test]

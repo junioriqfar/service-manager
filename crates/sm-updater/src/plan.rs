@@ -13,6 +13,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sm_core::redact_secrets;
 
+use crate::dirty::filter_status;
 use crate::registry::{AppConfig, ServicePlan, UpdaterSettings};
 use crate::runner::{Output, Runner};
 use crate::services::{Lifecycle, ServiceControl};
@@ -327,15 +328,26 @@ fn scan_git_result(
         PREFLIGHT_TIMEOUT,
         "Gagal membaca status Git",
     )?;
-    let dirty_entries = split_lines(&status_output.stdout);
-    if !dirty_entries.is_empty() {
-        for entry in dirty_entries.iter().take(30) {
+    let scan = filter_status(&status_output.stdout, &app.dirty_ignore);
+    if !scan.ignored.is_empty() {
+        for entry in scan.ignored.iter().take(10) {
+            warnings.push(format!("dirtyIgnore: {entry}"));
+        }
+        if scan.ignored.len() > 10 {
+            warnings.push(format!(
+                "dirtyIgnore: {} entri lain diabaikan.",
+                scan.ignored.len() - 10
+            ));
+        }
+    }
+    if scan.is_blocking() {
+        for entry in scan.blocking.iter().take(30) {
             warnings.push(format!("Working tree: {entry}"));
         }
-        if dirty_entries.len() > 30 {
+        if scan.blocking.len() > 30 {
             warnings.push(format!(
                 "Working tree: {} entri lain tidak ditampilkan.",
-                dirty_entries.len() - 30
+                scan.blocking.len() - 30
             ));
         }
 
@@ -1265,6 +1277,62 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("5 entri lain")));
+    }
+
+    #[test]
+    fn dirty_ignore_continues_plan_for_generated_artifacts() {
+        let mut fixture = fixture(true);
+        fixture.app.dirty_ignore = vec!["public/build/**".into()];
+        let mut replies = ready_replies();
+        replies.status = "?? public/build/app.js\n".into();
+        let runner = FakeRunner::new(replies);
+        let control = FakeControl::new(&[], &[]);
+
+        let plan = plan_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.project,
+            &runner,
+            &control,
+        );
+
+        assert_eq!(plan.status, PlanStatus::Ready, "{}", plan.message);
+        assert!(plan
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("dirtyIgnore") && warning.contains("public/build")));
+        assert!(runner.has_call("fetch"));
+        assert_only_read_only_git_calls(&runner.calls());
+    }
+
+    #[test]
+    fn dirty_ignore_keeps_unmatched_entries_blocking() {
+        let mut fixture = fixture(true);
+        fixture.app.dirty_ignore = vec!["public/build/**".into()];
+        let mut replies = ready_replies();
+        replies.status = "?? public/build/app.js\n M src/app.ts\n".into();
+        let runner = FakeRunner::new(replies);
+        let control = FakeControl::new(&[], &[]);
+
+        let plan = plan_app(
+            &fixture.app,
+            &fixture.settings,
+            &fixture.project,
+            &runner,
+            &control,
+        );
+
+        assert_eq!(plan.status, PlanStatus::Dirty);
+        assert!(plan
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("dirtyIgnore") && warning.contains("public/build")));
+        assert!(plan
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Working tree: M src/app.ts")));
+        assert!(!runner.has_call("fetch"));
+        assert!(!runner.has_call("merge"));
     }
 
     #[test]
