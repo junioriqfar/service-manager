@@ -302,6 +302,8 @@ mod ui_tests {
         assert!(UPDATER_FORM.contains("serviceType === \"apache\""));
         assert!(UPDATER_FORM.contains("pick_directory"));
         assert!(UPDATER_FORM.contains("Browse…"));
+        assert!(UPDATER_FORM.contains("app.allowedClientIPs ?? []"));
+        assert!(UPDATER_FORM.contains("app.services?.stopBeforePull ?? []"));
         assert!(UPDATER_VIEW.contains("lucide-react"));
         assert!(UPDATER_FORM.contains("lucide-react"));
         assert!(UPDATER_VIEW.contains("ContextMenu"));

@@ -6,7 +6,7 @@ Dokumen ini merangkum hasil observasi implementasi `sm-updater`, seluruh fitur y
 
 - Status implementasi: **Phase A registry selesai** (mode lama + registry multi-toolchain); **Sprint 3.2 dry-run plan, Sprint 3.3 history/retention, Sprint 3.4a maintenance/export settings, Sprint 3.4b Git credential UI/firewall read-only, dan Sprint 3.5 stage 1 (check-only paralel) selesai**
 - Lokasi: `crates/sm-updater`
-- Test: **173 unit test** untuk crate ini; total workspace **460 test**. Config default ada di `data/projects.json`.
+- Test: **173 unit test** untuk crate ini; total workspace **461 test**. Config default ada di `data/projects.json`.
 - Verifikasi: unit test + E2E lokal dengan repository Git bare (list, check, update fast-forward, migration block, registry/toolchain/service lifecycle)
 
 ---

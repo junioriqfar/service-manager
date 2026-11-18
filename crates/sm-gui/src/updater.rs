@@ -60,6 +60,9 @@ pub struct UpdaterAppView {
     pub build_command: String,
     pub queue_restart: bool,
     pub clone_on_first_run: bool,
+    /// Keep the acronym spelling used by the frontend; camelCase alone would
+    /// produce `allowedClientIps` and make the edit form crash on `.join()`.
+    #[serde(rename = "allowedClientIPs", alias = "allowedClientIps")]
     pub allowed_client_ips: Vec<String>,
     /// Service Apache di `services.json`; kosong berarti tidak terhubung eksplisit.
     pub web_server_service: String,
@@ -880,6 +883,24 @@ mod tests {
         assert_eq!(limited.len(), 5);
         assert_eq!(limited[0].duration_ms, 58);
         assert_eq!(limited[4].duration_ms, 50);
+    }
+
+    #[test]
+    fn updater_app_view_uses_allowed_client_ips_acronym() {
+        let app = AppConfig {
+            id: "demo".into(),
+            name: "Demo".into(),
+            allowed_client_ips: vec!["10.0.0.1".into(), "10.0.0.0/24".into()],
+            ..AppConfig::default()
+        };
+        let view = view(&app, None, &Settings::default());
+        let json = serde_json::to_value(&view).unwrap();
+
+        assert_eq!(
+            json.get("allowedClientIPs"),
+            Some(&serde_json::json!(["10.0.0.1", "10.0.0.0/24"]))
+        );
+        assert!(json.get("allowedClientIps").is_none());
     }
 
     #[test]

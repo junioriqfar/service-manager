@@ -388,7 +388,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 460 test):
+Test GUI mencakup (total workspace 461 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
