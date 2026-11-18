@@ -21,7 +21,7 @@ pub use error::ScmError;
 pub use manager::{apply_service, install_service, remove_service, ManagerError};
 pub use native::{apply as apply_native, install_plan, NativeCommand, NativeError};
 pub use nssm::{apply_commands as nssm_apply_commands, Nssm, NssmCommand, NssmError};
-pub use process::{CommandOutput, CommandRunner, ProcessError, SystemRunner};
+pub use process::{CommandNoWindow, CommandOutput, CommandRunner, ProcessError, SystemRunner};
 pub use scm::{
     check_control_access, delete_service, query_status, restart_service, service_exists,
     set_delayed_start, set_startup, start_service, stop_service, wait_for_state,

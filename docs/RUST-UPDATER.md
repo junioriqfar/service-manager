@@ -654,7 +654,7 @@ control character/non-`.json`, dan tidak ada write ke config aktif. Credential r
 validasi host/username/token, dan redaksi token diuji tanpa menyentuh Credential Manager
 asli. Check-only concurrency diuji dengan barrier dua worker (max=2), serial
 saat max=1, update non-check tetap serial, serta urutan state/history. Total
-workspace: 457 test.
+workspace: 458 test.
 
 ## Task Scheduler / Elevation
 

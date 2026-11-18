@@ -132,6 +132,7 @@ gunakan CLI `sm-trigger`.
 
 Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
 
+- Proses console anak (PowerShell untuk status Scheduled Task, Git, `cmd.exe`) dijalankan dengan flag Windows `CREATE_NO_WINDOW`, sehingga tidak ada jendela `cmd` yang muncul saat tab Settings dibuka atau tool diuji.
 - **Toolchain**: kartu untuk Git, PHP, Composer, Node, npm, pnpm, yarn, Bun, Go,
   Apache, dan NSSM. Setiap kartu memiliki path, **Browse…**, **Auto-detect**,
   **Test**, dan badge versi/status.
@@ -383,7 +384,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 457 test):
+Test GUI mencakup (total workspace 458 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

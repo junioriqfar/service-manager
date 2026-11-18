@@ -197,7 +197,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **457 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **458 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Dokumentasi
 
@@ -230,6 +230,7 @@ Saat ini **457 unit test** workspace lulus. Frontend harus dibangun terlebih dah
 | Updater gagal akses remote | Simpan kredensial dengan `sm-updater credential store`; cek PAT/akun. |
 | Update diblokir migration | Jalankan migration manual, lalu ulangi update. |
 | GUI tidak muncul | Pastikan WebView2 Runtime terpasang dan jalankan sebagai Administrator. |
+| Jendela `cmd`/PowerShell muncul sekilas | Versi lama menjalankan child process tanpa `CREATE_NO_WINDOW`. Pakai build terbaru; proses status Scheduled Task, Git, dan tool test sekarang berjalan hidden. |
 
 ## Lisensi
 

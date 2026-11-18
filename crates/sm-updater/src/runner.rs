@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use sm_win::CommandNoWindow;
 use thiserror::Error;
 use wait_timeout::ChildExt;
 
@@ -113,6 +114,7 @@ fn run_process(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .no_window()
         .spawn()
         .map_err(|source| RunnerError::Spawn {
             program: program.to_string_lossy().to_string(),

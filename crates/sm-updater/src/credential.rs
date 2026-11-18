@@ -3,6 +3,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use sm_win::CommandNoWindow;
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct CredentialRequest {
     pub host: String,
@@ -42,6 +44,7 @@ impl CredentialSink for GitCredentialSink {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
+            .no_window()
             .spawn()
             .map_err(|error| format!("Gagal menjalankan git credential approve: {error}"))?;
 
@@ -168,6 +171,7 @@ pub fn reject_credential(git_path: &Path, host: &str, username: &str) -> Result<
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
+        .no_window()
         .spawn()
         .map_err(|error| format!("Gagal menjalankan git credential reject: {error}"))?;
 
@@ -200,6 +204,7 @@ pub fn verify_remote(request: &CredentialRequest) -> Result<(), String> {
         .env("GCM_INTERACTIVE", "never")
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
+        .no_window()
         .output()
         .map_err(|error| format!("Gagal menjalankan git ls-remote: {error}"))?;
 

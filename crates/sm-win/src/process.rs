@@ -3,6 +3,29 @@ use std::process::Command;
 
 use thiserror::Error;
 
+/// Windows `CREATE_NO_WINDOW` flag. Child console tools (PowerShell, Git,
+/// cmd.exe, sc.exe, NSSM) must not flash a console window when launched from
+/// the GUI.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Extension for console child processes launched from a GUI application.
+pub trait CommandNoWindow {
+    /// Prevent Windows from creating a console window for this child.
+    fn no_window(&mut self) -> &mut Self;
+}
+
+impl CommandNoWindow for Command {
+    fn no_window(&mut self) -> &mut Self {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            self.creation_flags(CREATE_NO_WINDOW);
+        }
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandOutput {
     pub program: String,
@@ -57,6 +80,7 @@ impl CommandRunner for SystemRunner {
     fn run(&self, program: &Path, args: &[String]) -> Result<CommandOutput, ProcessError> {
         let output = Command::new(program)
             .args(args)
+            .no_window()
             .output()
             .map_err(|source| ProcessError::Spawn {
                 program: program.to_string_lossy().to_string(),
@@ -168,6 +192,17 @@ pub(crate) fn output(exit_code: i32, stdout: &str, stderr: &str) -> CommandOutpu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_window_command_runs_without_changing_output() {
+        let output = Command::new("cmd.exe")
+            .args(["/C", "echo hidden"])
+            .no_window()
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).contains("hidden"));
+    }
 
     #[test]
     fn decodes_utf8_output() {

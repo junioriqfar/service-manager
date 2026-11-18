@@ -7,7 +7,7 @@ use std::thread;
 use serde::{Deserialize, Serialize};
 use sm_config::ConfigPaths;
 use sm_trigger::{Args as TriggerArgs, DEFAULT_REMOTE_BIN};
-use sm_win::{dpapi_protect, dpapi_unprotect};
+use sm_win::{dpapi_protect, dpapi_unprotect, CommandNoWindow};
 use tauri::{AppHandle, Emitter};
 
 const DEFAULT_WRAPPER: &str = r"C:\tools\ServiceManager\scripts\Invoke-UpdaterTask.ps1";
@@ -371,6 +371,7 @@ fn run_capture(
                 .map(|(key, value)| (key.as_str(), value.as_str())),
         )
         .stdin(Stdio::null())
+        .no_window()
         .output()
         .map_err(|error| format!("Failed to run {program}: {error}"))?;
     let mut text = String::from_utf8_lossy(&output.stdout).to_string();
@@ -404,6 +405,7 @@ fn run_streaming(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .no_window()
         .spawn()
         .map_err(|error| format!("Failed to run {program}: {error}"))?;
 
