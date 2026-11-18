@@ -85,9 +85,10 @@ try {
     }
 
     Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination (Join-Path $stage 'README.md')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'AGENTS.md') -Destination (Join-Path $stage 'AGENTS.md')
     $docs = Join-Path $stage 'docs'
     New-Item -ItemType Directory -Path $docs -Force | Out-Null
-    foreach ($doc in @('CONFIGURATION.md', 'RUST-README.md', 'RUST-GUI.md', 'RUST-SERVICES.md', 'RUST-UPDATER.md', 'RUST-UPDATER-PLAN.md', 'RUST-UPDATER-REGISTRY-PLAN.md', 'RUST-TRIGGER.md', 'RUST-SETTINGS-PLAN.md', 'RUST-OPERATIONS-PLAN.md', 'RUST-SECURITY.md', 'RUST-RELEASE.md')) {
+    foreach ($doc in @('AGENT-GUIDE.md', 'CONFIGURATION.md', 'RUST-README.md', 'RUST-GUI.md', 'RUST-SERVICES.md', 'RUST-UPDATER.md', 'RUST-UPDATER-PLAN.md', 'RUST-UPDATER-REGISTRY-PLAN.md', 'RUST-TRIGGER.md', 'RUST-SETTINGS-PLAN.md', 'RUST-OPERATIONS-PLAN.md', 'RUST-SECURITY.md', 'RUST-RELEASE.md')) {
         $path = Join-Path $repoRoot (Join-Path 'docs' $doc)
         if (Test-Path -LiteralPath $path) {
             Copy-Item -LiteralPath $path -Destination $docs
@@ -109,6 +110,7 @@ Service Manager RS $version - Portable
 9. Simpan kredensial Git: sm-updater.exe credential store --help
 10. Diagnosa: sm-diag.exe
 11. Backup config tersimpan di folder backup; log aplikasi di folder logs.
+12. Panduan agent: AGENTS.md (root) dan docs\AGENT-GUIDE.md.
 
 Config dibaca dari <folder exe>\data. Set SERVICE_MANAGER_HOME untuk folder lain.
 Dokumentasi ada di folder docs.

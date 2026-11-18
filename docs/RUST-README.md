@@ -2,6 +2,14 @@
 
 Implementasi Service Manager dalam Rust. Status: **Phase 0-7 selesai** (workspace, domain model, kompatibilitas config, SCM core, NSSM/native wrapper, import discovery, GUI Tauri, batch async, registry updater, toolchain multi-bahasa, service lifecycle, SSH trigger client, GUI Remote, security hardening, release & CI, test).
 
+> **Untuk agent:** baca [`../AGENTS.md`](../AGENTS.md) lebih dulu, lalu
+> [`AGENT-GUIDE.md`](AGENT-GUIDE.md) untuk panduan operasional lengkap (decision matrix, file
+> runtime, CLI, kontrak otomasi Tauri/CDP, workflow, troubleshooting). Urutan baca fitur:
+> [`CONFIGURATION.md`](CONFIGURATION.md) → [`RUST-UPDATER.md`](RUST-UPDATER.md) →
+> [`RUST-TRIGGER.md`](RUST-TRIGGER.md) → [`RUST-GUI.md`](RUST-GUI.md) →
+> [`RUST-SECURITY.md`](RUST-SECURITY.md) → [`RUST-OPERATIONS-PLAN.md`](RUST-OPERATIONS-PLAN.md) →
+> [`RUST-RELEASE.md`](RUST-RELEASE.md).
+
 Rencana lengkap: [RUST-REWRITE-PLAN.md](RUST-REWRITE-PLAN.md).
 
 ## Struktur

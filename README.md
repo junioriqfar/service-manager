@@ -64,6 +64,7 @@ ServiceManager/
 ├─ Cargo.toml                   # workspace Rust
 ├─ Cargo.lock
 ├─ Build-Release.ps1
+├─ AGENTS.md                    # aturan wajib agent
 ├─ crates/
 │  ├─ sm-core/                  # model, validasi, ordering, update plan
 │  ├─ sm-config/                # services.json, projects.json, backup
@@ -197,12 +198,24 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **461 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **462 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+
+## Untuk Agent
+
+- **Wajib** baca [AGENTS.md](AGENTS.md) sebelum menyentuh kode, config runtime, service, atau
+  server produksi.
+- Panduan operasional lengkap (arsitektur, decision matrix, CLI, kontrak otomasi Tauri/CDP,
+  workflow, troubleshooting) ada di [docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md).
+- Aturan singkat: `plan`/`run --check` sebelum update nyata; jangan menjalankan migration otomatis;
+  jangan menulis token/password ke file/log; jangan menulis firewall rule; jangan membuat Windows
+  Service untuk updater; gunakan `SERVICE_MANAGER_HOME` sementara untuk test.
 
 ## Dokumentasi
 
 | Dokumen | Isi |
 | --- | --- |
+| [AGENTS.md](AGENTS.md) | Onboarding wajib agent: aturan keselamatan, build/test, definition of done |
+| [docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md) | Panduan operasional agent lengkap: arsitektur, file runtime, fitur, CLI, CDP, workflow, troubleshooting |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Skema `services.json`, `projects.json`, `trigger-client.json`, backup |
 | [docs/RUST-GUI.md](docs/RUST-GUI.md) | GUI Services/Updater/Remote/Settings, tema, batch async, build frontend |
 | [docs/RUST-SERVICES.md](docs/RUST-SERVICES.md) | Cronical multi-project, queue per project |

@@ -40,7 +40,8 @@ dist\ServiceManager-RS-0.1.0\
 ├─ logs\
 ├─ RUN.txt
 ├─ README.md
-└─ docs\*.md
+├─ AGENTS.md
+└─ docs\*.md (termasuk AGENT-GUIDE.md)
 dist\ServiceManager-RS-0.1.0.zip
 ```
 
@@ -173,7 +174,8 @@ Config dibaca dari `<folder exe>\data`. Gunakan `SERVICE_MANAGER_HOME` untuk mem
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
 - [ ] `cargo test --workspace` (semua test hijau)
-- [ ] `Build-Release.ps1` menghasilkan ZIP dan isinya lengkap
+- [ ] `Build-Release.ps1` menghasilkan ZIP dan isinya lengkap, termasuk `AGENTS.md` dan
+      `docs/AGENT-GUIDE.md`
 - [ ] `sm-gui.exe` terbuka, memuat service, dan batch Start/Stop/Restart menampilkan progress
 - [ ] Tab **Updater** menampilkan registry, test, Check All/Update All, dan log
 - [ ] Tab **Remote** menyimpan config, Preview, Test SSH (key dan password/DPAPI)
