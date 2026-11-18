@@ -7,7 +7,7 @@ use sm_updater::history::{load_history, HistoryEntry};
 use sm_updater::plan::{plan_app, AppPlan};
 use sm_updater::registry::{
     load_config, save_config, AppConfig, HealthCheck, NotifyConfig, PackageManager, Preset,
-    ServicePlan,
+    ServicePlan, UpdaterConfig,
 };
 use sm_updater::runner::{Runner, SystemRunner};
 use sm_updater::services::{ServiceControl, WindowsServiceControl};
@@ -422,8 +422,17 @@ pub fn delete_updater_app(id: String) -> Result<Vec<UpdaterAppView>, String> {
 pub fn test_updater_app(id: String) -> Result<String, String> {
     let path = config_path();
     let config = load_config(&path)?;
+    test_updater_app_at(&path, &config, &id, &SystemRunner)
+}
+
+fn test_updater_app_at(
+    config_path: &Path,
+    config: &UpdaterConfig,
+    id: &str,
+    runner: &dyn Runner,
+) -> Result<String, String> {
     let app = config
-        .find(&id)
+        .find(id)
         .ok_or_else(|| format!("App '{id}' tidak ditemukan."))?;
     config.validate_app(app)?;
 
@@ -434,15 +443,12 @@ pub fn test_updater_app(id: String) -> Result<String, String> {
             project.display()
         ));
     }
-    let git_path = Path::new(config.settings.git_path.trim());
-    if !git_path.is_file() {
-        return Err(format!("Git tidak ditemukan: {}", git_path.display()));
-    }
+    // Test must follow the same effective settings as plan/run/check.
+    let git_path = crate::credentials::effective_git_path_at(config_path)?;
 
-    let runner = SystemRunner;
     let branch = runner
         .run(
-            git_path,
+            &git_path,
             &[
                 "-C".to_string(),
                 app.local_path.clone(),
@@ -460,7 +466,7 @@ pub fn test_updater_app(id: String) -> Result<String, String> {
 
     let remote = runner
         .run(
-            git_path,
+            &git_path,
             &[
                 "-C".to_string(),
                 app.local_path.clone(),
@@ -901,6 +907,87 @@ mod tests {
             Some(&serde_json::json!(["10.0.0.1", "10.0.0.0/24"]))
         );
         assert!(json.get("allowedClientIps").is_none());
+    }
+
+    #[test]
+    fn test_app_uses_effective_git_path_not_legacy_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join("package.json"), "{}").unwrap();
+        let tools = temp.path().join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        let good_git = tools.join("git.exe");
+        for name in ["git.exe", "php.exe", "composer.bat", "npm.cmd"] {
+            std::fs::write(tools.join(name), b"stub").unwrap();
+        }
+        let data = temp.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let config_path = data.join("projects.json");
+
+        let mut settings = Settings::default();
+        settings.tools.git.path = good_git.to_string_lossy().to_string();
+        settings.tools.php.path = tools.join("php.exe").to_string_lossy().to_string();
+        settings.tools.composer.path = tools.join("composer.bat").to_string_lossy().to_string();
+        settings.tools.npm.path = tools.join("npm.cmd").to_string_lossy().to_string();
+        sm_updater::settings::save_settings(&settings_path_for(&config_path), &settings).unwrap();
+
+        let config = UpdaterConfig {
+            settings: UpdaterSettings {
+                git_path: temp
+                    .path()
+                    .join("legacy-missing-git.exe")
+                    .to_string_lossy()
+                    .to_string(),
+                ..UpdaterSettings::default()
+            },
+            apps: vec![AppConfig {
+                id: "demo".into(),
+                name: "Demo".into(),
+                repo_url: "https://example.com/demo.git".into(),
+                local_path: project.to_string_lossy().to_string(),
+                branch: "main".into(),
+                preset: Preset::Node,
+                ..AppConfig::default()
+            }],
+            ..UpdaterConfig::default()
+        };
+        save_config(&config_path, &config).unwrap();
+
+        struct RecordingRunner {
+            programs: Mutex<Vec<PathBuf>>,
+        }
+        impl Runner for RecordingRunner {
+            fn run(
+                &self,
+                program: &Path,
+                args: &[String],
+                _cwd: &Path,
+                _timeout: Duration,
+            ) -> Result<Output, RunnerError> {
+                self.programs.lock().unwrap().push(program.to_path_buf());
+                let stdout = if args.iter().any(|arg| arg == "rev-parse") {
+                    "main\n"
+                } else {
+                    "refs/heads/main\n"
+                };
+                Ok(Output {
+                    exit_code: 0,
+                    stdout: stdout.to_string(),
+                    stderr: String::new(),
+                })
+            }
+        }
+        let runner = RecordingRunner {
+            programs: Mutex::new(Vec::new()),
+        };
+
+        let message = test_updater_app_at(&config_path, &config, "demo", &runner).unwrap();
+        assert!(message.contains("Branch aktif : main"), "{message}");
+        let programs = runner.programs.lock().unwrap();
+        assert_eq!(programs.len(), 2);
+        assert_eq!(programs[0], good_git);
+        assert_eq!(programs[1], good_git);
     }
 
     #[test]
