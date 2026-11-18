@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use sm_config::ConfigPaths;
 use sm_core::ServiceConfig;
+use sm_win::CommandNoWindow;
 
 pub const LOG_MAX_BYTES: u64 = 131_072;
 pub const LOG_MAX_LINES: usize = 600;
@@ -107,6 +108,7 @@ pub fn open_path(path: &Path) -> Result<(), String> {
     }
     std::process::Command::new("explorer.exe")
         .arg(path)
+        .no_window()
         .spawn()
         .map_err(|error| format!("Failed to open path: {error}"))?;
     Ok(())

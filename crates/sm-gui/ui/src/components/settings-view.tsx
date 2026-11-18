@@ -3024,7 +3024,31 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   <div className="text-muted-foreground">Task name</div>
                   <div className="break-all">{taskStatus?.taskName || "—"}</div>
                 </div>
+                <div>
+                  <div className="text-muted-foreground">Console window</div>
+                  <div>
+                    {taskStatus?.installed
+                      ? taskStatus.windowHidden
+                        ? "Hidden"
+                        : "Visible — Repair Task"
+                      : "—"}
+                  </div>
+                </div>
               </div>
+
+              {taskStatus?.installed && !taskStatus.windowHidden && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <div className="font-medium">Task action is not hidden</div>
+                    <p className="text-xs">
+                      Triggering this task may flash a PowerShell window. Click{" "}
+                      <span className="font-medium">Repair Task</span> as Administrator to apply{" "}
+                      <code>-WindowStyle Hidden</code> and the Hidden task setting.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {taskStatusError && (
                 <p className="break-words text-xs text-destructive">{taskStatusError}</p>

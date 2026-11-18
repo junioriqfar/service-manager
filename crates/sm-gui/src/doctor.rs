@@ -727,6 +727,16 @@ pub(crate) fn task_check(task_name: &str, status: Result<TaskStatusView, String>
             ),
             "Open the updater task log and fix the last failure.",
         ),
+        Ok(status) if !status.window_hidden => check(
+            "task.status",
+            "task",
+            label,
+            DoctorStatus::Warning,
+            format!(
+                "Scheduled Task '{task_name}' is installed but its action is not hidden. Triggering it may flash a PowerShell window."
+            ),
+            "Click Repair Task in Settings > Privileged Execution as Administrator to apply -WindowStyle Hidden and the Hidden setting.",
+        ),
         Ok(status) => check(
             "task.status",
             "task",
@@ -1873,6 +1883,7 @@ mod tests {
                 installed: true,
                 state: "Ready".into(),
                 last_result: 0,
+                window_hidden: true,
                 ..TaskStatusView::default()
             }),
         );
@@ -1896,11 +1907,25 @@ mod tests {
                 installed: true,
                 state: "Ready".into(),
                 last_result: 1,
+                window_hidden: true,
                 ..TaskStatusView::default()
             }),
         );
         assert_eq!(nonzero.status, DoctorStatus::Warning);
         assert!(nonzero.detail.contains('1'));
+
+        let not_hidden = task_check(
+            "ServiceManager-Updater",
+            Ok(TaskStatusView {
+                installed: true,
+                state: "Ready".into(),
+                last_result: 0,
+                window_hidden: false,
+                ..TaskStatusView::default()
+            }),
+        );
+        assert_eq!(not_hidden.status, DoctorStatus::Warning);
+        assert!(not_hidden.detail.contains("not hidden"));
     }
 
     #[test]

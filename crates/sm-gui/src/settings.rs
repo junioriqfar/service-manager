@@ -123,6 +123,9 @@ $lastRun = ''
 if ($null -ne $info -and $null -ne $info.LastRunTime) { $lastRun = $info.LastRunTime.ToString('o') }
 $lastResult = 0
 if ($null -ne $info -and $null -ne $info.LastTaskResult) { $lastResult = [long]$info.LastTaskResult }
+$arguments = ''
+if ($task.Actions.Count -gt 0) { $arguments = [string]$task.Actions[0].Arguments }
+$windowHidden = [bool]$task.Settings.Hidden -and ($arguments -match '-WindowStyle\s+Hidden')
 [pscustomobject]@{
     installed = $true
     taskName = $name
@@ -132,6 +135,7 @@ if ($null -ne $info -and $null -ne $info.LastTaskResult) { $lastResult = [long]$
     logonType = [string]$task.Principal.LogonType
     lastRun = $lastRun
     lastResult = $lastResult
+    windowHidden = $windowHidden
 } | ConvertTo-Json -Compress
 "#;
 
@@ -233,6 +237,9 @@ pub struct TaskStatusView {
     pub logon_type: String,
     pub last_run: String,
     pub last_result: i64,
+    /// True when the task setting `Hidden` is enabled *and* the action uses
+    /// `powershell.exe -WindowStyle Hidden`.
+    pub window_hidden: bool,
     pub error: Option<String>,
 }
 
@@ -263,6 +270,8 @@ struct TaskStatusJson {
     last_run: String,
     #[serde(default)]
     last_result: i64,
+    #[serde(default)]
+    window_hidden: bool,
 }
 
 pub(crate) struct ToolSpec {
@@ -1178,6 +1187,7 @@ fn parse_task_status_json(task_name: &str, json: &str) -> Result<TaskStatusView,
         logon_type: raw.logon_type.trim().to_string(),
         last_run,
         last_result: raw.last_result,
+        window_hidden: raw.window_hidden,
         error: None,
     })
 }
@@ -1456,7 +1466,7 @@ mod tests {
 
     #[test]
     fn parses_installed_task_status_json() {
-        let json = r#"{"installed":true,"taskName":"ServiceManager-Updater","state":"Ready","runLevel":"Highest","user":"DOMAIN\\User","logonType":"Interactive","lastRun":"2026-11-16T09:30:00.0000000+07:00","lastResult":0}"#;
+        let json = r#"{"installed":true,"taskName":"ServiceManager-Updater","state":"Ready","runLevel":"Highest","user":"DOMAIN\\User","logonType":"Interactive","lastRun":"2026-11-16T09:30:00.0000000+07:00","lastResult":0,"windowHidden":true}"#;
         let status = parse_task_status_json("ServiceManager-Updater", json).unwrap();
 
         assert!(status.installed);
@@ -1467,7 +1477,16 @@ mod tests {
         assert_eq!(status.logon_type, "Interactive");
         assert!(status.last_run.contains("2026-11-16"));
         assert_eq!(status.last_result, 0);
+        assert!(status.window_hidden);
         assert!(status.error.is_none());
+    }
+
+    #[test]
+    fn parses_task_status_without_hidden_action_flag() {
+        let json = r#"{"installed":true,"taskName":"ServiceManager-Updater","state":"Ready","lastResult":0}"#;
+        let status = parse_task_status_json("ServiceManager-Updater", json).unwrap();
+        assert!(status.installed);
+        assert!(!status.window_hidden);
     }
 
     #[test]

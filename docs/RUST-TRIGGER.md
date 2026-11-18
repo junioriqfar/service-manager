@@ -110,8 +110,14 @@ Default:
 - Task name: `ServiceManager-Updater`
 - Logon type: `Interactive` (harus ada sesi user aktif)
 - Run level: **Highest**
-- Action: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...\Run-UpdaterTaskAction.ps1`
+- Action: `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ...\Run-UpdaterTaskAction.ps1`
+- Task setting **Hidden** aktif; action dan child `sm-updater.exe` berjalan tanpa jendela console.
 - Tidak ada trigger otomatis; task hanya dijalankan manual.
+
+Task lama yang didaftarkan sebelum perubahan ini harus di-**Repair Task** (atau
+jalankan ulang `Install-UpdaterTask.ps1` sebagai Administrator) agar action
+`-WindowStyle Hidden` dan setting `Hidden` ikut diterapkan. Tanpa repair, task lama
+masih bisa memunculkan jendela PowerShell saat dipicu.
 
 Untuk akun yang tidak selalu login, gunakan `-LogonType Password` (akan meminta
 password) atau `-LogonType S4U`. S4U tidak selalu bisa mengakses kredensial jaringan
@@ -204,6 +210,7 @@ Langsung di server, tanpa SSH:
 | Task jalan tapi wrapper timeout | Cek `Get-ScheduledTaskInfo`, log `logs/updater-task-*.log`, dan lock `data/updater.lock` |
 | `IP ... tidak diizinkan` | Tambahkan IP/CIDR ke `trigger.allowedClientIPs` atau per-app `allowedClientIPs` |
 | Service gagal stop/start | Task belum `RunLevel Highest` atau user bukan Administrator |
+| Jendela PowerShell/cmd muncul saat task dipicu | Task lama belum memakai action `-WindowStyle Hidden`/setting `Hidden`; klik **Repair Task** sebagai Administrator atau jalankan ulang `Install-UpdaterTask.ps1`. |
 | Git remote gagal di task | Gunakan `-LogonType Interactive`/`Password` agar DPAPI/GCM user tersedia |
 
 ## Catatan Rilis

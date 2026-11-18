@@ -523,6 +523,7 @@ export interface TaskStatus {
   logonType: string;
   lastRun: string;
   lastResult: number;
+  windowHidden: boolean;
   error: string | null;
 }
 

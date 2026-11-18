@@ -132,7 +132,8 @@ gunakan CLI `sm-trigger`.
 
 Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
 
-- Proses console anak (PowerShell untuk status Scheduled Task, Git, `cmd.exe`) dijalankan dengan flag Windows `CREATE_NO_WINDOW`, sehingga tidak ada jendela `cmd` yang muncul saat tab Settings dibuka atau tool diuji.
+- Proses console anak (PowerShell untuk status Scheduled Task, Git, `cmd.exe`) dijalankan dengan flag Windows `CREATE_NO_WINDOW`, sehingga tidak ada jendela `cmd` yang muncul saat tab Settings dibuka atau tool diuji. Test source-audit memastikan setiap `Command::new` di jalur GUI memakai `.no_window()`.
+- Scheduled Task action memakai `powershell.exe -NoProfile -WindowStyle Hidden ...` dan setting **Hidden**; task lama perlu **Repair Task** sekali.
 - **Toolchain**: kartu untuk Git, PHP, Composer, Node, npm, pnpm, yarn, Bun, Go,
   Apache, dan NSSM. Setiap kartu memiliki path, **Browse…**, **Auto-detect**,
   **Test**, dan badge versi/status.
@@ -205,10 +206,13 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
   berubah sampai **Save Settings**. File non-`.json`, JSON invalid, settings invalid,
   dan karakter kontrol ditolak.
 - **Privileged Execution**: status Scheduled Task (`installed`, state, run level,
-  user, logon type, last run, last result), field task name/user/logon type, dan
-  tombol **Install Task**/**Repair Task**, **Remove Task**, **Test Task**.
-  Install/remove membutuhkan Administrator dan memanggil
-  `scripts/Install-UpdaterTask.ps1` atau `Unregister-ScheduledTask`; test memanggil
+  user, logon type, last run, last result, console window hidden/visible), field
+  task name/user/logon type, dan tombol **Install Task**/**Repair Task**,
+  **Remove Task**, **Test Task**. Task lama yang action-nya belum memakai
+  `-WindowStyle Hidden`/setting `Hidden` menampilkan warning **Task action is not
+  hidden** dan harus di-**Repair Task** sekali. Install/remove membutuhkan
+  Administrator dan memanggil `scripts/Install-UpdaterTask.ps1` atau
+  `Unregister-ScheduledTask`; test memanggil
   `scripts/Invoke-UpdaterTask.ps1 -Check`.
 - **Diagnostics**: tool wajib yang kosong, path tool yang tidak ditemukan,
   Scheduled Task yang belum terpasang, error status task, dan notice **Legacy
@@ -384,7 +388,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 458 test):
+Test GUI mencakup (total workspace 460 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

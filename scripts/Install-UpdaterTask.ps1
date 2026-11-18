@@ -21,13 +21,14 @@ if ([string]::IsNullOrWhiteSpace($UserId)) {
 
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$actionScript`"" `
+    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$actionScript`"" `
     -WorkingDirectory $root
 
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -MultipleInstances IgnoreNew `
+    -Hidden `
     -ExecutionTimeLimit (New-TimeSpan -Hours 2)
 
 $principalParams = @{

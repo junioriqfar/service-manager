@@ -113,6 +113,14 @@ mod ui_tests {
     const TYPES: &str = include_str!("../ui/src/lib/types.ts");
     const HINT: &str = include_str!("../ui/src/components/hint.tsx");
     const TOOLTIP: &str = include_str!("../ui/src/components/ui/tooltip.tsx");
+    // Runtime process-spawning sources. Keep this list in sync when adding a
+    // new GUI-side Command::new. Console-only crates (sm-trigger, sm-diag,
+    // sm-updater CLI) are intentionally excluded.
+    const GUI_REMOTE_SOURCE: &str = include_str!("remote.rs");
+    const GUI_UTIL_SOURCE: &str = include_str!("util.rs");
+    const UPDATER_RUNNER_SOURCE: &str = include_str!("../../sm-updater/src/runner.rs");
+    const UPDATER_CREDENTIAL_SOURCE: &str = include_str!("../../sm-updater/src/credential.rs");
+    const WIN_PROCESS_SOURCE: &str = include_str!("../../sm-win/src/process.rs");
 
     fn all_sources() -> String {
         format!(
@@ -429,6 +437,8 @@ mod ui_tests {
             "Repair Task",
             "Remove Task",
             "Test Task",
+            "Console window",
+            "Task action is not hidden",
             "Legacy fallback",
             "Missing required tools",
             "Invalid tool path",
@@ -609,5 +619,40 @@ mod ui_tests {
         assert!(include_str!("main.rs").contains("credentials::test_git_credential"));
         assert!(include_str!("main.rs").contains("credentials::clear_git_credential"));
         assert!(include_str!("main.rs").contains("firewall::read_ssh_firewall_status"));
+    }
+
+    fn assert_spawned_commands_are_hidden(name: &str, source: &str) {
+        let mut rest = source;
+        let mut checked = 0;
+        while let Some(index) = rest.find("Command::new") {
+            let tail = &rest[index..];
+            let boundary = [".spawn()", ".output()", ".status()"]
+                .iter()
+                .filter_map(|needle| tail.find(needle))
+                .min()
+                .unwrap_or_else(|| tail.len().min(800));
+            let segment = &tail[..boundary.clamp(1, 800)];
+            assert!(
+                segment.contains(".no_window()"),
+                "{name}: Command::new without .no_window() near: {}",
+                segment.chars().take(140).collect::<String>()
+            );
+            checked += 1;
+            rest = &tail[boundary.max(1)..];
+        }
+        assert!(checked > 0, "{name}: expected at least one Command::new");
+    }
+
+    #[test]
+    fn every_gui_used_child_process_hides_its_console_window() {
+        for (name, source) in [
+            ("sm-gui/remote.rs", GUI_REMOTE_SOURCE),
+            ("sm-gui/util.rs", GUI_UTIL_SOURCE),
+            ("sm-updater/runner.rs", UPDATER_RUNNER_SOURCE),
+            ("sm-updater/credential.rs", UPDATER_CREDENTIAL_SOURCE),
+            ("sm-win/process.rs", WIN_PROCESS_SOURCE),
+        ] {
+            assert_spawned_commands_are_hidden(name, source);
+        }
     }
 }
