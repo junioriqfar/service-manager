@@ -28,18 +28,13 @@ import {
 import { toast } from "sonner";
 
 import { Hint } from "@/components/hint";
+import { PathInput } from "@/components/path-input";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -370,32 +365,30 @@ function ToolCard({
 
       {definition.key === "apache" && (
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label className="text-xs" htmlFor="settings-apache-root">
-              Apache root
-            </Label>
-            <Input
-              id="settings-apache-root"
-              value={value.root ?? ""}
-              onChange={(event) => onChange({ root: event.target.value })}
-              placeholder="C:\\laragon\\bin\\apache\\httpd-2.4"
-              className="h-8 font-mono text-xs"
-              title="Apache installation root; config is resolved relative to this folder."
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs" htmlFor="settings-apache-config">
-              Apache config
-            </Label>
-            <Input
-              id="settings-apache-config"
-              value={value.config ?? ""}
-              onChange={(event) => onChange({ config: event.target.value })}
-              placeholder="conf/httpd.conf"
-              className="h-8 font-mono text-xs"
-              title="Apache config path, relative to the root or absolute."
-            />
-          </div>
+          <PathInput
+            id="settings-apache-root"
+            label="Apache root"
+            mode="directory"
+            value={value.root ?? ""}
+            onChange={(root) => onChange({ root })}
+            placeholder="C:\\laragon\\bin\\apache\\httpd-2.4"
+            inputClassName="h-8 font-mono text-xs"
+            hint="Browse for the local Apache root folder; config is resolved relative to it"
+            showLabel
+          />
+          <PathInput
+            id="settings-apache-config"
+            label="Apache config"
+            mode="file"
+            value={value.config ?? ""}
+            onChange={(config) => onChange({ config })}
+            placeholder="conf/httpd.conf"
+            inputClassName="h-8 font-mono text-xs"
+            hint="Browse for the local Apache config file"
+            filterName="Apache configuration"
+            extensions={["conf", "cfg", "ini"]}
+            showLabel
+          />
         </div>
       )}
 
@@ -1128,47 +1121,31 @@ function GitCredentialsCard() {
         )}
       </CardContent>
 
-      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4" />
-              Clear Git credential?
-            </DialogTitle>
-            <DialogDescription>
-              Ask Git Credential Manager to remove the stored credential for{" "}
-              <span className="font-mono">
-                {username.trim() || "(username)"}@{host || "(host)"}
-              </span>
-              . The token is not shown and settings.json is not changed.
-            </DialogDescription>
-          </DialogHeader>
-          {error && (
-            <div className="whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setClearOpen(false)}
-              disabled={busy === "clear"}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void clearCredential()}
-              disabled={busy === "clear"}
-            >
-              {busy === "clear" ? <Loader2 className="animate-spin" /> : <Trash2 />}
-              Clear
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={clearOpen}
+        onOpenChange={setClearOpen}
+        title="Clear Git credential?"
+        description={
+          <>
+            Ask Git Credential Manager to remove the stored credential for{" "}
+            <span className="font-mono">
+              {username.trim() || "(username)"}@{host || "(host)"}
+            </span>
+            . The token is not shown and settings.json is not changed.
+          </>
+        }
+        icon={<Trash2 className="h-4 w-4 text-destructive" />}
+        destructive
+        confirmLabel="Clear"
+        loading={busy === "clear"}
+        onConfirm={() => void clearCredential()}
+      >
+        {error && (
+          <div className="whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+      </ConfirmDialog>
     </Card>
   );
 }
@@ -1939,18 +1916,6 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
       toast.error(message, { duration: 8000 });
     } finally {
       setToolBusy(key, null);
-    }
-  }
-
-  async function browseLogDir() {
-    if (!draft) return;
-    try {
-      const selected = await invoke<string | null>("pick_directory", {
-        current: draft.updater.logDir || null,
-      });
-      if (selected) updateUpdater({ logDir: selected });
-    } catch (error) {
-      toast.error(errorMessage(error));
     }
   }
 
@@ -2766,27 +2731,17 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                 <Label className="text-xs" htmlFor="settings-log-dir">
                   Log directory
                 </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="settings-log-dir"
-                    value={draft.updater.logDir}
-                    onChange={(event) => updateUpdater({ logDir: event.target.value })}
-                    placeholder="C:\\tools\\ServiceManager\\logs"
-                    className="h-8 flex-1 font-mono text-xs"
-                    title="Updater logs are written here. Empty uses the default logs folder next to the config."
-                  />
-                  <Hint label="Browse for the updater log directory">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void browseLogDir()}
-                    >
-                      <FolderOpen />
-                      Browse…
-                    </Button>
-                  </Hint>
-                </div>
+                <PathInput
+                  id="settings-log-dir"
+                  mode="directory"
+                  value={draft.updater.logDir}
+                  onChange={(logDir) => updateUpdater({ logDir })}
+                  placeholder="C:\\tools\\ServiceManager\\logs"
+                  inputClassName="h-8 font-mono text-xs"
+                  hint="Browse for the local updater log directory"
+                  helpText="Updater logs are written here. Empty uses the default logs folder next to the config."
+                  showLabel={false}
+                />
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -3311,7 +3266,7 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
         </Card>
       </div>
 
-      <Dialog
+      <ModalShell
         open={phpDialogOpen && phpPathChange !== null}
         onOpenChange={(open) => {
           if (open) {
@@ -3320,87 +3275,12 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             dismissPhpPathChange();
           }
         }}
-      >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Terminal className="h-4 w-4" />
-              PHP references found
-            </DialogTitle>
-            <DialogDescription>
-              The saved PHP path changed, but some app commands still contain the old PHP path or
-              root. Nothing is rewritten until you choose an action.
-            </DialogDescription>
-          </DialogHeader>
-
-          {phpPathChange && (
-            <div className="space-y-3">
-              <div className="grid gap-2 rounded-md border bg-background/40 p-3 text-xs sm:grid-cols-2">
-                <div className="min-w-0">
-                  <div className="text-muted-foreground">Old PHP path</div>
-                  <div className="break-all font-mono">{phpPathChange.oldPath || "—"}</div>
-                  <div className="mt-1 break-all font-mono text-muted-foreground">
-                    Old PHP root: {phpPathChange.oldRoot || "—"}
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-muted-foreground">New PHP path</div>
-                  <div className="break-all font-mono">{phpPathChange.newPath || "—"}</div>
-                  <div className="mt-1 break-all font-mono text-muted-foreground">
-                    New PHP root: {phpPathChange.newRoot || "—"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="text-xs font-medium">
-                  References ({phpPathChange.references.length})
-                </div>
-                <div className="max-h-64 space-y-1 overflow-auto pr-1">
-                  {phpPathChange.references.map((reference, index) => (
-                    <div
-                      key={`${reference.appId}-${reference.field}-${index}`}
-                      className="rounded-md border bg-background/40 px-2 py-2 text-xs"
-                    >
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-medium">
-                          {reference.appName || reference.appId}
-                        </span>
-                        <Badge variant="outline" title="App id">
-                          {reference.appId}
-                        </Badge>
-                        <Badge
-                          variant="secondary"
-                          title="Command field that contains the old PHP path/root"
-                        >
-                          {reference.field}
-                        </Badge>
-                      </div>
-                      <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-muted-foreground">
-                        {reference.value}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                <strong>Use {"${PHP}"}</strong> rewrites the old PHP executable to {"${PHP}"} and the
-                old PHP folder to {"${PHP_HOME}"}. <strong>Use new path</strong> writes the saved new
-                path/root literally. Apply only to apps listed above; other apps are not changed.
-                projects.json is backed up first.
-              </p>
-
-              {phpApplyError && (
-                <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                  <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div>{phpApplyError}</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
+        title="PHP references found"
+        description="The saved PHP path changed, but some app commands still contain the old PHP path or root. Nothing is rewritten until you choose an action."
+        icon={<Terminal className="h-5 w-5 text-primary" />}
+        maxWidthClass="sm:max-w-3xl"
+        footer={
+          <>
             <Button
               type="button"
               onClick={() => void applyPhpReferences("variable")}
@@ -3429,54 +3309,100 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
             >
               Leave
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={pruneOpen} onOpenChange={setPruneOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4" />
-              Clean updater logs?
-            </DialogTitle>
-            <DialogDescription>
-              Delete logs older than {draft.updater.logRetentionDays} days? Active/recent logs are skipped.
-            </DialogDescription>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            Targets <code>project-update-*.log</code> and <code>updater-task-*.log</code> in the
-            updater log directory, plus <code>project-update-*.log</code> under each registered
-            app&apos;s <code>storage/logs</code>. Files modified in the last 5 minutes are never
-            deleted. Update history is append-only and is not pruned.
-          </p>
-          {pruneError && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {pruneError}
+          </>
+        }
+      >
+        {phpPathChange && (
+          <div className="space-y-3">
+            <div className="grid gap-2 rounded-md border bg-background/40 p-3 text-xs sm:grid-cols-2">
+              <div className="min-w-0">
+                <div className="text-muted-foreground">Old PHP path</div>
+                <div className="break-all font-mono">{phpPathChange.oldPath || "—"}</div>
+                <div className="mt-1 break-all font-mono text-muted-foreground">
+                  Old PHP root: {phpPathChange.oldRoot || "—"}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="text-muted-foreground">New PHP path</div>
+                <div className="break-all font-mono">{phpPathChange.newPath || "—"}</div>
+                <div className="mt-1 break-all font-mono text-muted-foreground">
+                  New PHP root: {phpPathChange.newRoot || "—"}
+                </div>
+              </div>
             </div>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPruneOpen(false)}
-              disabled={pruning}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void pruneLogsNow()}
-              disabled={pruning}
-              title="Delete old log files now"
-            >
-              {pruning ? <Loader2 className="animate-spin" /> : <Trash2 />}
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+            <div className="space-y-1">
+              <div className="text-xs font-medium">
+                References ({phpPathChange.references.length})
+              </div>
+              <div className="space-y-1">
+                {phpPathChange.references.map((reference, index) => (
+                  <div
+                    key={`${reference.appId}-${reference.field}-${index}`}
+                    className="rounded-md border bg-background/40 px-2 py-2 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium">
+                        {reference.appName || reference.appId}
+                      </span>
+                      <Badge variant="outline" title="App id">
+                        {reference.appId}
+                      </Badge>
+                      <Badge
+                        variant="secondary"
+                        title="Command field that contains the old PHP path/root"
+                      >
+                        {reference.field}
+                      </Badge>
+                    </div>
+                    <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-muted-foreground">
+                      {reference.value}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              <strong>Use {"${PHP}"}</strong> rewrites the old PHP executable to {"${PHP}"} and the
+              old PHP folder to {"${PHP_HOME}"}. <strong>Use new path</strong> writes the saved new
+              path/root literally. Apply only to apps listed above; other apps are not changed.
+              projects.json is backed up first.
+            </p>
+
+            {phpApplyError && (
+              <div className="flex items-start gap-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>{phpApplyError}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </ModalShell>
+
+      <ConfirmDialog
+        open={pruneOpen}
+        onOpenChange={setPruneOpen}
+        title="Clean updater logs?"
+        description={`Delete logs older than ${draft.updater.logRetentionDays} days? Active/recent logs are skipped.`}
+        icon={<Trash2 className="h-4 w-4 text-destructive" />}
+        destructive
+        confirmLabel="Delete"
+        loading={pruning}
+        onConfirm={() => void pruneLogsNow()}
+      >
+        <p className="text-xs text-muted-foreground">
+          Targets <code>project-update-*.log</code> and <code>updater-task-*.log</code> in the
+          updater log directory, plus <code>project-update-*.log</code> under each registered
+          app&apos;s <code>storage/logs</code>. Files modified in the last 5 minutes are never
+          deleted. Update history is append-only and is not pruned.
+        </p>
+        {pruneError && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {pruneError}
+          </div>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

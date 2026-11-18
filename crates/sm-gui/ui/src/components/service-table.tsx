@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { ServiceStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -36,7 +36,6 @@ import {
   countsLabel,
   restartLabel,
   startupLabel,
-  statusVariant,
   typeLabel,
 } from "@/lib/service";
 import type { ServiceAction, ServiceRow } from "@/lib/types";
@@ -108,7 +107,7 @@ export function ServiceTable({
         <Table containerClassName="h-full overflow-auto" className="min-w-[820px] table-fixed">
           <TableHeader className="sticky top-0 z-10 bg-muted">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[112px] text-xs font-semibold uppercase tracking-wide">
+              <TableHead className="w-[132px] text-xs font-semibold uppercase tracking-wide">
                 Status
               </TableHead>
               <TableHead className="w-[140px] text-xs font-semibold uppercase tracking-wide">
@@ -165,16 +164,12 @@ export function ServiceTable({
                         onContextMenu={() => onSelect(service.name)}
                       >
                         <TableCell>
-                          <Badge
-                            variant={statusVariant(service.state)}
-                            className="max-w-full whitespace-nowrap px-2 py-0.5 text-[11px]"
-                            title={service.error ?? service.stateLabel}
-                          >
-                            {pendingService === service.name && (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            )}
-                            {service.stateLabel}
-                          </Badge>
+                          <ServiceStatusBadge
+                            state={service.state}
+                            label={service.stateLabel}
+                            pending={pendingService === service.name}
+                            hint={service.error || undefined}
+                          />
                         </TableCell>
                         <TableCell className="truncate font-medium" title={service.name}>
                           {service.name}

@@ -16,27 +16,6 @@ export function restartLabel(service: Pick<ServiceRow, "restartOnCrash" | "resta
   return service.restartOnCrash ? `Yes (${service.restartDelaySec}s)` : "No";
 }
 
-export function statusVariant(
-  state: string,
-): "success" | "destructive" | "warning" | "secondary" | "outline" {
-  switch (state) {
-    case "running":
-      return "success";
-    case "stopped":
-      return "destructive";
-    case "notInstalled":
-      return "secondary";
-    case "startPending":
-    case "stopPending":
-    case "continuePending":
-    case "pausePending":
-    case "paused":
-      return "warning";
-    default:
-      return "outline";
-  }
-}
-
 export function countsLabel(services: ServiceRow[]): string {
   const installed = services.filter((service) => service.installed).length;
   const running = services.filter((service) => service.state === "running").length;

@@ -3,14 +3,7 @@ import { Import as ImportIcon, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { typeLabel } from "@/lib/service";
 import type { ServiceConfig } from "@/lib/types";
@@ -56,15 +49,41 @@ export function ImportDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Import Services</DialogTitle>
-          <DialogDescription>
-            Detected NSSM/Apache/PostgreSQL services that are not in the config.
-          </DialogDescription>
-        </DialogHeader>
-
+    <ModalShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Import Services"
+      description="Detected NSSM/Apache/PostgreSQL services that are not in the config."
+      icon={<ImportIcon className="h-5 w-5 text-primary" />}
+      maxWidthClass="sm:max-w-xl"
+      footerClassName="items-center gap-3 sm:justify-between"
+      footer={
+        <>
+          <span className="text-xs text-muted-foreground">
+            {candidates.length} candidate(s) · {selected.size} selected
+          </span>
+          <div className="flex w-full justify-end gap-2 sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={importing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => onImport([...selected])}
+              disabled={importing}
+            >
+              {importing ? <Loader2 className="animate-spin" /> : <ImportIcon />}
+              Import
+            </Button>
+          </div>
+        </>
+      }
+    >
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">Select the services to add to the config.</p>
           <Button type="button" variant="ghost" size="sm" onClick={toggleAll} disabled={importing}>
@@ -104,31 +123,7 @@ export function ImportDialog({
             })}
           </div>
         </ScrollArea>
-
-        <DialogFooter className="items-center gap-3 sm:justify-between sm:space-x-0">
-          <span className="text-xs text-muted-foreground">
-            {candidates.length} candidate(s) · {selected.size} selected
-          </span>
-          <div className="flex w-full justify-end gap-2 sm:w-auto">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={importing}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => onImport([...selected])}
-              disabled={importing}
-            >
-              {importing ? <Loader2 className="animate-spin" /> : <ImportIcon />}
-              Import
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </ModalShell>
   );
 }

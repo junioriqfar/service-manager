@@ -46,12 +46,22 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 
 - UI React + TypeScript (Vite, Tailwind CSS, shadCN UI) sepenuhnya dalam Bahasa Inggris.
 - Tema terang/gelap/sistem dengan ikon Sun/Moon/Monitor; pilihan disimpan di `localStorage`, default mengikuti preferensi sistem.
-- Tombol **Browse…** pada Application (file picker) dan Working Directory (folder picker).
+- Path fields use the reusable `PathInput`: a normal text input plus an icon-only **Browse** button
+  (`aria-label`, `title`, and `Hint` tooltip). Modes: existing file, directory, executable, and
+  save/new file. `pick_file` and `pick_save_file` are Tauri commands in `commands.rs`; they reuse
+  `pick_directory`/`pick_executable` behavior, seed the dialog from the current value, and accept
+  an optional filter/default filename.
+- Local service paths use `PathInput`: executable (executable picker), working directory, stdout
+  and stderr logs (save picker), Apache root (directory), Apache config (file), and PGDATA
+  (directory). Settings use it for the Apache root/config and updater log directory, while the
+  toolchain path keeps its existing Browse/Auto-detect/Test row. Remote identity file is local and
+  browsable; Wrapper, Remote sm-updater.exe, and Remote projects.json stay manual inputs marked
+  "Server-side path; browse is unavailable".
 - Klik kanan baris service menampilkan context menu: Edit, Install, Start, Stop, Restart, Open Log, Delete.
 - Toolbar atas hanya berisi aksi global: Start All, Stop All, Restart All, Backup, Restore, Folder, App Log, About.
 - Add, Import, dan Refresh dipindahkan ke header **Service List**; aksi per-service hanya lewat context menu.
 
-- Tabel service: status, nama, display name, jenis, application, startup, restart.
+- Tabel service: status (icon + colored badge + explanatory tooltip), nama, display name, jenis, application, startup, restart.
 - Form tambah/edit dengan field khusus Apache (`apacheRoot`, `apacheConfig`) dan PostgreSQL (`pgData`, `pgAccount`).
 - Import service terpasang (NSSM/Apache/PostgreSQL) via enumerasi SCM.
 - Log viewer: stdout + stderr, auto-refresh 2 detik, batas 128 KB dan 600 baris, tombol buka file.
@@ -61,11 +71,56 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 - Status bar: jumlah terdaftar/terpasang/berjalan.
 - Pola service global Cronical dan queue per project dijelaskan di [RUST-SERVICES.md](RUST-SERVICES.md).
 
+## UI Conventions (modal, status, actions, and paths)
+
+These conventions are shared by every tab and are covered by Rust UI source tests in
+`crates/sm-gui/src/main.rs`.
+
+### Modal shell
+
+- Every dialog uses `components/ui/modal-shell.tsx` (`ModalShell`) or the derived
+  `ConfirmDialog`; no feature file calls `DialogContent` directly.
+- `DialogContent` is `flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0`.
+  Header and footer are `shrink-0` with a bottom/top border; only the body
+  (`min-h-0 flex-1 overflow-y-auto px-6 py-5`) scrolls. Footer actions therefore stay
+  visible at any window height and long forms never push the buttons off-screen.
+- The fixed header keeps `pr-14` so the Radix close button never overlaps the title.
+- `ConfirmDialog` provides `title`, `description`, `confirmLabel`, `cancelLabel`,
+  `destructive`, and `loading`; destructive confirmations use the destructive button
+  variant and show a spinner while the action is in flight.
+- Dialogs that must not close while work is running (batch progress) pass
+  `hideClose` and block Escape/outside interaction through `contentProps`.
+
+### Status badges
+
+- `components/status-badge.tsx` renders `StatusBadge` (shadCN `Badge` + lucide icon +
+  `Hint` tooltip). Tooltips explain the operational meaning, not just the state word.
+- Services: `running` → success/PlayCircle, `stopped` → destructive/Square,
+  `paused`/pending → warning/PauseCircle or spinner Loader, `notInstalled` →
+  secondary/ServerOff, unknown → outline/HelpCircle. Service errors override the hint.
+- Updater: `updated` → success/CheckCircle2, `up-to-date` → secondary/CircleCheck,
+  `check` → outline/Search, `ready` → success/CheckCircle2, `dirty` →
+  warning/AlertTriangle, `blocked-migration` → warning/ShieldAlert,
+  `clone-required` → warning/Download, `degraded` → warning/Activity, `failed`/
+  `error` → destructive/XCircle, `forbidden` → destructive/Ban, `idle` →
+  outline/Circle. The same badge is used in the app table, plan dialog, history
+  entries, run outcomes, and plan service rows.
+
+### Updater row actions
+
+- The Actions column always shows only **Preview Plan** and **Check** as icon buttons.
+  Both have `aria-label`, `title`, and a `Hint` tooltip, and stop row-click propagation.
+- The rightmost `MoreHorizontal` button opens a `DropdownMenu` with Run, Test, Log,
+  History, Edit, a separator, and destructive Delete. Menu items carry titles and do
+  not select the row.
+- The right-click context menu on the row is unchanged and still exposes the full
+  action list (Preview Plan, Run, Check, Test, Log, History, Edit, Delete).
+
 ## Tab Updater
 
 Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings**.
 
-- Tabel app registry: nama/ID, branch, toolchain, service lifecycle, status, last update.
+- Tabel app registry: nama/ID, branch, toolchain, service lifecycle, status (icon + colored badge + tooltip), last update.
   Untuk preset Laravel ditampilkan versi PHP efektif; app dengan `webServerService`
   menampilkan nama service Apache dan versi Apache dari settings efektif.
 - Jika `settings.json.maintenance.enabled`, banner peringatan **Maintenance mode is
@@ -74,8 +129,10 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
   `load_maintenance_status` saat mount/refresh dan tidak memiliki tombol disable;
   maintenance hanya dinonaktifkan dari tab Settings.
 - Tombol **Refresh**, **Add App**, **Check All**, **Update All**.
-- Aksi per app: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
-- Form registrasi/edit: repo URL, local path (Browse…), branch, preset, package manager,
+- Aksi per app: **Preview Plan** dan **Check** selalu tampil sebagai icon button; Run, Test,
+  Log, History, Edit, dan Delete ada di menu overflow tiga-titik (dan tetap tersedia di
+  context menu klik kanan).
+- Form registrasi/edit: repo URL, local path (folder picker), branch, preset, package manager,
   composer/artisan/package-install/build, install/build command, queue restart,
   **Dirty ignore patterns**, web server Apache opsional, allowlist IP per app, service
   lifecycle, clone-on-first-run, health check, dan webhook.
@@ -108,8 +165,8 @@ Header memiliki empat tab: **Services**, **Updater**, **Remote**, dan **Settings
 - **History** (context menu, setelah Log) memanggil `load_updater_history` dan
   menampilkan 50 entry terbaru per app: timestamp, badge status, pesan, commit
   pendek, durasi, dan client IP trigger. Dialog punya state loading/error serta empty
-  state **No history yet.**, dan area daftar bisa di-scroll. History bersifat
-  append-only dan tidak dihapus oleh **Clean Logs Now**.
+  state **No history yet.**, dan body dialog yang bisa di-scroll (header/footer tetap).
+  History bersifat append-only dan tidak dihapus oleh **Clean Logs Now**.
 - Klik kanan baris app: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
 - Tooltip tersedia pada tab, tombol aksi, dan field penting.
 - Tidak ada polling/auto-update. Aksi hanya dipicu tombol atau `sm-trigger` via SSH.

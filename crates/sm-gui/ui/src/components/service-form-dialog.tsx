@@ -2,25 +2,17 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   AlertCircle,
   Database,
-  FileSearch,
   FileText,
-  FolderOpen,
   Loader2,
   Save,
   Server,
 } from "lucide-react";
 
+import { PathInput } from "@/components/path-input";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ModalShell } from "@/components/ui/modal-shell";
 import {
   Select,
   SelectContent,
@@ -156,40 +148,19 @@ export function ServiceFormDialog({
     setValues((previous) => ({ ...previous, [key]: value }));
   }
 
-  async function browseExecutable() {
-    setError(null);
-    try {
-      const selected = await invoke<string | null>("pick_executable", {
-        current: values.executable,
-      });
-      if (!selected) return;
-      setValues((previous) => {
-        const next = { ...previous, executable: selected };
-        if (!previous.workingDirectory.trim()) {
-          const separator = Math.max(selected.lastIndexOf("\\"), selected.lastIndexOf("/"));
-          if (separator > 0) next.workingDirectory = selected.slice(0, separator);
-        }
-        if (!previous.displayName.trim()) {
-          const fileName = selected.split(/[\\/]/).pop() || "";
-          next.displayName = fileName.replace(/\.exe$/i, "");
-        }
-        return next;
-      });
-    } catch (browseError) {
-      setError(errorMessage(browseError));
-    }
-  }
-
-  async function browseWorkingDirectory() {
-    setError(null);
-    try {
-      const selected = await invoke<string | null>("pick_directory", {
-        current: values.workingDirectory,
-      });
-      if (selected) update("workingDirectory", selected);
-    } catch (browseError) {
-      setError(errorMessage(browseError));
-    }
+  function handleExecutableBrowsed(selected: string) {
+    setValues((previous) => {
+      const next = { ...previous, executable: selected };
+      if (!previous.workingDirectory.trim()) {
+        const separator = Math.max(selected.lastIndexOf("\\"), selected.lastIndexOf("/"));
+        if (separator > 0) next.workingDirectory = selected.slice(0, separator);
+      }
+      if (!previous.displayName.trim()) {
+        const fileName = selected.split(/[\\/]/).pop() || "";
+        next.displayName = fileName.replace(/\.exe$/i, "");
+      }
+      return next;
+    });
   }
 
   async function save() {
@@ -243,29 +214,50 @@ export function ServiceFormDialog({
   const isPostgres = values.serviceType === "postgresql";
 
   return (
-    <Dialog
+    <ModalShell
       open={open}
       onOpenChange={(nextOpen) => {
         if (!saving) onOpenChange(nextOpen);
       }}
-    >
-      <DialogContent className="flex max-h-[92vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[860px]">
-        <DialogHeader className="border-b px-6 py-4 pr-14">
-          <DialogTitle>{edit ? "Edit Service" : "Add Service"}</DialogTitle>
-          <DialogDescription>
+      title={edit ? "Edit Service" : "Add Service"}
+      description={
+        edit
+          ? "Update the configuration for this service."
+          : "Register a new service configuration."
+      }
+      icon={<Server className="h-5 w-5 text-primary" />}
+      maxWidthClass="sm:max-w-[860px]"
+      footerClassName="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      footer={
+        <>
+          <p className="text-xs text-muted-foreground">
             {edit
-              ? "Update the configuration for this service."
-              : "Register a new service configuration."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          {error && (
-            <div className="mb-4 flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="whitespace-pre-wrap">{error}</span>
-            </div>
-          )}
+              ? "The service name cannot be changed while editing."
+              : "The service can be installed after the config is saved."}
+          </p>
+          <div className="flex w-full justify-end gap-2 sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void save()} disabled={saving}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
+              Save
+            </Button>
+          </div>
+        </>
+      }
+    >
+      {error && (
+        <div className="mb-4 flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="whitespace-pre-wrap">{error}</span>
+        </div>
+      )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Type" htmlFor="service-type">
@@ -310,28 +302,17 @@ export function ServiceFormDialog({
               htmlFor="service-executable"
               className="sm:col-span-2"
             >
-              <div className="flex items-center gap-2">
-                <Input
-                  id="service-executable"
-                  placeholder="C:\apps\app.exe"
-                  value={values.executable}
-                  disabled={saving}
-                  onChange={(event) => update("executable", event.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0"
-                  title="Browse for executable"
-                  onClick={() => void browseExecutable()}
-                  disabled={saving}
-                >
-                  <FileSearch />
-                  Browse…
-                </Button>
-              </div>
+              <PathInput
+                id="service-executable"
+                mode="executable"
+                placeholder="C:\apps\app.exe"
+                value={values.executable}
+                disabled={saving}
+                onChange={(value) => update("executable", value)}
+                onBrowsed={handleExecutableBrowsed}
+                onError={setError}
+                hint="Browse for the local service executable"
+              />
             </FormField>
 
             <FormField label="Arguments" htmlFor="service-arguments" className="sm:col-span-2">
@@ -349,28 +330,16 @@ export function ServiceFormDialog({
               htmlFor="service-working-directory"
               className="sm:col-span-2"
             >
-              <div className="flex items-center gap-2">
-                <Input
-                  id="service-working-directory"
-                  placeholder="C:\apps"
-                  value={values.workingDirectory}
-                  disabled={saving}
-                  onChange={(event) => update("workingDirectory", event.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0"
-                  title="Browse for folder"
-                  onClick={() => void browseWorkingDirectory()}
-                  disabled={saving}
-                >
-                  <FolderOpen />
-                  Browse…
-                </Button>
-              </div>
+              <PathInput
+                id="service-working-directory"
+                mode="directory"
+                placeholder="C:\apps"
+                value={values.workingDirectory}
+                disabled={saving}
+                onChange={(value) => update("workingDirectory", value)}
+                onError={setError}
+                hint="Browse for the local working directory"
+              />
             </FormField>
 
             <FormField label="Startup" htmlFor="service-startup">
@@ -434,22 +403,34 @@ export function ServiceFormDialog({
             <SectionHeading icon={<FileText className="h-4 w-4" />}>Logs</SectionHeading>
 
             <FormField label="Stdout log" htmlFor="service-stdout-log">
-              <Input
+              <PathInput
                 id="service-stdout-log"
+                mode="save"
                 placeholder="C:\apps\logs\out.log"
                 value={values.stdoutLog}
                 disabled={saving}
-                onChange={(event) => update("stdoutLog", event.target.value)}
+                onChange={(value) => update("stdoutLog", value)}
+                onError={setError}
+                defaultFilename="out.log"
+                filterName="Log files"
+                extensions={["log", "txt"]}
+                hint="Choose the local stdout log file"
               />
             </FormField>
 
             <FormField label="Stderr log" htmlFor="service-stderr-log">
-              <Input
+              <PathInput
                 id="service-stderr-log"
+                mode="save"
                 placeholder="C:\apps\logs\err.log"
                 value={values.stderrLog}
                 disabled={saving}
-                onChange={(event) => update("stderrLog", event.target.value)}
+                onChange={(value) => update("stderrLog", value)}
+                onError={setError}
+                defaultFilename="err.log"
+                filterName="Log files"
+                extensions={["log", "txt"]}
+                hint="Choose the local stderr log file"
               />
             </FormField>
 
@@ -461,21 +442,29 @@ export function ServiceFormDialog({
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField label="Apache root" htmlFor="service-apache-root">
-                    <Input
+                    <PathInput
                       id="service-apache-root"
+                      mode="directory"
                       placeholder="C:\Apache24"
                       value={values.apacheRoot}
                       disabled={saving}
-                      onChange={(event) => update("apacheRoot", event.target.value)}
+                      onChange={(value) => update("apacheRoot", value)}
+                      onError={setError}
+                      hint="Browse for the local Apache root folder"
                     />
                   </FormField>
                   <FormField label="Apache config" htmlFor="service-apache-config">
-                    <Input
+                    <PathInput
                       id="service-apache-config"
+                      mode="file"
                       placeholder="conf/httpd.conf"
                       value={values.apacheConfig}
                       disabled={saving}
-                      onChange={(event) => update("apacheConfig", event.target.value)}
+                      onChange={(value) => update("apacheConfig", value)}
+                      onError={setError}
+                      filterName="Apache configuration"
+                      extensions={["conf", "cfg", "ini"]}
+                      hint="Browse for the local Apache config file"
                     />
                   </FormField>
                 </div>
@@ -490,12 +479,15 @@ export function ServiceFormDialog({
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField label="PGDATA" htmlFor="service-pg-data">
-                    <Input
+                    <PathInput
                       id="service-pg-data"
+                      mode="directory"
                       placeholder="C:\PostgreSQL\16\data"
                       value={values.pgData}
                       disabled={saving}
-                      onChange={(event) => update("pgData", event.target.value)}
+                      onChange={(value) => update("pgData", value)}
+                      onError={setError}
+                      hint="Browse for the local PostgreSQL data directory"
                     />
                   </FormField>
                   <FormField label="Service account" htmlFor="service-pg-account">
@@ -511,30 +503,6 @@ export function ServiceFormDialog({
               </div>
             )}
           </div>
-        </div>
-
-        <DialogFooter className="flex-col gap-3 border-t bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:space-x-0">
-          <p className="text-xs text-muted-foreground">
-            {edit
-              ? "The service name cannot be changed while editing."
-              : "The service can be installed after the config is saved."}
-          </p>
-          <div className="flex w-full justify-end gap-2 sm:w-auto">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void save()} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              Save
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ModalShell>
   );
 }

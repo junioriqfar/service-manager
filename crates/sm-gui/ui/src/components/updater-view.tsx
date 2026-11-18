@@ -5,7 +5,9 @@ import {
   FileText,
   FlaskConical,
   History,
+  ListChecks,
   Loader2,
+  MoreHorizontal,
   Pencil,
   Play,
   Plus,
@@ -15,8 +17,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Hint } from "@/components/hint";
+import { ServiceStatusBadge, UpdaterStatusBadge } from "@/components/status-badge";
 import { UpdaterFormDialog } from "@/components/updater-form-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -26,13 +30,13 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ModalShell } from "@/components/ui/modal-shell";
 import {
   Table,
   TableBody,
@@ -52,29 +56,6 @@ import type {
   UpdaterLogView,
   UpdaterRunOutcome,
 } from "@/lib/types";
-
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "success" | "warning" | "outline" {
-  switch (status) {
-    case "updated":
-    case "ready":
-      return "success";
-    case "up-to-date":
-      return "secondary";
-    case "check":
-      return "outline";
-    case "dirty":
-    case "blocked-migration":
-    case "clone-required":
-    case "degraded":
-      return "warning";
-    case "failed":
-    case "forbidden":
-    case "error":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 function formatWhen(value: string): string {
   if (!value) return "—";
@@ -129,13 +110,17 @@ function PlanServiceRow({ service }: { service: PlanService }) {
     <li className="px-3 py-1.5 text-xs">
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium">{service.name}</span>
-        <Badge
-          variant={
-            running === true ? "success" : running === false ? "secondary" : "warning"
+        <ServiceStatusBadge
+          state={running === true ? "running" : running === false ? "stopped" : "unknown"}
+          label={running === true ? "running" : running === false ? "stopped" : "unknown"}
+          hint={
+            running === true
+              ? "This service will be handled by the plan and is currently running."
+              : running === false
+                ? "This service is currently stopped; the plan starts it only when configured to."
+                : "The plan could not read the current service state; validation is limited."
           }
-        >
-          {running === true ? "running" : running === false ? "stopped" : "unknown"}
-        </Badge>
+        />
       </div>
       {service.error && <div className="mt-1 text-destructive">{service.error}</div>}
     </li>
@@ -146,7 +131,7 @@ function PlanDetails({ plan }: { plan: AppPlan }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={statusVariant(plan.status)}>{plan.status}</Badge>
+        <UpdaterStatusBadge status={plan.status} />
         <span className="text-sm text-muted-foreground">{plan.message}</span>
       </div>
 
@@ -628,7 +613,7 @@ export function UpdaterView() {
                 <TableHead>Services</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last update</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="w-[124px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -683,7 +668,7 @@ export function UpdaterView() {
                     {serviceSummary(app)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(app.status)}>{app.status}</Badge>
+                    <UpdaterStatusBadge status={app.status} />
                     {app.lastError && (
                       <div className="mt-1 max-w-56 truncate text-xs text-destructive" title={app.lastError}>
                         {app.lastError}
@@ -693,82 +678,114 @@ export function UpdaterView() {
                   <TableCell className="text-xs text-muted-foreground">
                     {formatWhen(app.lastUpdatedAt)}
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Run"
-                        disabled={running !== null}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void run(app.id, false);
-                        }}
-                      >
-                        <Play />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Check"
-                        disabled={running !== null}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void run(app.id, true);
-                        }}
-                      >
-                        <Search />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Test"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void testApp(app);
-                        }}
-                      >
-                        <FlaskConical />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Log"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setSelectedId(app.id);
-                        }}
-                      >
-                        <FileText />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Edit"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setForm({ open: true, edit: true, app });
-                        }}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Delete"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setDeleteTarget(app);
-                        }}
-                      >
-                        <Trash2 />
-                      </Button>
+                  <TableCell className="w-[124px] whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Hint label="Preview Plan: dry run that fetches remote refs without merging, building, or changing services">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Preview Plan"
+                          title="Preview Plan"
+                          disabled={running !== null || planDialog.loading}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void previewPlan(app);
+                          }}
+                        >
+                          {planDialog.loading && planDialog.appId === app.id ? (
+                            <Loader2 className="animate-spin" />
+                          ) : (
+                            <ClipboardList />
+                          )}
+                        </Button>
+                      </Hint>
+                      <Hint label="Check: verify repository state and preview results without changing files or services">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Check"
+                          title="Check"
+                          disabled={running !== null}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void run(app.id, true);
+                          }}
+                        >
+                          <Search />
+                        </Button>
+                      </Hint>
+                      <DropdownMenu>
+                        <Hint label="More actions: run, test, log, history, edit, or delete this app">
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label="More actions"
+                              title="More actions"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                        </Hint>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-48"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <DropdownMenuItem
+                            disabled={running !== null}
+                            title="Run the updater for this app; services may restart"
+                            onSelect={() => void run(app.id, false)}
+                          >
+                            <Play />
+                            Run
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            title="Detect path, branch, remote, and toolchain without changing files"
+                            onSelect={() => void testApp(app)}
+                          >
+                            <FlaskConical />
+                            Test
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            title="Show the latest updater log for this app"
+                            onSelect={() => setSelectedId(app.id)}
+                          >
+                            <FileText />
+                            Log
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            title="Show the latest 50 update history entries for this app"
+                            onSelect={() => void openHistory(app)}
+                          >
+                            <History />
+                            History
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            title="Edit this updater app"
+                            onSelect={() => setForm({ open: true, edit: true, app })}
+                          >
+                            <Pencil />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                            title="Remove this app from the registry; project files are not deleted"
+                            onSelect={() => setDeleteTarget(app)}
+                          >
+                            <Trash2 />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                     </TableRow>
@@ -874,7 +891,7 @@ export function UpdaterView() {
         onSaved={handleSaved}
       />
 
-      <Dialog
+      <ModalShell
         open={planDialog.open}
         onOpenChange={(open) => {
           if (open) {
@@ -883,42 +900,33 @@ export function UpdaterView() {
             closePlanDialog();
           }
         }}
+        title={`Update plan: ${planDialog.plan?.appName || planDialog.appId}`}
+        description="Dry run. Plan fetches remote refs but does not merge, build, install, or change services."
+        icon={<ClipboardList className="h-5 w-5 text-primary" />}
+        maxWidthClass="sm:max-w-3xl"
+        footer={
+          <Button type="button" variant="outline" onClick={closePlanDialog}>
+            Close
+          </Button>
+        }
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              Update plan: {planDialog.plan?.appName || planDialog.appId}
-            </DialogTitle>
-            <DialogDescription>
-              Dry run. Plan fetches remote refs but does not merge, build, install, or
-              change services.
-            </DialogDescription>
-          </DialogHeader>
+        {planDialog.loading && (
+          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="animate-spin" />
+            Generating dry-run plan…
+          </div>
+        )}
 
-          {planDialog.loading && (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="animate-spin" />
-              Generating dry-run plan…
-            </div>
-          )}
+        {planDialog.error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {planDialog.error}
+          </div>
+        )}
 
-          {planDialog.error && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {planDialog.error}
-            </div>
-          )}
+        {planDialog.plan && <PlanDetails plan={planDialog.plan} />}
+      </ModalShell>
 
-          {planDialog.plan && <PlanDetails plan={planDialog.plan} />}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closePlanDialog}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
+      <ModalShell
         open={historyDialog.open}
         onOpenChange={(open) => {
           if (open) {
@@ -927,155 +935,132 @@ export function UpdaterView() {
             closeHistoryDialog();
           }
         }}
+        title={`History: ${historyDialog.appId}`}
+        description="Latest 50 update outcomes, newest first. History is append-only and is not removed by log retention."
+        icon={<History className="h-5 w-5 text-primary" />}
+        maxWidthClass="sm:max-w-2xl"
+        footer={
+          <Button type="button" variant="outline" onClick={closeHistoryDialog}>
+            Close
+          </Button>
+        }
       >
-        <DialogContent className="max-h-[85vh] sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>History: {historyDialog.appId}</DialogTitle>
-            <DialogDescription>
-              Latest 50 update outcomes, newest first. History is append-only and is not
-              removed by log retention.
-            </DialogDescription>
-          </DialogHeader>
+        {historyDialog.loading && (
+          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="animate-spin" />
+            Loading history…
+          </div>
+        )}
 
-          {historyDialog.loading && (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="animate-spin" />
-              Loading history…
-            </div>
+        {historyDialog.error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {historyDialog.error}
+          </div>
+        )}
+
+        {!historyDialog.loading &&
+          !historyDialog.error &&
+          historyDialog.entries.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">No history yet.</p>
           )}
 
-          {historyDialog.error && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {historyDialog.error}
-            </div>
-          )}
-
-          {!historyDialog.loading &&
-            !historyDialog.error &&
-            historyDialog.entries.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">No history yet.</p>
-            )}
-
-          {historyDialog.entries.length > 0 && (
-            <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-              {historyDialog.entries.map((entry, index) => (
-                <div
-                  key={`${entry.timestamp}-${index}`}
-                  className="rounded-md border px-3 py-2 text-xs"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={statusVariant(entry.status)}>{entry.status}</Badge>
-                    <span className="text-muted-foreground">{formatWhen(entry.timestamp)}</span>
-                    <span
-                      className="ml-auto font-mono text-muted-foreground"
-                      title={entry.commit || "No commit recorded"}
-                    >
-                      {shortSha(entry.commit)}
-                    </span>
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-                    {entry.message || "—"}
-                  </p>
-                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                    <span>Duration: {formatDuration(entry.durationMs)}</span>
-                    <span title="Trigger client IP recorded for audit">
-                      Client IP: {entry.clientIp || "—"}
-                    </span>
-                  </div>
+        {historyDialog.entries.length > 0 && (
+          <div className="space-y-2">
+            {historyDialog.entries.map((entry, index) => (
+              <div
+                key={`${entry.timestamp}-${index}`}
+                className="rounded-md border px-3 py-2 text-xs"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <UpdaterStatusBadge status={entry.status} />
+                  <span className="text-muted-foreground">{formatWhen(entry.timestamp)}</span>
+                  <span
+                    className="ml-auto font-mono text-muted-foreground"
+                    title={entry.commit || "No commit recorded"}
+                  >
+                    {shortSha(entry.commit)}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                  {entry.message || "—"}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                  <span>Duration: {formatDuration(entry.durationMs)}</span>
+                  <span title="Trigger client IP recorded for audit">
+                    Client IP: {entry.clientIp || "—"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </ModalShell>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeHistoryDialog}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
+      <ModalShell
         open={outcomes !== null}
         onOpenChange={(open) => {
           if (!open) setOutcomes(null);
         }}
+        title="Updater result"
+        description="Latest run for the selected app(s)."
+        icon={<ListChecks className="h-5 w-5 text-primary" />}
+        maxWidthClass="sm:max-w-2xl"
+        bodyClassName="space-y-2"
+        footer={
+          <Button type="button" variant="outline" onClick={() => setOutcomes(null)}>
+            Close
+          </Button>
+        }
       >
-        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Updater result</DialogTitle>
-            <DialogDescription>Latest run for the selected app(s).</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            {(outcomes ?? []).map((outcome) => (
-              <div key={outcome.appId} className="rounded-md border px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{outcome.appId}</span>
-                  <Badge variant={statusVariant(outcome.status)}>{outcome.status}</Badge>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">{outcome.message}</p>
-              </div>
-            ))}
+        {(outcomes ?? []).map((outcome) => (
+          <div key={outcome.appId} className="rounded-md border px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium">{outcome.appId}</span>
+              <UpdaterStatusBadge status={outcome.status} />
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">{outcome.message}</p>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOutcomes(null)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        ))}
+      </ModalShell>
 
-      <Dialog
+      <ModalShell
         open={testDialog.open}
         onOpenChange={(open) => setTestDialog((previous) => ({ ...previous, open }))}
-      >
-        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{testDialog.title}</DialogTitle>
-            <DialogDescription>Path, branch, remote, and toolchain detection.</DialogDescription>
-          </DialogHeader>
-          <pre
-            className={`whitespace-pre-wrap break-words rounded-md border p-3 font-mono text-xs ${
-              testDialog.error ? "text-destructive" : ""
-            }`}
+        title={testDialog.title}
+        description="Path, branch, remote, and toolchain detection."
+        icon={<FlaskConical className="h-5 w-5 text-primary" />}
+        maxWidthClass="sm:max-w-2xl"
+        footer={
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTestDialog((previous) => ({ ...previous, open: false }))}
           >
-            {testDialog.text}
-          </pre>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setTestDialog((previous) => ({ ...previous, open: false }))}
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            Close
+          </Button>
+        }
+      >
+        <pre
+          className={`whitespace-pre-wrap break-words rounded-md border p-3 font-mono text-xs ${
+            testDialog.error ? "text-destructive" : ""
+          }`}
+        >
+          {testDialog.text}
+        </pre>
+      </ModalShell>
 
-      <Dialog
+      <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove updater app?</DialogTitle>
-            <DialogDescription>
-              This removes {deleteTarget?.id ?? "the app"} from the registry. Project files are not deleted.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={() => void confirmDelete()}>
-              Remove
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Remove updater app?"
+        description={`This removes ${deleteTarget?.id ?? "the app"} from the registry. Project files are not deleted.`}
+        icon={<Trash2 className="h-5 w-5 text-destructive" />}
+        destructive
+        confirmLabel="Remove"
+        onConfirm={() => void confirmDelete()}
+      />
     </>
   );
 }

@@ -154,6 +154,113 @@ fn dialog_directory(current: Option<&str>) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
+fn dialog_filter(
+    filter_name: Option<String>,
+    extensions: Option<Vec<String>>,
+) -> Option<(String, Vec<String>)> {
+    let mut extensions: Vec<String> = extensions
+        .unwrap_or_default()
+        .into_iter()
+        .map(|extension| {
+            extension
+                .trim()
+                .trim_start_matches('.')
+                .to_ascii_lowercase()
+        })
+        .filter(|extension| !extension.is_empty())
+        .collect();
+    extensions.sort();
+    extensions.dedup();
+    if extensions.is_empty() {
+        return None;
+    }
+    let name = filter_name
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "Files".to_string());
+    Some((name, extensions))
+}
+
+fn file_name_seed(current: Option<&str>, default_filename: Option<&str>) -> Option<String> {
+    if let Some(current) = current {
+        let trimmed = current.trim();
+        if !trimmed.is_empty() {
+            if let Some(name) = Path::new(trimmed).file_name() {
+                let name = name.to_string_lossy().trim().to_string();
+                if !name.is_empty() {
+                    return Some(name);
+                }
+            }
+        }
+    }
+    let default_filename = default_filename?.trim();
+    if default_filename.is_empty() {
+        None
+    } else {
+        Some(default_filename.to_string())
+    }
+}
+
+/// Buka dialog file biasa di main thread (COM/STA).
+#[tauri::command]
+pub async fn pick_file(
+    app: AppHandle,
+    current: Option<String>,
+    filter_name: Option<String>,
+    extensions: Option<Vec<String>>,
+) -> Result<Option<String>, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let mut dialog = rfd::FileDialog::new();
+        if let Some(directory) = dialog_directory(current.as_deref()) {
+            dialog = dialog.set_directory(directory);
+        }
+        if let Some((name, extensions)) = dialog_filter(filter_name, extensions) {
+            let extension_refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
+            dialog = dialog.add_filter(name, &extension_refs);
+        }
+        let selected = dialog
+            .pick_file()
+            .map(|path| path.to_string_lossy().to_string());
+        let _ = sender.send(selected);
+    })
+    .map_err(|error| error.to_string())?;
+
+    receiver.await.map_err(|error| error.to_string())
+}
+
+/// Buka dialog simpan-file di main thread (COM/STA).
+#[tauri::command]
+pub async fn pick_save_file(
+    app: AppHandle,
+    current: Option<String>,
+    default_filename: Option<String>,
+    filter_name: Option<String>,
+    extensions: Option<Vec<String>>,
+) -> Result<Option<String>, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let mut dialog = rfd::FileDialog::new();
+        if let Some(directory) = dialog_directory(current.as_deref()) {
+            dialog = dialog.set_directory(directory);
+        }
+        if let Some(name) = file_name_seed(current.as_deref(), default_filename.as_deref()) {
+            dialog = dialog.set_file_name(name);
+        }
+        if let Some((name, extensions)) = dialog_filter(filter_name, extensions) {
+            let extension_refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
+            dialog = dialog.add_filter(name, &extension_refs);
+        }
+        let selected = dialog
+            .save_file()
+            .map(|path| path.to_string_lossy().to_string());
+        let _ = sender.send(selected);
+    })
+    .map_err(|error| error.to_string())?;
+
+    receiver.await.map_err(|error| error.to_string())
+}
+
 /// Buka dialog file executable di main thread (COM/STA).
 #[tauri::command]
 pub async fn pick_executable(
@@ -599,5 +706,50 @@ mod tests {
             dialog_directory(Some(r"C:\definitely-missing\app.exe")),
             None
         );
+    }
+
+    #[test]
+    fn dialog_filter_normalizes_extensions() {
+        assert_eq!(
+            dialog_filter(
+                Some(" Logs ".to_string()),
+                Some(vec![
+                    ".LOG".to_string(),
+                    " log ".to_string(),
+                    "txt".to_string()
+                ])
+            ),
+            Some((
+                "Logs".to_string(),
+                vec!["log".to_string(), "txt".to_string()]
+            ))
+        );
+        assert_eq!(
+            dialog_filter(None, Some(vec!["json".to_string()])),
+            Some(("Files".to_string(), vec!["json".to_string()]))
+        );
+        assert_eq!(dialog_filter(None, Some(vec!["  ".to_string()])), None);
+        assert_eq!(dialog_filter(Some("Empty".to_string()), None), None);
+    }
+
+    #[test]
+    fn file_name_seed_prefers_current_then_default() {
+        assert_eq!(
+            file_name_seed(Some(r"C:\logs\current.log"), Some("out.log")),
+            Some("current.log".to_string())
+        );
+        assert_eq!(
+            file_name_seed(Some("  "), Some("out.log")),
+            Some("out.log".to_string())
+        );
+        assert_eq!(
+            file_name_seed(Some(r"C:\logs"), None),
+            Some("logs".to_string())
+        );
+        assert_eq!(
+            file_name_seed(None, Some("err.log")),
+            Some("err.log".to_string())
+        );
+        assert_eq!(file_name_seed(None, None), None);
     }
 }

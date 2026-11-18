@@ -37,6 +37,8 @@ fn main() {
             commands::open_path,
             commands::pick_executable,
             commands::pick_directory,
+            commands::pick_file,
+            commands::pick_save_file,
             commands::save_service,
             commands::delete_service,
             commands::install_service,
@@ -110,6 +112,10 @@ mod ui_tests {
     const UPDATER_FORM: &str = include_str!("../ui/src/components/updater-form-dialog.tsx");
     const REMOTE_VIEW: &str = include_str!("../ui/src/components/remote-trigger-view.tsx");
     const SETTINGS_VIEW: &str = include_str!("../ui/src/components/settings-view.tsx");
+    const MODAL_SHELL: &str = include_str!("../ui/src/components/ui/modal-shell.tsx");
+    const CONFIRM_DIALOG: &str = include_str!("../ui/src/components/confirm-dialog.tsx");
+    const STATUS_BADGE: &str = include_str!("../ui/src/components/status-badge.tsx");
+    const PATH_INPUT: &str = include_str!("../ui/src/components/path-input.tsx");
     const TYPES: &str = include_str!("../ui/src/lib/types.ts");
     const HINT: &str = include_str!("../ui/src/components/hint.tsx");
     const TOOLTIP: &str = include_str!("../ui/src/components/ui/tooltip.tsx");
@@ -124,7 +130,7 @@ mod ui_tests {
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{TYPES}\n{HINT}\n{TOOLTIP}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{MODAL_SHELL}\n{CONFIRM_DIALOG}\n{STATUS_BADGE}\n{PATH_INPUT}\n{TYPES}\n{HINT}\n{TOOLTIP}"
         )
     }
 
@@ -174,9 +180,24 @@ mod ui_tests {
 
     #[test]
     fn ui_has_browse_buttons_and_context_menu() {
-        assert!(SERVICE_FORM.contains("pick_executable"));
-        assert!(SERVICE_FORM.contains("pick_directory"));
-        assert!(SERVICE_FORM.contains("Browse…"));
+        for command in [
+            "pick_executable",
+            "pick_directory",
+            "pick_file",
+            "pick_save_file",
+        ] {
+            assert!(
+                PATH_INPUT.contains(command),
+                "missing path picker command: {command}"
+            );
+        }
+        assert!(PATH_INPUT.contains("aria-label"));
+        assert!(PATH_INPUT.contains("title={tooltip}"));
+        assert!(PATH_INPUT.contains("Hint"));
+        assert!(SERVICE_FORM.contains("<PathInput"));
+        assert!(SERVICE_FORM.contains("mode=\"executable\""));
+        assert!(SERVICE_FORM.contains("mode=\"directory\""));
+        assert!(SERVICE_FORM.contains("mode=\"save\""));
         assert!(SERVICE_TABLE.contains("ContextMenu"));
         assert!(SERVICE_TABLE.contains("onEdit(service)"));
         for action in ["install", "start", "stop", "restart", "log", "delete"] {
@@ -310,8 +331,8 @@ mod ui_tests {
         assert!(UPDATER_FORM.contains("resources/js/routes/**"));
         assert!(UPDATER_FORM.contains("list_services"));
         assert!(UPDATER_FORM.contains("serviceType === \"apache\""));
-        assert!(UPDATER_FORM.contains("pick_directory"));
-        assert!(UPDATER_FORM.contains("Browse…"));
+        assert!(UPDATER_FORM.contains("<PathInput"));
+        assert!(UPDATER_FORM.contains("mode=\"directory\""));
         assert!(UPDATER_FORM.contains("app.allowedClientIPs ?? []"));
         assert!(UPDATER_FORM.contains("app.dirtyIgnore ?? []"));
         assert!(UPDATER_FORM.contains("app.services?.stopBeforePull ?? []"));
@@ -384,6 +405,8 @@ mod ui_tests {
             assert!(REMOTE_VIEW.contains(field), "missing remote field: {field}");
         }
         assert!(REMOTE_VIEW.contains("lucide-react"));
+        assert!(REMOTE_VIEW.contains("<PathInput"));
+        assert!(REMOTE_VIEW.contains("Server-side path; browse is unavailable"));
         assert!(APP.contains("TooltipProvider"));
         assert!(APP.contains("Hint"));
         assert!(HINT.contains("TooltipTrigger"));
@@ -514,13 +537,16 @@ mod ui_tests {
             "replace_php_references",
             "list_services",
             "pick_executable",
-            "pick_directory",
         ] {
             assert!(
                 SETTINGS_VIEW.contains(command),
                 "missing settings command: {command}"
             );
         }
+        assert!(PATH_INPUT.contains("pick_directory"));
+        assert!(PATH_INPUT.contains("pick_executable"));
+        assert!(PATH_INPUT.contains("pick_file"));
+        assert!(PATH_INPUT.contains("pick_save_file"));
         for field in [
             "logDir",
             "maxConcurrentUpdates",
@@ -632,6 +658,77 @@ mod ui_tests {
         assert!(include_str!("main.rs").contains("credentials::test_git_credential"));
         assert!(include_str!("main.rs").contains("credentials::clear_git_credential"));
         assert!(include_str!("main.rs").contains("firewall::read_ssh_firewall_status"));
+    }
+
+    #[test]
+    fn ui_uses_reusable_modal_shell_and_status_primitives() {
+        assert!(MODAL_SHELL.contains("DialogContent"));
+        assert!(MODAL_SHELL.contains("flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0"));
+        assert!(MODAL_SHELL.contains("shrink-0 space-y-1 border-b"));
+        assert!(MODAL_SHELL.contains("min-h-0 flex-1 overflow-y-auto"));
+        assert!(MODAL_SHELL.contains("shrink-0 gap-2 border-t"));
+        assert!(MODAL_SHELL.contains("pr-14"));
+        assert!(CONFIRM_DIALOG.contains("ModalShell"));
+        assert!(CONFIRM_DIALOG.contains("confirmLabel"));
+        assert!(CONFIRM_DIALOG.contains("destructive"));
+        assert!(CONFIRM_DIALOG.contains("loading"));
+        for source in [
+            ABOUT_DIALOG,
+            BATCH_DIALOG,
+            IMPORT_DIALOG,
+            SERVICE_ACTIONS,
+            SERVICE_FORM,
+            UPDATER_FORM,
+            UPDATER_VIEW,
+            SETTINGS_VIEW,
+        ] {
+            assert!(
+                !source.contains("<DialogContent"),
+                "modal still uses a raw DialogContent instead of ModalShell/ConfirmDialog"
+            );
+        }
+
+        for icon in [
+            "PlayCircle",
+            "Square",
+            "PauseCircle",
+            "ServerOff",
+            "HelpCircle",
+            "AlertTriangle",
+            "ShieldAlert",
+            "Download",
+            "Activity",
+            "XCircle",
+            "Ban",
+            "CircleCheck",
+        ] {
+            assert!(STATUS_BADGE.contains(icon), "missing status icon: {icon}");
+        }
+        assert!(STATUS_BADGE.contains("Hint"));
+        assert!(STATUS_BADGE.contains("serviceStatusDescriptor"));
+        assert!(STATUS_BADGE.contains("updaterStatusDescriptor"));
+        assert!(SERVICE_TABLE.contains("ServiceStatusBadge"));
+        assert!(UPDATER_VIEW.contains("UpdaterStatusBadge"));
+        assert!(UPDATER_VIEW.contains("<ServiceStatusBadge"));
+
+        assert!(UPDATER_VIEW.contains("MoreHorizontal"));
+        assert!(UPDATER_VIEW.contains("DropdownMenuTrigger"));
+        assert!(UPDATER_VIEW.contains("DropdownMenuSeparator"));
+        assert!(UPDATER_VIEW.contains("More actions"));
+        assert!(UPDATER_VIEW.contains("aria-label=\"Preview Plan\""));
+        assert!(UPDATER_VIEW.contains("aria-label=\"Check\""));
+        assert!(UPDATER_VIEW.contains("aria-label=\"More actions\""));
+        assert!(UPDATER_VIEW.contains("event.stopPropagation()"));
+        assert!(UPDATER_VIEW.contains("ContextMenuContent"));
+
+        assert!(PATH_INPUT.contains("PathInputMode"));
+        assert!(PATH_INPUT.contains("onBrowsed"));
+        assert!(PATH_INPUT.contains("aria-label={accessibleLabel}"));
+        assert!(SERVICE_FORM.contains("mode=\"file\""));
+        assert!(SETTINGS_VIEW.contains("<PathInput"));
+        assert!(SETTINGS_VIEW.contains("showLabel={false}"));
+        assert!(include_str!("main.rs").contains("commands::pick_file"));
+        assert!(include_str!("main.rs").contains("commands::pick_save_file"));
     }
 
     fn assert_spawned_commands_are_hidden(name: &str, source: &str) {

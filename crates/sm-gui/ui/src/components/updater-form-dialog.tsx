@@ -1,18 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { FolderOpen, Loader2, Save } from "lucide-react";
+import { Loader2, PackageOpen, Save } from "lucide-react";
 import { toast } from "sonner";
 
+import { PathInput } from "@/components/path-input";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ModalShell } from "@/components/ui/modal-shell";
 import {
   Select,
   SelectContent,
@@ -283,17 +277,6 @@ export function UpdaterFormDialog({
     setValues((previous) => ({ ...previous, [key]: value }));
   }
 
-  async function browseFolder() {
-    try {
-      const selected = await invoke<string | null>("pick_directory", {
-        current: values.localPath || null,
-      });
-      if (selected) set("localPath", selected);
-    } catch (caught) {
-      toast.error(errorMessage(caught));
-    }
-  }
-
   async function save() {
     if (saving) return;
     setError(null);
@@ -329,16 +312,31 @@ export function UpdaterFormDialog({
   ).sort((left, right) => left.localeCompare(right));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{edit ? "Edit Updater App" : "Add Updater App"}</DialogTitle>
-          <DialogDescription>
-            Registered applications are updated only when you press Run or Check.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-4 py-2 sm:grid-cols-2">
+    <ModalShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title={edit ? "Edit Updater App" : "Add Updater App"}
+      description="Registered applications are updated only when you press Run or Check."
+      icon={<PackageOpen className="h-5 w-5 text-primary" />}
+      maxWidthClass="sm:max-w-3xl"
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} title="Discard changes">
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => void save()} disabled={saving} title="Save this app to the registry">
+            {saving ? <Loader2 className="animate-spin" /> : <Save />}
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </>
+      }
+    >
+      {error && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
           <SectionHeading>Application</SectionHeading>
           <FormField label="App ID" htmlFor="updater-app-id">
             <Input
@@ -366,18 +364,15 @@ export function UpdaterFormDialog({
             />
           </FormField>
           <FormField label="Local path" htmlFor="updater-app-path" className="sm:col-span-2">
-            <div className="flex gap-2">
-              <Input
-                id="updater-app-path"
-                value={values.localPath}
-                onChange={(event) => set("localPath", event.target.value)}
-                placeholder="D:\Projects\NodeProjects\app"
-              />
-              <Button type="button" variant="outline" onClick={() => void browseFolder()} title="Choose the project folder">
-                <FolderOpen />
-                Browse…
-              </Button>
-            </div>
+            <PathInput
+              id="updater-app-path"
+              mode="directory"
+              value={values.localPath}
+              onChange={(value) => set("localPath", value)}
+              placeholder="D:\Projects\NodeProjects\app"
+              hint="Browse for the local project checkout folder"
+              helpText="Local checkout on this machine. Clone on first run creates it when the folder is missing."
+            />
           </FormField>
           <FormField label="Branch" htmlFor="updater-app-branch">
             <Input
@@ -633,23 +628,6 @@ export function UpdaterFormDialog({
             />
           </FormField>
         </div>
-
-        {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} title="Discard changes">
-            Cancel
-          </Button>
-          <Button type="button" onClick={() => void save()} disabled={saving} title="Save this app to the registry">
-            {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ModalShell>
   );
 }

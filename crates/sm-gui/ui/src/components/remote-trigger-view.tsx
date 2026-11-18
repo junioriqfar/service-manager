@@ -5,11 +5,13 @@ import {
   Play,
   RadioTower,
   Search,
+  Server,
   Terminal,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { PathInput } from "@/components/path-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,19 +57,35 @@ function Field({
   htmlFor,
   className,
   hint,
+  description,
   children,
 }: {
   label: string;
   htmlFor: string;
   className?: string;
   hint?: string;
+  description?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className={cn("space-y-1.5", className)} title={hint}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
+      {description ? (
+        <div className="flex items-start gap-1 text-xs text-muted-foreground">{description}</div>
+      ) : null}
     </div>
+  );
+}
+
+const SERVER_PATH_HINT = "Server-side path; browse is unavailable";
+
+function ServerPathNote() {
+  return (
+    <>
+      <Server className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+      <span>{SERVER_PATH_HINT}</span>
+    </>
   );
 }
 
@@ -300,37 +318,62 @@ export function RemoteTriggerView() {
               </div>
             </>
           ) : (
-            <Field label="Identity file" htmlFor="remote-identity" className="sm:col-span-2" hint="Private key path; optional when ssh-agent is configured">
-              <Input
+            <Field label="Identity file" htmlFor="remote-identity" className="sm:col-span-2" hint="Local private key path; optional when ssh-agent is configured">
+              <PathInput
                 id="remote-identity"
+                mode="file"
                 value={config.identity}
-                onChange={(event) => set("identity", event.target.value)}
+                onChange={(identity) => set("identity", identity)}
                 placeholder="C:\Users\you\.ssh\id_ed25519 (optional with ssh-agent)"
+                hint="Browse for the local SSH private key"
+                helpText="Local private key on this client. Passphrase-protected keys use ssh-agent."
+                showLabel={false}
               />
             </Field>
           )}
-          <Field label="Wrapper script" htmlFor="remote-wrapper" className="sm:col-span-2" hint="Remote PowerShell wrapper; recommended for service lifecycle">
+          <Field
+            label="Wrapper script"
+            htmlFor="remote-wrapper"
+            className="sm:col-span-2"
+            hint="Remote PowerShell wrapper; recommended for service lifecycle"
+            description={<ServerPathNote />}
+          >
             <Input
               id="remote-wrapper"
               value={config.wrapper}
               onChange={(event) => set("wrapper", event.target.value)}
               placeholder="C:\tools\ServiceManager\scripts\Invoke-UpdaterTask.ps1"
+              title={SERVER_PATH_HINT}
             />
           </Field>
-          <Field label="Remote sm-updater.exe" htmlFor="remote-bin" className="sm:col-span-2" hint="Updater binary used when no wrapper is set">
+          <Field
+            label="Remote sm-updater.exe"
+            htmlFor="remote-bin"
+            className="sm:col-span-2"
+            hint="Updater binary used when no wrapper is set"
+            description={<ServerPathNote />}
+          >
             <Input
               id="remote-bin"
               value={config.remoteBin}
               onChange={(event) => set("remoteBin", event.target.value)}
               placeholder="C:\tools\ServiceManager\target\release\sm-updater.exe"
+              title={SERVER_PATH_HINT}
             />
           </Field>
-          <Field label="Remote projects.json (optional)" htmlFor="remote-config" className="sm:col-span-2" hint="Optional remote registry config path">
+          <Field
+            label="Remote projects.json (optional)"
+            htmlFor="remote-config"
+            className="sm:col-span-2"
+            hint="Optional remote registry config path"
+            description={<ServerPathNote />}
+          >
             <Input
               id="remote-config"
               value={config.remoteConfig}
               onChange={(event) => set("remoteConfig", event.target.value)}
               placeholder="C:\tools\ServiceManager\data\projects.json"
+              title={SERVER_PATH_HINT}
             />
           </Field>
           <Field label="App ID (optional)" htmlFor="remote-app" hint="App ID for Check App / Run App">

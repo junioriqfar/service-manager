@@ -17,7 +17,8 @@ Aplikasi Windows untuk mengelola **Windows Service** (NSSM, Apache native, Postg
 - Updater `sm-updater`: registry app, trigger SSH dengan allowlist IP/CIDR, cek/update Git, blokir migration, toolchain Composer/npm/pnpm/yarn/Bun/Go/static/custom, service lifecycle, credential helper.
 - Client `sm-trigger` cross-platform (Windows/macOS/Linux) untuk memicu update via SSH tanpa polling.
 - GUI tab **Remote** di `sm-gui` untuk trigger via SSH dengan output live (Windows client), mendukung SSH key/agent atau password (DPAPI).
-- Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Preview Plan, Run, Check, Test, Log, History, Edit, Delete.
+- Tooltip pada aksi utama dan context menu klik kanan di daftar app Updater: Preview Plan, Run, Check, Test, Log, History, Edit, Delete. Di kolom Actions hanya **Preview Plan** dan **Check** yang selalu tampil; aksi lain ada di menu overflow tiga-titik, dan context menu klik kanan tetap lengkap.
+- Semua modal memakai shell reusable (header/footer fixed, border, hanya body yang scroll), status service/updater tampil sebagai icon + colored badge + tooltip penjelas, dan path lokal memakai input dengan Browse icon-only. Remote path server-side tetap input manual dengan catatan "Server-side path; browse is unavailable".
 - GUI tab **Updater**: registry CRUD, test, Check All/Update All, status, log, history per app, serta tampilan versi PHP/Apache efektif dan `webServerService`.
 - **Check All** paralel mengikuti `maxConcurrentUpdates` (stage 1: check-only; Update All, Run, dan trigger tetap serial). Log check memakai nama unik per app agar tidak bertabrakan.
 - **Preview Plan** dry-run di tab Updater: status, branch/HEAD, incoming commit, changed/migration files, command install/build/artisan, service stop/restart/start + state, health/webhook (redacted), dan warnings. Plan hanya fetch remote refs; tidak merge, build, install, atau mengubah service.
@@ -200,7 +201,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Saat ini **485 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
+Saat ini **488 unit test** workspace lulus. Frontend harus dibangun terlebih dahulu (`npm ci && npm run build`) karena Tauri memakai `ui/dist`.
 
 ## Untuk Agent
 

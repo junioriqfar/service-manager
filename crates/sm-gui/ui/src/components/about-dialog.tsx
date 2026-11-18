@@ -1,14 +1,7 @@
 import { Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ModalShell } from "@/components/ui/modal-shell";
 import type { PathsView } from "@/lib/types";
 
 interface AboutDialogProps {
@@ -29,36 +22,32 @@ export function AboutDialog({ open, paths, onOpenChange }: AboutDialogProps) {
     : [];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Info className="h-5 w-5 text-primary" />
-            About Service Manager
-          </DialogTitle>
-          <DialogDescription>Service Manager Rust version 0.1.0</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="space-y-2 rounded-md border bg-muted/30 p-4 text-xs">
-            {rows.map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[132px_1fr] gap-2">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="break-all font-mono">{value}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            The application must run as Administrator to change services.
-          </p>
+    <ModalShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="About Service Manager"
+      description="Service Manager Rust version 0.1.0"
+      icon={<Info className="h-5 w-5 text-primary" />}
+      maxWidthClass="sm:max-w-lg"
+      footer={
+        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="space-y-2 rounded-md border bg-muted/30 p-4 text-xs">
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-[132px_1fr] gap-2">
+              <span className="text-muted-foreground">{label}</span>
+              <span className="break-all font-mono">{value}</span>
+            </div>
+          ))}
         </div>
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <p className="text-sm text-muted-foreground">
+          The application must run as Administrator to change services.
+        </p>
+      </div>
+    </ModalShell>
   );
 }
