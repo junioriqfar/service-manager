@@ -41,6 +41,24 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 - Build **release** (`sm-gui.exe`) memakai subsystem Windows GUI, jadi **tidak** membuka cmd/terminal.
 - Build **debug** (`cargo run -p sm-gui` atau `target/debug/sm-gui.exe`) tetap membuka console untuk log/panic.
 - `sm-updater.exe` dan `sm-diag.exe` adalah aplikasi console dan memang menampilkan terminal saat dijalankan langsung.
+- The `ServiceManager-Updater` Scheduled Task action runs
+  `wscript.exe //B //Nologo ...Run-UpdaterTaskHidden.vbs`; the VBScript starts PowerShell with
+  window style `0` (hidden), so Task Scheduler never creates a visible console window. The task
+  settings use `-Hidden`. `test_task`/`task_status` and every GUI child process use
+  `CREATE_NO_WINDOW` (`.no_window()`); Doctor warns when the installed task action is not hidden.
+
+## UI Language
+
+- All user-facing GUI text is English: labels, tooltips, dialogs, toasts, placeholders,
+  aria-labels, empty states, status hints, and backend error/outcome messages returned to the GUI.
+- Internal updater log lines and CLI-only `sm-updater` help/output may remain technical; they are
+  not GUI copy.
+- The `ui_is_english` source test scans every React/TypeScript source file for common Indonesian
+  UI words and asserts key English labels.
+- Backend messages for Settings, updater plan/run, credentials, firewall, Doctor, Apache, PHP
+  references, and Remote Trigger are English; their unit tests assert the English text.
+- Validation failures are surfaced as-is in the relevant dialog or toast; no Indonesian fallback
+  text is used.
 
 ## Fitur
 
@@ -198,7 +216,7 @@ gunakan CLI `sm-trigger`.
 Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
 
 - Proses console anak (PowerShell untuk status Scheduled Task, Git, `cmd.exe`) dijalankan dengan flag Windows `CREATE_NO_WINDOW`, sehingga tidak ada jendela `cmd` yang muncul saat tab Settings dibuka atau tool diuji. Test source-audit memastikan setiap `Command::new` di jalur GUI memakai `.no_window()`.
-- Scheduled Task action memakai `powershell.exe -NoProfile -WindowStyle Hidden ...` dan setting **Hidden**; task lama perlu **Repair Task** sekali.
+- Scheduled Task action memakai `wscript.exe //B //Nologo ...Run-UpdaterTaskHidden.vbs` (VBScript menjalankan PowerShell dengan window style `0`) dan setting **Hidden**; task lama perlu **Repair Task** sekali. Action lama `powershell.exe -WindowStyle Hidden` masih bisa memunculkan console window singkat saat Task Scheduler memulai proses.
 - **Toolchain**: kartu untuk Git, PHP, Composer, Node, npm, pnpm, yarn, Bun, Go,
   Apache, dan NSSM. Setiap kartu memiliki path, **Browse…**, **Auto-detect**,
   **Test**, dan badge versi/status.
@@ -273,9 +291,10 @@ Tab **Settings** mengelola konfigurasi mesin di `data/settings.json`.
 - **Privileged Execution**: status Scheduled Task (`installed`, state, run level,
   user, logon type, last run, last result, console window hidden/visible), field
   task name/user/logon type, dan tombol **Install Task**/**Repair Task**,
-  **Remove Task**, **Test Task**. Task lama yang action-nya belum memakai
-  `-WindowStyle Hidden`/setting `Hidden` menampilkan warning **Task action is not
-  hidden** dan harus di-**Repair Task** sekali. Install/remove membutuhkan
+  **Remove Task**, **Test Task**. Task lama yang action-nya belum memakai hidden
+  launcher (`wscript.exe` + `Run-UpdaterTaskHidden.vbs`) atau setting `Hidden`
+  menampilkan warning **Task action is not hidden** dan harus di-**Repair Task**
+  sekali. Install/remove membutuhkan
   Administrator dan memanggil `scripts/Install-UpdaterTask.ps1` atau
   `Unregister-ScheduledTask`; test memanggil
   `scripts/Invoke-UpdaterTask.ps1 -Check`.
@@ -453,7 +472,7 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 485 test):
+Test GUI mencakup (total workspace 490 test):
 
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.

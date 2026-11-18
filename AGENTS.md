@@ -116,7 +116,7 @@ cargo fmt --all -- --check
 git diff --check
 ```
 
-- Test workspace saat ini: **488 test lulus** (angka ini harus diperbarui jika test berubah).
+- Test workspace saat ini: **490 test lulus** (angka ini harus diperbarui jika test berubah).
 - Test default tidak memerlukan Administrator. Test yang mengubah service Windows hanya untuk
   server uji dan dijalankan manual: `cargo test -p sm-win -- --ignored` sebagai Administrator.
 - `Build-Release.ps1` menjalankan frontend build, cargo release build, menyusun folder portable,

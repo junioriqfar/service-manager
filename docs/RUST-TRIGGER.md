@@ -110,14 +110,20 @@ Default:
 - Task name: `ServiceManager-Updater`
 - Logon type: `Interactive` (harus ada sesi user aktif)
 - Run level: **Highest**
-- Action: `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ...\Run-UpdaterTaskAction.ps1`
+- Action: `wscript.exe //B //Nologo ...\Run-UpdaterTaskHidden.vbs`; VBScript menjalankan
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...\Run-UpdaterTaskAction.ps1`
+  dengan window style `0` (hidden).
 - Task setting **Hidden** aktif; action dan child `sm-updater.exe` berjalan tanpa jendela console.
+  `wscript.exe` adalah GUI-subsystem host, sehingga Task Scheduler tidak membuat console window
+  yang sempat terlihat seperti pada action `powershell.exe -WindowStyle Hidden`.
 - Tidak ada trigger otomatis; task hanya dijalankan manual.
 
 Task lama yang didaftarkan sebelum perubahan ini harus di-**Repair Task** (atau
 jalankan ulang `Install-UpdaterTask.ps1` sebagai Administrator) agar action
-`-WindowStyle Hidden` dan setting `Hidden` ikut diterapkan. Tanpa repair, task lama
-masih bisa memunculkan jendela PowerShell saat dipicu.
+`wscript.exe` + VBScript hidden dan setting `Hidden` ikut diterapkan. Tanpa repair,
+task lama masih bisa memunculkan jendela PowerShell saat dipicu. Doctor juga
+mendeteksi hidden launcher `wscript.exe ...Run-UpdaterTaskHidden.vbs` agar
+`windowHidden` tetap `true` setelah repair.
 
 Untuk akun yang tidak selalu login, gunakan `-LogonType Password` (akan meminta
 password) atau `-LogonType S4U`. S4U tidak selalu bisa mengakses kredensial jaringan
@@ -206,11 +212,11 @@ Langsung di server, tanpa SSH:
 | --- | --- |
 | `ssh: command not found` | Install OpenSSH client |
 | `Permission denied (publickey)` | Cek `--user`, `--identity`, `ssh-agent`, dan `authorized_keys` |
-| `Scheduled Task ... belum dibuat` | Jalankan `Install-UpdaterTask.ps1` sebagai Administrator |
+| `Scheduled Task ... is not installed` | Jalankan `Install-UpdaterTask.ps1` sebagai Administrator |
 | Task jalan tapi wrapper timeout | Cek `Get-ScheduledTaskInfo`, log `logs/updater-task-*.log`, dan lock `data/updater.lock` |
 | `IP ... tidak diizinkan` | Tambahkan IP/CIDR ke `trigger.allowedClientIPs` atau per-app `allowedClientIPs` |
 | Service gagal stop/start | Task belum `RunLevel Highest` atau user bukan Administrator |
-| Jendela PowerShell/cmd muncul saat task dipicu | Task lama belum memakai action `-WindowStyle Hidden`/setting `Hidden`; klik **Repair Task** sebagai Administrator atau jalankan ulang `Install-UpdaterTask.ps1`. |
+| Jendela PowerShell/cmd muncul saat task dipicu | Task lama masih memakai action `powershell.exe -WindowStyle Hidden` (sempat flash) atau belum memakai setting `Hidden`; klik **Repair Task** sebagai Administrator atau jalankan ulang `Install-UpdaterTask.ps1` agar action memakai `wscript.exe` + `Run-UpdaterTaskHidden.vbs`. |
 | Git remote gagal di task | Gunakan `-LogonType Interactive`/`Password` agar DPAPI/GCM user tersedia |
 
 ## Catatan Rilis

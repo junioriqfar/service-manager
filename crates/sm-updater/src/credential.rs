@@ -46,21 +46,21 @@ impl CredentialSink for GitCredentialSink {
             .stderr(Stdio::piped())
             .no_window()
             .spawn()
-            .map_err(|error| format!("Gagal menjalankan git credential approve: {error}"))?;
+            .map_err(|error| format!("Failed to run git credential approve: {error}"))?;
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
                 .write_all(input.as_bytes())
-                .map_err(|error| format!("Gagal mengirim kredensial: {error}"))?;
+                .map_err(|error| format!("Failed to send credentials: {error}"))?;
         }
 
         let output = child
             .wait_with_output()
-            .map_err(|error| format!("Gagal menunggu git credential approve: {error}"))?;
+            .map_err(|error| format!("Failed to wait for git credential approve: {error}"))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!(
-                "git credential approve gagal: {}",
+                "git credential approve failed: {}",
                 sm_core::redact_secrets(stderr.trim())
             ));
         }
@@ -80,15 +80,15 @@ pub fn credential_reject_input(host: &str, username: &str) -> String {
 
 fn validate_field(value: &str, label: &str) -> Result<String, String> {
     if value.trim().is_empty() {
-        return Err(format!("{label} wajib diisi."));
+        return Err(format!("{label} is required."));
     }
     if value.chars().any(char::is_control) {
         return Err(format!(
-            "{label} tidak boleh berisi karakter kontrol atau baris baru."
+            "{label} must not contain control characters or newlines."
         ));
     }
     if value.chars().any(char::is_whitespace) {
-        return Err(format!("{label} tidak boleh berisi spasi."));
+        return Err(format!("{label} must not contain spaces."));
     }
     Ok(value.to_string())
 }
@@ -99,7 +99,7 @@ pub fn validate_host(host: &str) -> Result<(), String> {
     let value = validate_field(host, "Host Git")?;
     if value.contains(['/', '\\', '@', '?', '#']) {
         return Err(
-            "Host Git tidak boleh memuat skema, path, atau userinfo (contoh: gitlab.com)."
+            "Git host must not contain a scheme, path, or userinfo (for example: gitlab.com)."
                 .to_string(),
         );
     }
@@ -122,14 +122,11 @@ pub fn validate_request(request: &CredentialRequest) -> Result<(), String> {
     validate_username(&request.username)?;
     validate_token(&request.token)?;
     if !request.git_path.is_file() {
-        return Err(format!(
-            "Git tidak ditemukan: {}",
-            request.git_path.display()
-        ));
+        return Err(format!("Git not found: {}", request.git_path.display()));
     }
     if !request.project_path.is_dir() {
         return Err(format!(
-            "Folder project tidak ditemukan: {}",
+            "Project folder not found: {}",
             request.project_path.display()
         ));
     }
@@ -159,7 +156,7 @@ pub fn reject_credential(git_path: &Path, host: &str, username: &str) -> Result<
     validate_host(host)?;
     validate_username(username)?;
     if !git_path.is_file() {
-        return Err(format!("Git tidak ditemukan: {}", git_path.display()));
+        return Err(format!("Git not found: {}", git_path.display()));
     }
 
     let input = credential_reject_input(host.trim(), username.trim());
@@ -173,21 +170,21 @@ pub fn reject_credential(git_path: &Path, host: &str, username: &str) -> Result<
         .stderr(Stdio::piped())
         .no_window()
         .spawn()
-        .map_err(|error| format!("Gagal menjalankan git credential reject: {error}"))?;
+        .map_err(|error| format!("Failed to run git credential reject: {error}"))?;
 
     if let Some(mut stdin) = child.stdin.take() {
         stdin
             .write_all(input.as_bytes())
-            .map_err(|error| format!("Gagal mengirim permintaan hapus kredensial: {error}"))?;
+            .map_err(|error| format!("Failed to send the credential delete request: {error}"))?;
     }
 
     let output = child
         .wait_with_output()
-        .map_err(|error| format!("Gagal menunggu git credential reject: {error}"))?;
+        .map_err(|error| format!("Failed to wait for git credential reject: {error}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!(
-            "git credential reject gagal: {}",
+            "git credential reject failed: {}",
             sm_core::redact_secrets(stderr.trim())
         ));
     }
@@ -206,12 +203,12 @@ pub fn verify_remote(request: &CredentialRequest) -> Result<(), String> {
         .stdin(Stdio::null())
         .no_window()
         .output()
-        .map_err(|error| format!("Gagal menjalankan git ls-remote: {error}"))?;
+        .map_err(|error| format!("Failed to run git ls-remote: {error}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!(
-            "Verifikasi remote gagal: {}",
+            "Remote verification failed: {}",
             sm_core::redact_secrets(stderr.trim())
         ));
     }
@@ -313,7 +310,7 @@ mod tests {
         value.project_path = fixture.project_path.join("missing");
         assert!(validate_request(&value)
             .unwrap_err()
-            .contains("Folder project"));
+            .contains("Project folder"));
     }
 
     #[test]

@@ -93,7 +93,7 @@ pub fn detect_package_manager(project: &Path) -> Result<Option<PackageManager>, 
         0 => Ok(None),
         1 => Ok(found.into_iter().next()),
         _ => Err(format!(
-            "Lockfile package manager ambigu ({}). Set packageManager eksplisit di registry.",
+            "Ambiguous package-manager lockfiles ({}). Set packageManager explicitly in the registry.",
             found
                 .iter()
                 .map(|value| match value {
@@ -121,10 +121,7 @@ pub fn resolve_plan(
     settings: &UpdaterSettings,
 ) -> Result<ToolchainPlan, String> {
     if !project.is_dir() {
-        return Err(format!(
-            "Folder project tidak ditemukan: {}",
-            project.display()
-        ));
+        return Err(format!("Project folder not found: {}", project.display()));
     }
 
     let preset = match app.preset.normalized() {
@@ -138,7 +135,7 @@ pub fn resolve_plan(
     let mut plan = ToolchainPlan::default();
 
     if app.composer.normalized() == ToggleMode::Always && !project.join("composer.json").is_file() {
-        return Err("composer=always tetapi composer.json tidak ditemukan.".to_string());
+        return Err("composer=always but composer.json was not found.".to_string());
     }
 
     if composer_should_install(app, project, changed) {
@@ -202,18 +199,18 @@ pub fn resolve_plan(
         } else if preset == Preset::Go {
             if app.build.normalized() == ToggleMode::Always {
                 return Err(
-                    "preset go membutuhkan buildCommand (mis. 'make build-windows' atau 'go build -o build/app.exe .')."
+                    "the go preset requires buildCommand (for example 'make build-windows' or 'go build -o build/app.exe .')."
                         .to_string(),
                 );
             }
             plan.notes.push(
-                "preset go tanpa buildCommand; build dilewati (set buildCommand untuk build otomatis)."
+                "the go preset has no buildCommand; the build is skipped (set buildCommand for automatic builds)."
                     .to_string(),
             );
         } else if let Some(manager) = package_manager {
             if build_script.is_none() {
                 return Err(
-                    "Build diminta tetapi package.json tidak punya scripts.build; isi buildCommand."
+                    "Build requested but package.json has no scripts.build; set buildCommand."
                         .to_string(),
                 );
             }
@@ -221,8 +218,7 @@ pub fn resolve_plan(
                 .push(package_build_command(settings, manager, project)?);
         } else {
             return Err(
-                "Build diminta tetapi tidak ada package manager/buildCommand yang bisa dipakai."
-                    .to_string(),
+                "Build requested but no package manager or buildCommand is available.".to_string(),
             );
         }
         append_specs(
@@ -242,7 +238,7 @@ pub fn resolve_plan(
         && preset != Preset::Custom
     {
         plan.notes.push(
-            "package.json ditemukan tanpa package manager yang dipakai; dependency Node dilewati."
+            "package.json found but no package manager is selected; Node dependencies are skipped."
                 .to_string(),
         );
     }
@@ -255,7 +251,7 @@ fn validate_preset(preset: Preset, project: &Path, app: &AppConfig) -> Result<()
         Preset::Laravel => {
             if !project.join("artisan").is_file() || !project.join("composer.json").is_file() {
                 return Err(
-                    "preset laravel membutuhkan artisan dan composer.json di folder project."
+                    "the laravel preset requires artisan and composer.json in the project folder."
                         .to_string(),
                 );
             }
@@ -263,14 +259,14 @@ fn validate_preset(preset: Preset, project: &Path, app: &AppConfig) -> Result<()
         Preset::Node | Preset::Bun => {
             if !project.join("package.json").is_file() {
                 return Err(format!(
-                    "preset {} membutuhkan package.json.",
+                    "the {} preset requires package.json.",
                     if preset == Preset::Bun { "bun" } else { "node" }
                 ));
             }
         }
         Preset::Go => {
             if !project.join("go.mod").is_file() {
-                return Err("preset go membutuhkan go.mod.".to_string());
+                return Err("the go preset requires go.mod.".to_string());
             }
         }
         Preset::Custom => {
@@ -283,16 +279,14 @@ fn validate_preset(preset: Preset, project: &Path, app: &AppConfig) -> Result<()
                 && app.build_command.trim().is_empty()
             {
                 return Err(
-                    "preset custom membutuhkan commands.* atau installCommand/buildCommand."
+                    "the custom preset requires commands.* or installCommand/buildCommand."
                         .to_string(),
                 );
             }
         }
         Preset::Auto | Preset::Static => {}
         Preset::Unknown => {
-            return Err(
-                "Preset tidak dikenal; gunakan auto/laravel/node/bun/go/static/custom.".to_string(),
-            )
+            return Err("Unknown preset; use auto/laravel/node/bun/go/static/custom.".to_string())
         }
     }
     Ok(())
@@ -317,7 +311,7 @@ fn resolve_package_manager(
             PackageManager::Npm | PackageManager::Pnpm | PackageManager::Yarn | PackageManager::Bun
         ) {
             return Err(format!(
-                "packageManager={} tetapi package.json tidak ditemukan.",
+                "packageManager={} but package.json was not found.",
                 package_manager_name(explicit)
             ));
         }
@@ -467,9 +461,9 @@ fn read_build_script(project: &Path) -> Result<Option<String>, String> {
         return Ok(None);
     }
     let raw = fs::read_to_string(&path)
-        .map_err(|error| format!("Gagal membaca package.json: {error}"))?;
+        .map_err(|error| format!("Failed to read package.json: {error}"))?;
     let value: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|error| format!("package.json tidak valid: {error}"))?;
+        serde_json::from_str(&raw).map_err(|error| format!("package.json is invalid: {error}"))?;
     Ok(value
         .get("scripts")
         .and_then(|scripts| scripts.get("build"))
@@ -568,7 +562,7 @@ fn package_manager_tool(
         PackageManager::Yarn => require_tool(&settings.yarn_path, "yarn"),
         PackageManager::Bun => require_tool(&settings.bun_path, "Bun"),
         _ => Err(format!(
-            "Package manager {} tidak didukung untuk install/build.",
+            "Package manager {} is not supported for install/build.",
             package_manager_name(manager)
         )),
     }
@@ -701,9 +695,9 @@ pub(crate) fn planned_from_spec(
     let program_text = program_text_owned.trim();
     if program_text.is_empty() {
         return Err(format!(
-            "Command '{}' tidak punya program.",
+            "Command '{}' has no program.",
             if spec.name.trim().is_empty() {
-                "(tanpa nama)"
+                "(unnamed)"
             } else {
                 spec.name.trim()
             }
@@ -711,10 +705,7 @@ pub(crate) fn planned_from_spec(
     }
     let program = PathBuf::from(program_text);
     if (program_text.contains('\\') || program_text.contains('/')) && !program.is_file() {
-        return Err(format!(
-            "Program command tidak ditemukan: {}",
-            program.display()
-        ));
+        return Err(format!("Command program not found: {}", program.display()));
     }
     Ok(PlannedCommand {
         label: if spec.name.trim().is_empty() {
@@ -757,7 +748,7 @@ fn resolve_cwd(value: &str, project: &Path) -> Result<PathBuf, String> {
     };
     if !cwd.is_dir() {
         return Err(format!(
-            "Working directory command tidak ditemukan: {}",
+            "Command working directory not found: {}",
             cwd.display()
         ));
     }
@@ -777,10 +768,10 @@ fn require_tool(path: &str, label: &str) -> Result<PathBuf, String> {
     }
     if path.is_empty() {
         Err(format!(
-            "{label} tidak ditemukan di settings maupun PATH. Isi path-nya di data/projects.json."
+            "{label} was not found in settings or PATH. Set its path in data/projects.json."
         ))
     } else {
-        Err(format!("{label} tidak ditemukan: {path}"))
+        Err(format!("{label} not found: {path}"))
     }
 }
 
@@ -920,7 +911,7 @@ mod tests {
             &fixture.settings,
         )
         .unwrap_err();
-        assert!(error.contains("ambigu"));
+        assert!(error.contains("Ambiguous"));
     }
 
     #[test]

@@ -119,6 +119,28 @@ mod ui_tests {
     const TYPES: &str = include_str!("../ui/src/lib/types.ts");
     const HINT: &str = include_str!("../ui/src/components/hint.tsx");
     const TOOLTIP: &str = include_str!("../ui/src/components/ui/tooltip.tsx");
+    const MAIN_TSX: &str = include_str!("../ui/src/main.tsx");
+    const SERVICE_LIB: &str = include_str!("../ui/src/lib/service.ts");
+    const TAURI_LIB: &str = include_str!("../ui/src/lib/tauri.ts");
+    const UTILS_LIB: &str = include_str!("../ui/src/lib/utils.ts");
+    const BADGE: &str = include_str!("../ui/src/components/ui/badge.tsx");
+    const BUTTON: &str = include_str!("../ui/src/components/ui/button.tsx");
+    const CARD: &str = include_str!("../ui/src/components/ui/card.tsx");
+    const CHECKBOX: &str = include_str!("../ui/src/components/ui/checkbox.tsx");
+    const CONTEXT_MENU: &str = include_str!("../ui/src/components/ui/context-menu.tsx");
+    const DIALOG: &str = include_str!("../ui/src/components/ui/dialog.tsx");
+    const DROPDOWN_MENU: &str = include_str!("../ui/src/components/ui/dropdown-menu.tsx");
+    const INPUT: &str = include_str!("../ui/src/components/ui/input.tsx");
+    const LABEL: &str = include_str!("../ui/src/components/ui/label.tsx");
+    const PROGRESS: &str = include_str!("../ui/src/components/ui/progress.tsx");
+    const SCROLL_AREA: &str = include_str!("../ui/src/components/ui/scroll-area.tsx");
+    const SELECT: &str = include_str!("../ui/src/components/ui/select.tsx");
+    const SEPARATOR: &str = include_str!("../ui/src/components/ui/separator.tsx");
+    const SONNER: &str = include_str!("../ui/src/components/ui/sonner.tsx");
+    const SWITCH: &str = include_str!("../ui/src/components/ui/switch.tsx");
+    const TABLE: &str = include_str!("../ui/src/components/ui/table.tsx");
+    const TASK_INSTALL_SCRIPT: &str = include_str!("../../../scripts/Install-UpdaterTask.ps1");
+    const TASK_HIDDEN_LAUNCHER: &str = include_str!("../../../scripts/Run-UpdaterTaskHidden.vbs");
     // Runtime process-spawning sources. Keep this list in sync when adding a
     // new GUI-side Command::new. Console-only crates (sm-trigger, sm-diag,
     // sm-updater CLI) are intentionally excluded.
@@ -130,7 +152,7 @@ mod ui_tests {
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{MODAL_SHELL}\n{CONFIRM_DIALOG}\n{STATUS_BADGE}\n{PATH_INPUT}\n{TYPES}\n{HINT}\n{TOOLTIP}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{MODAL_SHELL}\n{CONFIRM_DIALOG}\n{STATUS_BADGE}\n{PATH_INPUT}\n{TYPES}\n{HINT}\n{TOOLTIP}\n{MAIN_TSX}\n{SERVICE_LIB}\n{TAURI_LIB}\n{UTILS_LIB}\n{BADGE}\n{BUTTON}\n{CARD}\n{CHECKBOX}\n{CONTEXT_MENU}\n{DIALOG}\n{DROPDOWN_MENU}\n{INPUT}\n{LABEL}\n{PROGRESS}\n{SCROLL_AREA}\n{SELECT}\n{SEPARATOR}\n{SONNER}\n{SWITCH}\n{TABLE}"
         )
     }
 
@@ -150,6 +172,26 @@ mod ui_tests {
             "berjalan",
             "Tentang",
             "Tidak",
+            "Buka",
+            "Tutup",
+            "Pilih",
+            "Cari",
+            "Ubah",
+            "Perbarui",
+            "Gagal",
+            "Belum",
+            "Sudah",
+            "Aplikasi",
+            "Pengaturan",
+            "Layanan",
+            "Selesai",
+            "Kosong",
+            "Wajib",
+            "Alamat",
+            "Berkas",
+            "Nama",
+            "Jalankan",
+            "Kesalahan",
         ] {
             assert!(!sources.contains(word), "untranslated UI word: {word}");
         }
@@ -751,6 +793,15 @@ mod ui_tests {
             rest = &tail[boundary.max(1)..];
         }
         assert!(checked > 0, "{name}: expected at least one Command::new");
+    }
+
+    #[test]
+    fn scheduled_task_action_and_task_setting_hide_console_windows() {
+        assert!(TASK_INSTALL_SCRIPT.contains("wscript.exe"));
+        assert!(TASK_INSTALL_SCRIPT.contains("Run-UpdaterTaskHidden.vbs"));
+        assert!(TASK_INSTALL_SCRIPT.contains("-Hidden"));
+        assert!(TASK_HIDDEN_LAUNCHER.contains("WScript.Shell"));
+        assert!(TASK_HIDDEN_LAUNCHER.contains(", 0, True"));
     }
 
     #[test]

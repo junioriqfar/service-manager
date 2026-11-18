@@ -54,7 +54,7 @@ try {
     $created = [datetime]::Parse([string]$request.createdAt).ToUniversalTime()
     $age = (Get-Date).ToUniversalTime() - $created
     if ($age.TotalMinutes -gt 15 -or $age.TotalMinutes -lt -1) {
-        "Request trigger kedaluwarsa (umur $([math]::Round($age.TotalMinutes, 1)) menit)." |
+        "Trigger request expired (age $([math]::Round($age.TotalMinutes, 1)) minutes)." |
             Set-Content -LiteralPath $logPath -Encoding UTF8
         Write-Result -Nonce $nonce -ExitCode 1 -LogPath $logPath -ErrorText "expired request"
         exit 1
@@ -110,7 +110,7 @@ try {
     Write-Result -Nonce $nonce -ExitCode $exitCode -LogPath $logPath
     exit $exitCode
 } catch {
-    "Task action gagal: $($_.Exception.Message)" | Add-Content -LiteralPath $logPath -Encoding UTF8
+    "Task action failed: $($_.Exception.Message)" | Add-Content -LiteralPath $logPath -Encoding UTF8
     Write-Result -Nonce $nonce -ExitCode 1 -LogPath $logPath -ErrorText $_.Exception.Message
     exit 1
 }

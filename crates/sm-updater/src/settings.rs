@@ -27,9 +27,9 @@ pub const MAX_MAINTENANCE_MESSAGE_CHARS: usize = 500;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
-    #[error("Gagal membaca/menulis settings: {0}")]
+    #[error("Failed to read/write settings: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Settings JSON tidak valid: {0}")]
+    #[error("Settings JSON is invalid: {0}")]
     Json(#[from] serde_json::Error),
     #[error("{0}")]
     Invalid(String),
@@ -141,7 +141,7 @@ fn find_plaintext_secret(value: &Value, prefix: &str) -> Option<String> {
 fn reject_plaintext_secrets(value: &Value) -> Result<(), SettingsError> {
     if let Some(path) = find_plaintext_secret(value, "") {
         return Err(invalid(format!(
-            "Field rahasia '{path}' tidak boleh memuat password/token plaintext di settings.json."
+            "Secret field '{path}' must not contain a plaintext password/token in settings.json."
         )));
     }
     Ok(())
@@ -183,22 +183,22 @@ impl ToolPath {
         let path = self.path.trim();
         if required && path.is_empty() {
             return Err(invalid(format!(
-                "Path tool '{tool}' wajib diisi di settings.json."
+                "Tool path '{tool}' is required in settings.json."
             )));
         }
         if has_control_characters(path) {
             return Err(invalid(format!(
-                "Path tool '{tool}' memuat karakter kontrol."
+                "Tool path '{tool}' contains control characters."
             )));
         }
         if self.version.len() > 128 || has_control_characters(&self.version) {
             return Err(invalid(format!(
-                "Versi tool '{tool}' tidak valid (maksimal 128 karakter tanpa karakter kontrol)."
+                "Tool version '{tool}' is invalid (maximum 128 characters without control characters)."
             )));
         }
         if self.detected_at.len() > 64 || has_control_characters(&self.detected_at) {
             return Err(invalid(format!(
-                "Timestamp deteksi tool '{tool}' tidak valid."
+                "Detection timestamp for tool '{tool}' is invalid."
             )));
         }
         Ok(())
@@ -232,7 +232,7 @@ impl ApacheToolPath {
     fn validate(&self) -> Result<(), SettingsError> {
         self.tool.validate("apache", false)?;
         if has_control_characters(&self.root) || has_control_characters(&self.config) {
-            return Err(invalid("Root/config Apache memuat karakter kontrol."));
+            return Err(invalid("Apache root/config contains control characters."));
         }
         if !self.tool.path.trim().is_empty() {
             let is_httpd = Path::new(self.tool.path.trim())
@@ -242,7 +242,7 @@ impl ApacheToolPath {
                 .unwrap_or(false);
             if !is_httpd {
                 return Err(invalid(
-                    "Path Apache harus menunjuk httpd.exe (contoh C:\\Apache24\\bin\\httpd.exe).",
+                    "Apache path must point to httpd.exe (for example C:\\Apache24\\bin\\httpd.exe).",
                 ));
             }
         }
@@ -388,7 +388,7 @@ impl UpdateTimeouts {
         ] {
             if seconds == 0 || seconds > MAX_TIMEOUT_SECONDS {
                 return Err(invalid(format!(
-                    "Timeout '{name}' harus antara 1 dan {MAX_TIMEOUT_SECONDS} detik."
+                    "Timeout '{name}' must be between 1 and {MAX_TIMEOUT_SECONDS} seconds."
                 )));
             }
         }
@@ -426,17 +426,17 @@ impl UpdaterDefaults {
         if self.max_concurrent_updates == 0 || self.max_concurrent_updates > MAX_CONCURRENT_UPDATES
         {
             return Err(invalid(format!(
-                "maxConcurrentUpdates harus antara 1 dan {MAX_CONCURRENT_UPDATES}."
+                "maxConcurrentUpdates must be between 1 and {MAX_CONCURRENT_UPDATES}."
             )));
         }
         self.timeouts.validate()?;
         if self.log_retention_days > MAX_LOG_RETENTION_DAYS {
             return Err(invalid(format!(
-                "logRetentionDays maksimal {MAX_LOG_RETENTION_DAYS} hari."
+                "logRetentionDays must be at most {MAX_LOG_RETENTION_DAYS} days."
             )));
         }
         if has_control_characters(&self.log_dir) {
-            return Err(invalid("logDir memuat karakter kontrol."));
+            return Err(invalid("logDir contains control characters."));
         }
         Ok(())
     }
@@ -480,12 +480,12 @@ impl SettingsTrigger {
             let pattern = pattern.trim();
             if pattern.is_empty() {
                 return Err(invalid(format!(
-                    "trigger.allowedClientIPs[{index}] kosong. Hapus entri kosong atau isi alamat IP/CIDR."
+                    "trigger.allowedClientIPs[{index}] is empty. Remove the empty entry or provide an IP/CIDR."
                 )));
             }
             if pattern.parse::<IpAddr>().is_err() && pattern.parse::<IpNet>().is_err() {
                 return Err(invalid(format!(
-                    "Pola IP/CIDR trigger tidak valid: '{pattern}'. Gunakan alamat IP atau CIDR IPv4/IPv6 (contoh 10.0.0.0/24)."
+                    "Trigger IP/CIDR pattern is invalid: '{pattern}'. Use an IPv4/IPv6 address or CIDR (for example 10.0.0.0/24)."
                 )));
             }
         }
@@ -528,15 +528,15 @@ impl PrivilegedExecution {
 
     fn validate(&self) -> Result<(), SettingsError> {
         if self.mode.is_empty() {
-            return Err(invalid("privilegedExecution.mode wajib diisi."));
+            return Err(invalid("privilegedExecution.mode is required."));
         }
         if self.mode == "scheduled-task" && self.task_name.is_empty() {
             return Err(invalid(
-                "privilegedExecution.taskName wajib diisi untuk mode scheduled-task.",
+                "privilegedExecution.taskName is required for scheduled-task mode.",
             ));
         }
         if self.logon_type.is_empty() {
-            return Err(invalid("privilegedExecution.logonType wajib diisi."));
+            return Err(invalid("privilegedExecution.logonType is required."));
         }
         Ok(())
     }
@@ -562,12 +562,12 @@ impl MaintenanceSettings {
     fn validate(&self) -> Result<(), SettingsError> {
         if has_control_characters(&self.message) {
             return Err(invalid(format!(
-                "Maintenance message memuat karakter kontrol (maksimal {MAX_MAINTENANCE_MESSAGE_CHARS} karakter tanpa newline/tab)."
+                "Maintenance message contains control characters (maximum {MAX_MAINTENANCE_MESSAGE_CHARS} characters without newline/tab)."
             )));
         }
         if self.message.chars().count() > MAX_MAINTENANCE_MESSAGE_CHARS {
             return Err(invalid(format!(
-                "Maintenance message maksimal {MAX_MAINTENANCE_MESSAGE_CHARS} karakter."
+                "Maintenance message must be at most {MAX_MAINTENANCE_MESSAGE_CHARS} characters."
             )));
         }
         Ok(())
@@ -625,7 +625,7 @@ impl Settings {
     pub fn validate(&self) -> Result<(), SettingsError> {
         if self.version != SETTINGS_VERSION {
             return Err(invalid(format!(
-                "Versi settings {} tidak didukung (versi yang didukung: {SETTINGS_VERSION}).",
+                "Settings version {} is not supported (supported version: {SETTINGS_VERSION}).",
                 self.version
             )));
         }
@@ -637,7 +637,7 @@ impl Settings {
         for key in self.variables.keys() {
             if is_sensitive_key(key) {
                 return Err(invalid(format!(
-                    "Variable '{key}' terlihat menyimpan password/token; settings.json tidak boleh memuat rahasia plaintext."
+                    "Variable '{key}' appears to store a password/token; settings.json must not contain plaintext secrets."
                 )));
             }
         }
@@ -1003,7 +1003,7 @@ mod tests {
         settings.maintenance.enabled = true;
         settings.maintenance.message = "line\nbreak".into();
         let error = settings.validate().unwrap_err().to_string();
-        assert!(error.contains("kontrol"));
+        assert!(error.contains("control"));
 
         settings.maintenance.message = "x".repeat(MAX_MAINTENANCE_MESSAGE_CHARS + 1);
         let error = settings.validate().unwrap_err().to_string();
@@ -1051,7 +1051,7 @@ mod tests {
         let mut settings = base_settings();
         settings.trigger.allowed_client_ips = vec!["10.0.0.0/33".into()];
         let error = settings.validate().unwrap_err().to_string();
-        assert!(error.contains("tidak valid"));
+        assert!(error.contains("invalid"));
         assert!(error.contains("10.0.0.0/33"));
 
         settings.trigger.allowed_client_ips = vec!["not-an-ip".into()];
@@ -1059,11 +1059,11 @@ mod tests {
             .validate()
             .unwrap_err()
             .to_string()
-            .contains("tidak valid"));
+            .contains("invalid"));
 
         settings.trigger.allowed_client_ips = vec!["127.0.0.1".into(), "   ".into()];
         let error = settings.validate().unwrap_err().to_string();
-        assert!(error.contains("kosong"));
+        assert!(error.contains("empty"));
     }
 
     #[test]
@@ -1074,7 +1074,7 @@ mod tests {
         fs::write(&path, raw).unwrap();
 
         let error = load_settings(&path).unwrap_err().to_string();
-        assert!(error.contains("tidak valid"));
+        assert!(error.contains("invalid"));
     }
 
     #[test]

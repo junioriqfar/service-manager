@@ -110,7 +110,7 @@ pub fn run_registry_with(
 
     if let Some(requested) = &options.app {
         if config.find(requested).is_none() {
-            return Err(format!("App '{requested}' tidak ditemukan di registry."));
+            return Err(format!("App '{requested}' was not found in the registry."));
         }
     }
 
@@ -119,8 +119,8 @@ pub fn run_registry_with(
         && !services.is_elevated()?
     {
         return Err(
-            "Update dengan service lifecycle membutuhkan Administrator/elevated. \
-             Jalankan melalui Scheduled Task wrapper atau elevated terminal."
+            "Updates with a service lifecycle require Administrator/elevated privileges. \
+             Run through the Scheduled Task wrapper or an elevated terminal."
                 .to_string(),
         );
     }
@@ -195,7 +195,7 @@ pub fn run_registry_with(
                         project: selected_app.app.id.clone(),
                         status: UpdateStatus::Failed,
                         message: format!(
-                            "Check untuk app '{}' tidak mengembalikan hasil worker; status ditandai failed.",
+                            "Check for app '{}' did not return a worker result; marking as failed.",
                             selected_app.app.id
                         ),
                         log_path: None,
@@ -254,7 +254,7 @@ pub fn run_registry_with(
     save_state(config_path, &state)?;
 
     if outcomes.is_empty() {
-        return Err("Tidak ada app yang cocok/diproses.".to_string());
+        return Err("No matching app to process.".to_string());
     }
     Ok(outcomes)
 }
@@ -281,7 +281,7 @@ fn record_history(
         client_ip: client_ip.map(|ip| ip.to_string()).unwrap_or_default(),
     };
     if let Err(error) = append_history(config_path, &entry) {
-        eprintln!("Gagal menulis updater history untuk app '{app_id}': {error}");
+        eprintln!("Failed to write updater history for app '{app_id}': {error}");
     }
 }
 
@@ -292,8 +292,8 @@ fn record_forbidden(
     config_path: &Path,
 ) -> RunOutcome {
     let message = match client_ip {
-        Some(ip) => format!("IP {ip} tidak diizinkan untuk app '{}'.", app.id),
-        None => format!("Trigger lokal tidak diizinkan untuk app '{}'.", app.id),
+        Some(ip) => format!("IP {ip} is not allowed for app '{}'.", app.id),
+        None => format!("Local trigger is not allowed for app '{}'.", app.id),
     };
     mark(state, &app.id, "forbidden", Some(&message), 0);
     record_history(
@@ -413,7 +413,7 @@ fn run_check_apps_parallel(
                         project: app.id.clone(),
                         status: UpdateStatus::Failed,
                         message: format!(
-                            "Worker check untuk app '{}' berhenti tidak normal; status ditandai failed.",
+                            "Worker check for app '{}' stopped unexpectedly; marking as failed.",
                             app.id
                         ),
                         log_path: None,

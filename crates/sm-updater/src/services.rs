@@ -58,7 +58,7 @@ impl ServiceControl for WindowsServiceControl {
     fn preflight(&self, name: &str) -> Result<(), String> {
         sm_win::check_control_access(name).map_err(|error| {
             format!(
-                "Tidak punya hak start/stop service '{name}' (jalankan sebagai Administrator/elevated): {error}"
+                "No permission to start/stop service '{name}' (run as Administrator/elevated): {error}"
             )
         })
     }
@@ -103,7 +103,7 @@ impl<'a> Lifecycle<'a> {
     fn validate_name(&self, name: &str) -> Result<(), String> {
         if !self.control.exists(name)? {
             return Err(format!(
-                "Service '{name}' tidak ditemukan di Windows SCM. Periksa data/services.json."
+                "Service '{name}' was not found in the Windows SCM. Check data/services.json."
             ));
         }
         Ok(())
@@ -128,7 +128,7 @@ impl<'a> Lifecycle<'a> {
                 continue;
             }
             if let Err(error) = self.control.start(&name, self.timeout) {
-                errors.push(format!("start '{name}' gagal: {error}"));
+                errors.push(format!("start '{name}' failed: {error}"));
             }
         }
 
@@ -137,7 +137,7 @@ impl<'a> Lifecycle<'a> {
                 continue;
             }
             if let Err(error) = self.control.restart(&name, self.timeout) {
-                errors.push(format!("restart '{name}' gagal: {error}"));
+                errors.push(format!("restart '{name}' failed: {error}"));
             }
         }
 
@@ -146,7 +146,7 @@ impl<'a> Lifecycle<'a> {
                 continue;
             }
             if let Err(error) = self.control.start(&name, self.timeout) {
-                errors.push(format!("start '{name}' gagal: {error}"));
+                errors.push(format!("start '{name}' failed: {error}"));
             }
         }
 
@@ -163,7 +163,7 @@ impl<'a> Lifecycle<'a> {
         let mut errors = Vec::new();
         for name in stopped {
             if let Err(error) = self.control.start(&name, self.timeout) {
-                errors.push(format!("start '{name}' gagal: {error}"));
+                errors.push(format!("start '{name}' failed: {error}"));
             }
         }
         errors
@@ -179,14 +179,14 @@ impl<'a> Lifecycle<'a> {
                 Ok(false) => continue,
                 Ok(true) => {}
                 Err(error) => {
-                    result = Err(format!("Gagal memeriksa service '{name}': {error}"));
+                    result = Err(format!("Failed to check service '{name}': {error}"));
                     break;
                 }
             }
             match self.control.stop(&name, self.timeout) {
                 Ok(()) => self.stopped.borrow_mut().push(name),
                 Err(error) => {
-                    result = Err(format!("Gagal menghentikan service '{name}': {error}"));
+                    result = Err(format!("Failed to stop service '{name}': {error}"));
                     break;
                 }
             }
@@ -196,7 +196,7 @@ impl<'a> Lifecycle<'a> {
             let errors = self.best_effort_restore();
             if !errors.is_empty() {
                 if let Err(message) = &mut result {
-                    message.push_str(&format!("; pemulihan service: {}", errors.join("; ")));
+                    message.push_str(&format!("; service recovery: {}", errors.join("; ")));
                 }
             }
         }

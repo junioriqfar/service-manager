@@ -610,7 +610,7 @@ impl UpdaterConfig {
 
     pub fn validate_app(&self, app: &AppConfig) -> Result<(), String> {
         if app.id.trim().is_empty() {
-            return Err("App id wajib diisi.".to_string());
+            return Err("App id is required.".to_string());
         }
         if !app
             .id
@@ -618,18 +618,18 @@ impl UpdaterConfig {
             .all(|value| value.is_ascii_alphanumeric() || matches!(value, '-' | '_' | '.'))
         {
             return Err(
-                "App id hanya boleh berisi huruf, angka, titik, garis bawah, atau tanda hubung."
+                "App id may only contain letters, numbers, dots, underscores, or hyphens."
                     .to_string(),
             );
         }
         if app.repo_url.trim().is_empty() {
-            return Err(format!("Repo URL app '{}' wajib diisi.", app.id));
+            return Err(format!("Repo URL for app '{}' is required.", app.id));
         }
         if app.local_path.trim().is_empty() {
-            return Err(format!("Local path app '{}' wajib diisi.", app.id));
+            return Err(format!("Local path for app '{}' is required.", app.id));
         }
         if app.branch.trim().is_empty() {
-            return Err(format!("Branch app '{}' wajib diisi.", app.id));
+            return Err(format!("Branch for app '{}' is required.", app.id));
         }
         crate::dirty::validate_patterns(&app.dirty_ignore)
             .map_err(|error| format!("dirtyIgnore app '{}': {error}", app.id))?;
@@ -646,14 +646,14 @@ pub fn load_config(path: &Path) -> Result<UpdaterConfig, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(UpdaterConfig::default())
         }
-        Err(error) => return Err(format!("Gagal membaca config: {error}")),
+        Err(error) => return Err(format!("Failed to read config: {error}")),
     };
     if raw.trim().is_empty() {
         return Ok(UpdaterConfig::default());
     }
 
     let value: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|error| format!("Config JSON tidak valid: {error}"))?;
+        serde_json::from_str(&raw).map_err(|error| format!("Config JSON is invalid: {error}"))?;
     let version = value
         .get("version")
         .and_then(|value| value.as_u64())
@@ -661,12 +661,12 @@ pub fn load_config(path: &Path) -> Result<UpdaterConfig, String> {
 
     if version >= 2 || value.get("apps").is_some() {
         let mut config: UpdaterConfig = serde_json::from_value(value)
-            .map_err(|error| format!("Config registry tidak valid: {error}"))?;
+            .map_err(|error| format!("Registry config is invalid: {error}"))?;
         config.normalize();
         Ok(config)
     } else {
         let legacy: ProjectsFile = serde_json::from_value(value)
-            .map_err(|error| format!("Config lama tidak valid: {error}"))?;
+            .map_err(|error| format!("Legacy config is invalid: {error}"))?;
         let mut config = from_legacy(legacy);
         config.normalize();
         Ok(config)

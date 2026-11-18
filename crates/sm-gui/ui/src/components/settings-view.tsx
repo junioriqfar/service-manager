@@ -2998,8 +2998,8 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                     <div className="font-medium">Task action is not hidden</div>
                     <p className="text-xs">
                       Triggering this task may flash a PowerShell window. Click{" "}
-                      <span className="font-medium">Repair Task</span> as Administrator to apply{" "}
-                      <code>-WindowStyle Hidden</code> and the Hidden task setting.
+                      <span className="font-medium">Repair Task</span> as Administrator to apply
+                      the hidden wscript launcher and the Hidden task setting.
                     </p>
                   </div>
                 </div>

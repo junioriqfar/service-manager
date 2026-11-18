@@ -35,7 +35,7 @@ if ([string]::IsNullOrWhiteSpace($UpdaterPath)) {
     }
 }
 if (-not (Test-Path -LiteralPath $UpdaterPath)) {
-    [Console]::Error.WriteLine("sm-updater.exe tidak ditemukan: $UpdaterPath")
+    [Console]::Error.WriteLine("sm-updater.exe not found: $UpdaterPath")
     exit 1
 }
 
@@ -76,7 +76,7 @@ Move-Item -LiteralPath $tempRequest -Destination $requestPath -Force
 
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($null -eq $task) {
-    [Console]::Error.WriteLine("Scheduled Task '$TaskName' belum dibuat. Jalankan scripts\Install-UpdaterTask.ps1 sebagai Administrator.")
+    [Console]::Error.WriteLine("Scheduled Task '$TaskName' is not installed. Run scripts\Install-UpdaterTask.ps1 as Administrator.")
     exit 1
 }
 
@@ -104,5 +104,5 @@ while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 500
 }
 
-[Console]::Error.WriteLine("Timeout menunggu Scheduled Task '$TaskName' selesai.")
+[Console]::Error.WriteLine("Timed out waiting for Scheduled Task '$TaskName' to finish.")
 exit 1

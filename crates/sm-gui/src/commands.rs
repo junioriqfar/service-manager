@@ -131,7 +131,7 @@ pub fn open_app_folder(state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn open_app_log(state: State<'_, AppState>) -> Result<(), String> {
-    state.log("Buka log aplikasi.");
+    state.log("Open application log.");
     util::open_path(&state.paths.app_log_path())
 }
 

@@ -211,7 +211,7 @@ mod tests {
                 .iter()
                 .any(|name| name == &service.name)
             {
-                Err(format!("gagal: {}", service.name))
+                Err(format!("failed: {}", service.name))
             } else {
                 Ok(())
             }

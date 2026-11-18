@@ -484,7 +484,7 @@ mod tests {
             UpdateOptions::default(),
         );
         assert_eq!(outcome.status, UpdateStatus::Failed);
-        assert!(outcome.message.contains("Branch aktif"));
+        assert!(outcome.message.contains("Active branch"));
     }
 
     #[test]

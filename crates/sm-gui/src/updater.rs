@@ -305,7 +305,7 @@ fn validate_service_names(path: &Path, services: &[String]) -> Result<(), String
         Ok(())
     } else {
         Err(format!(
-            "Service tidak ada di data/services.json: {}",
+            "Service not found in data/services.json: {}",
             missing.join(", ")
         ))
     }
@@ -321,7 +321,7 @@ fn validate_web_server_service(path: &Path, service: &str) -> Result<(), String>
     let result = sm_config::load_services_lenient(path, &services_backup_dir(path));
     if let Some(warning) = result.warning.as_deref() {
         return Err(format!(
-            "Tidak bisa memvalidasi webServerService '{service}': {warning}"
+            "Could not validate webServerService '{service}': {warning}"
         ));
     }
     let Some(found) = result
@@ -330,12 +330,12 @@ fn validate_web_server_service(path: &Path, service: &str) -> Result<(), String>
         .find(|candidate| candidate.name.eq_ignore_ascii_case(service))
     else {
         return Err(format!(
-            "Web server service '{service}' tidak ada di data/services.json."
+            "Web server service '{service}' was not found in data/services.json."
         ));
     };
     if found.service_type.normalized() != ServiceType::Apache {
         return Err(format!(
-            "Web server service '{service}' bukan service Apache (serviceType: {}).",
+            "Web server service '{service}' is not an Apache service (serviceType: {}).",
             found.service_type.normalized().label()
         ));
     }
@@ -401,7 +401,7 @@ fn delete_app_at(config_path: &Path, id: &str) -> Result<Vec<UpdaterAppView>, St
     let before = config.apps.len();
     config.apps.retain(|app| !app.id.eq_ignore_ascii_case(id));
     if config.apps.len() == before {
-        return Err(format!("App '{id}' tidak ditemukan."));
+        return Err(format!("App '{id}' was not found."));
     }
     save_config(config_path, &config)?;
     load_views_at(config_path)
@@ -438,15 +438,12 @@ fn test_updater_app_at(
 ) -> Result<String, String> {
     let app = config
         .find(id)
-        .ok_or_else(|| format!("App '{id}' tidak ditemukan."))?;
+        .ok_or_else(|| format!("App '{id}' was not found."))?;
     config.validate_app(app)?;
 
     let project = Path::new(app.local_path.trim());
     if !project.is_dir() {
-        return Err(format!(
-            "Folder project tidak ditemukan: {}",
-            project.display()
-        ));
+        return Err(format!("Project folder not found: {}", project.display()));
     }
     // Test must follow the same effective settings as plan/run/check.
     let git_path = crate::credentials::effective_git_path_at(config_path)?;
@@ -466,7 +463,7 @@ fn test_updater_app_at(
         )
         .map_err(|error| error.to_string())?;
     if !branch.success() {
-        return Err(format!("Gagal membaca branch: {}", branch.combined()));
+        return Err(format!("Failed to read branch: {}", branch.combined()));
     }
 
     let remote = runner
@@ -484,7 +481,7 @@ fn test_updater_app_at(
         )
         .map_err(|error| error.to_string())?;
     if !remote.success() {
-        return Err(format!("Remote gagal: {}", remote.combined()));
+        return Err(format!("Remote check failed: {}", remote.combined()));
     }
 
     let preset = if app.preset == Preset::Auto {
@@ -499,7 +496,7 @@ fn test_updater_app_at(
     let mut lines = vec![
         format!("App          : {}", app.id),
         format!("Path         : {}", project.display()),
-        format!("Branch aktif : {}", branch.stdout.trim()),
+        format!("Active branch: {}", branch.stdout.trim()),
         "Remote       : OK".to_string(),
         format!("Preset       : {}", preset_name(preset)),
         format!("Package mgr  : {package_manager}"),
@@ -532,7 +529,7 @@ fn plan_updater_app_at(
     let config = load_config(config_path)?;
     let app = config
         .find(app_id)
-        .ok_or_else(|| format!("App '{app_id}' tidak ditemukan."))?;
+        .ok_or_else(|| format!("App '{app_id}' was not found."))?;
     config.validate_app(app)?;
     let settings = effective_settings(
         &settings_path_for(config_path),
@@ -667,7 +664,7 @@ pub fn read_updater_log(app: Option<String>) -> Result<UpdaterLogView, String> {
     let path = if let Some(id) = app.as_deref() {
         project_log.or(matching_global).ok_or_else(|| {
             format!(
-                "Belum ada log untuk app '{id}' di {} atau storage/logs.",
+                "No log found for app '{id}' in {} or storage/logs.",
                 log_dir.display()
             )
         })?
@@ -675,7 +672,7 @@ pub fn read_updater_log(app: Option<String>) -> Result<UpdaterLogView, String> {
         recent_logs(&log_dir, 1)
             .into_iter()
             .next()
-            .ok_or_else(|| format!("Belum ada log updater di {}", log_dir.display()))?
+            .ok_or_else(|| format!("No updater log found in {}", log_dir.display()))?
     };
     let text = tail_text(&path, 400)?;
     Ok(UpdaterLogView {
@@ -798,12 +795,15 @@ mod tests {
         let mut input = app("demo", &project);
         input.web_server_service = "api".into();
         let error = save_app_at(&config, Some(&services), input).unwrap_err();
-        assert!(error.contains("bukan service Apache"), "{error}");
+        assert!(error.contains("is not an Apache service"), "{error}");
 
         let mut input = app("demo", &project);
         input.web_server_service = "missing".into();
         let error = save_app_at(&config, Some(&services), input).unwrap_err();
-        assert!(error.contains("tidak ada di data/services.json"), "{error}");
+        assert!(
+            error.contains("was not found in data/services.json"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -1019,7 +1019,7 @@ mod tests {
         };
 
         let message = test_updater_app_at(&config_path, &config, "demo", &runner).unwrap();
-        assert!(message.contains("Branch aktif : main"), "{message}");
+        assert!(message.contains("Active branch: main"), "{message}");
         let programs = runner.programs.lock().unwrap();
         assert_eq!(programs.len(), 2);
         assert_eq!(programs[0], good_git);

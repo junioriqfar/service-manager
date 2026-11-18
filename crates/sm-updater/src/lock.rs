@@ -29,7 +29,7 @@ impl UpdateLock {
             } else {
                 let content = fs::read_to_string(path).unwrap_or_default();
                 return Err(format!(
-                    "Update lain sedang berjalan (lock: {}). {}",
+                    "Another update is already running (lock: {}). {}",
                     path.display(),
                     content.trim()
                 ));
@@ -42,7 +42,7 @@ impl UpdateLock {
             .open(path)
             .map_err(|error| {
                 format!(
-                    "Tidak bisa membuat lock {}: {error}. Mungkin update lain sedang berjalan.",
+                    "Could not create lock {}: {error}. Another update may already be running.",
                     path.display()
                 )
             })?;
@@ -81,7 +81,7 @@ mod tests {
         let lock = UpdateLock::acquire(&path, Duration::from_secs(60)).unwrap();
         assert!(path.is_file());
         let error = UpdateLock::acquire(&path, Duration::from_secs(60)).unwrap_err();
-        assert!(error.contains("sedang berjalan"));
+        assert!(error.contains("already running"));
         drop(lock);
         assert!(!path.exists());
     }

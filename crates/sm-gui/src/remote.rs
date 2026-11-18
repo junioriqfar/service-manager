@@ -243,7 +243,7 @@ fn askpass_path() -> Result<PathBuf, String> {
         Ok(candidate)
     } else {
         Err(format!(
-            "sm-trigger.exe tidak ditemukan di folder aplikasi ({}). Diperlukan untuk password SSH.",
+            "sm-trigger.exe was not found in the application folder ({}). It is required for SSH password authentication.",
             candidate.display()
         ))
     }
@@ -251,7 +251,7 @@ fn askpass_path() -> Result<PathBuf, String> {
 
 fn protect_password(password: &str) -> Result<String, String> {
     let protected = dpapi_protect(password.as_bytes(), Some(DPAPI_ENTROPY))
-        .map_err(|error| format!("Gagal mengenkripsi password dengan DPAPI: {error}"))?;
+        .map_err(|error| format!("Failed to encrypt the password with DPAPI: {error}"))?;
     Ok(hex_encode(&protected))
 }
 

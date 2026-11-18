@@ -80,7 +80,7 @@ try {
 
     $scriptsStage = Join-Path $stage 'scripts'
     New-Item -ItemType Directory -Path $scriptsStage -Force | Out-Null
-    foreach ($script in @('Invoke-UpdaterTask.ps1', 'Run-UpdaterTaskAction.ps1', 'Install-UpdaterTask.ps1')) {
+    foreach ($script in @('Invoke-UpdaterTask.ps1', 'Run-UpdaterTaskAction.ps1', 'Run-UpdaterTaskHidden.vbs', 'Install-UpdaterTask.ps1')) {
         Copy-Item -LiteralPath (Join-Path $root (Join-Path 'scripts' $script)) -Destination $scriptsStage
     }
 

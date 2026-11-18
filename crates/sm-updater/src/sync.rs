@@ -41,7 +41,7 @@ pub(crate) fn sync_project(
     before_merge: impl FnOnce(&[String]) -> Result<(), String>,
 ) -> Result<SyncResult, String> {
     if !git_path.is_file() {
-        return Err(format!("Git tidak ditemukan: {}", git_path.display()));
+        return Err(format!("Git not found: {}", git_path.display()));
     }
 
     let status = git(
@@ -64,12 +64,12 @@ pub(crate) fn sync_project(
         let remaining = scan.ignored.len().saturating_sub(10);
         if remaining > 0 {
             logger.log(&format!(
-                "INFO: {} perubahan diabaikan oleh dirtyIgnore: {shown} (+{remaining} entri lain)",
+                "INFO: {} change(s) ignored by dirtyIgnore: {shown} (+{remaining} more entries)",
                 scan.ignored.len()
             ));
         } else {
             logger.log(&format!(
-                "INFO: {} perubahan diabaikan oleh dirtyIgnore: {shown}",
+                "INFO: {} change(s) ignored by dirtyIgnore: {shown}",
                 scan.ignored.len()
             ));
         }
@@ -79,10 +79,10 @@ pub(crate) fn sync_project(
             logger.log(line);
         }
         let message = if scan.ignored.is_empty() {
-            "Working tree tidak bersih; project dilewati.".to_string()
+            "Working tree is not clean; project skipped.".to_string()
         } else {
             format!(
-                "Working tree tidak bersih ({} perubahan; {} diabaikan oleh dirtyIgnore); project dilewati.",
+                "Working tree is not clean ({} change(s); {} ignored by dirtyIgnore); project skipped.",
                 scan.blocking.len(),
                 scan.ignored.len()
             )
@@ -99,12 +99,12 @@ pub(crate) fn sync_project(
             &["rev-parse", "--abbrev-ref", "HEAD"],
             PREFLIGHT_TIMEOUT,
         )?,
-        "Gagal membaca branch Git",
+        "Failed to read the Git branch",
     )?;
     let active_branch = branch_output.stdout.trim().to_string();
     if !branch.trim().is_empty() && !active_branch.eq_ignore_ascii_case(branch.trim()) {
         return Err(format!(
-            "Branch aktif '{active_branch}', bukan '{}'.",
+            "Active branch is '{active_branch}', not '{}'.",
             branch.trim()
         ));
     }
@@ -119,10 +119,10 @@ pub(crate) fn sync_project(
             &["rev-parse", "HEAD"],
             PREFLIGHT_TIMEOUT,
         )?,
-        "Gagal membaca SHA HEAD",
+        "Failed to read HEAD SHA",
     )?;
     let before = before_output.stdout.trim().to_string();
-    logger.log(&format!("SHA sebelum: {before}"));
+    logger.log(&format!("SHA before: {before}"));
 
     let probe = git(
         path,
@@ -134,7 +134,7 @@ pub(crate) fn sync_project(
     )?;
     if !probe.success() || is_auth_failure(&probe) {
         return Err(format!(
-            "Akses remote gagal. Kredensial Git belum ada/tidak valid. {}",
+            "Remote access failed. Git credentials are missing or invalid. {}",
             probe.combined()
         ));
     }
@@ -149,7 +149,7 @@ pub(crate) fn sync_project(
     )?;
     if !fetch.success() || is_auth_failure(&fetch) {
         return Err(format!(
-            "git fetch gagal. Kredensial Git belum ada/tidak valid. {}",
+            "git fetch failed. Git credentials are missing or invalid. {}",
             fetch.combined()
         ));
     }
@@ -164,7 +164,7 @@ pub(crate) fn sync_project(
         PREFLIGHT_TIMEOUT,
     )?;
     if !verify.success() {
-        return Err(format!("Remote {origin_ref} tidak ditemukan."));
+        return Err(format!("Remote {origin_ref} was not found."));
     }
 
     let incoming_output = ensure_git(
@@ -176,16 +176,16 @@ pub(crate) fn sync_project(
             &["log", "--oneline", &format!("HEAD..{origin_ref}")],
             PREFLIGHT_TIMEOUT,
         )?,
-        "Gagal membaca commit masuk",
+        "Failed to read incoming commits",
     )?;
     let incoming = split_lines(&incoming_output.stdout);
     if incoming.is_empty() {
-        let message = "Sudah terbaru; tidak ada commit baru.".to_string();
+        let message = "Already up to date; no new commits.".to_string();
         logger.log(&message);
         return Ok(SyncResult::UpToDate(message));
     }
 
-    logger.log(&format!("Commit baru ({}):", incoming.len()));
+    logger.log(&format!("New commits ({}):", incoming.len()));
     for line in incoming.iter().take(30) {
         logger.log(line);
     }
@@ -199,10 +199,10 @@ pub(crate) fn sync_project(
             &["diff", "--name-only", &format!("HEAD..{origin_ref}")],
             PREFLIGHT_TIMEOUT,
         )?,
-        "Gagal membaca daftar file berubah",
+        "Failed to read the changed file list",
     )?;
     let preview = split_lines(&preview_output.stdout);
-    logger.log("File berubah:");
+    logger.log("Changed files:");
     for file in preview.iter().take(40) {
         logger.log(file);
     }
@@ -213,20 +213,19 @@ pub(crate) fn sync_project(
         .cloned()
         .collect();
     if !migration_files.is_empty() {
-        logger
-            .log("INFO MIGRASI: perubahan migration terdeteksi; update otomatis akan dihentikan.");
+        logger.log("MIGRATION INFO: migration changes detected; the automatic update will stop.");
         for file in &migration_files {
-            logger.log(&format!("MIGRASI: {file}"));
+            logger.log(&format!("MIGRATION: {file}"));
         }
     }
 
     if options.check_only {
-        logger.log("Cek selesai. Tidak ada file yang diubah.");
+        logger.log("Check finished. No files were changed.");
         return Ok(SyncResult::Check(incoming.len()));
     }
 
     if !migration_files.is_empty() {
-        logger.log("DIBATALKAN: migration harus dijalankan manual. Tidak ada pull yang dilakukan.");
+        logger.log("CANCELLED: migrations must be run manually. No pull was performed.");
         return Ok(SyncResult::BlockedMigration(migration_files.len()));
     }
 
@@ -242,7 +241,7 @@ pub(crate) fn sync_project(
         logger,
     )?;
     if !merge.success() {
-        return Err(format!("git merge --ff-only gagal: {}", merge.combined()));
+        return Err(format!("git merge --ff-only failed: {}", merge.combined()));
     }
 
     let after_output = ensure_git(
@@ -254,16 +253,16 @@ pub(crate) fn sync_project(
             &["rev-parse", "HEAD"],
             PREFLIGHT_TIMEOUT,
         )?,
-        "Gagal membaca SHA HEAD setelah pull",
+        "Failed to read HEAD SHA after pull",
     )?;
     let after = after_output.stdout.trim().to_string();
     if before == after {
-        logger.log("Sudah terbaru; tidak ada perubahan.");
+        logger.log("Already up to date; no changes.");
         return Ok(SyncResult::UpToDate(
-            "Sudah terbaru; tidak ada perubahan.".to_string(),
+            "Already up to date; no changes.".to_string(),
         ));
     }
-    logger.log(&format!("Commit baru: {before}..{after}"));
+    logger.log(&format!("New commits: {before}..{after}"));
 
     let changed_output = ensure_git(
         git(
@@ -274,7 +273,7 @@ pub(crate) fn sync_project(
             &["diff", "--name-only", &before, &after],
             PREFLIGHT_TIMEOUT,
         )?,
-        "Gagal membaca file yang berubah",
+        "Failed to read changed files",
     )?;
     let changed = split_lines(&changed_output.stdout);
 
@@ -323,7 +322,7 @@ pub(crate) fn run_tool(
     let output = run_command_owned(runner, program, args, cwd, TOOL_TIMEOUT, logger)?;
     if !output.success() {
         return Err(format!(
-            "Perintah '{}' gagal (exit {}): {}",
+            "Command '{}' failed (exit {}): {}",
             program.display(),
             output.exit_code,
             output.combined()

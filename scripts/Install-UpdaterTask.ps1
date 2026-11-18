@@ -13,15 +13,21 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $actionScript = Join-Path $PSScriptRoot "Run-UpdaterTaskAction.ps1"
 if (-not (Test-Path -LiteralPath $actionScript)) {
-    throw "Action script tidak ditemukan: $actionScript"
+    throw "Action script not found: $actionScript"
+}
+$hiddenLauncher = Join-Path $PSScriptRoot "Run-UpdaterTaskHidden.vbs"
+if (-not (Test-Path -LiteralPath $hiddenLauncher)) {
+    throw "Hidden launcher not found: $hiddenLauncher"
 }
 if ([string]::IsNullOrWhiteSpace($UserId)) {
     $UserId = "$env:USERDOMAIN\$env:USERNAME"
 }
 
+# wscript.exe is a GUI-subsystem host, so Task Scheduler never creates a console
+# window. The VBScript starts PowerShell with window style 0 (hidden).
 $action = New-ScheduledTaskAction `
-    -Execute "powershell.exe" `
-    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$actionScript`"" `
+    -Execute "wscript.exe" `
+    -Argument "//B //Nologo `"$hiddenLauncher`"" `
     -WorkingDirectory $root
 
 $settings = New-ScheduledTaskSettingsSet `
@@ -38,7 +44,7 @@ $principalParams = @{
 }
 if ($LogonType -eq "Password") {
     if ($null -eq $Credential) {
-        $Credential = Get-Credential -UserName $UserId -Message "Password akun untuk Scheduled Task $TaskName"
+        $Credential = Get-Credential -UserName $UserId -Message "Account password for Scheduled Task $TaskName"
     }
     $principalParams.UserId = $Credential.UserName
     $principalParams.Password = $Credential.GetNetworkCredential().Password
@@ -53,10 +59,10 @@ Register-ScheduledTask `
     -Description "Manual elevated trigger for Service Manager updater" `
     -Force | Out-Null
 
-Write-Host "Scheduled Task '$TaskName' terdaftar."
+Write-Host "Scheduled Task '$TaskName' registered."
 Write-Host "User    : $UserId"
 Write-Host "Logon   : $LogonType"
-Write-Host "Action  : powershell.exe -File `"$actionScript`""
+Write-Host "Action  : wscript.exe //B //Nologo `"$hiddenLauncher`" (PowerShell hidden)"
 Write-Host ""
-Write-Host "Uji dari sesi SSH:"
+Write-Host "Test from an SSH session:"
 Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\Invoke-UpdaterTask.ps1`" -Check"

@@ -123,9 +123,14 @@ $lastRun = ''
 if ($null -ne $info -and $null -ne $info.LastRunTime) { $lastRun = $info.LastRunTime.ToString('o') }
 $lastResult = 0
 if ($null -ne $info -and $null -ne $info.LastTaskResult) { $lastResult = [long]$info.LastTaskResult }
+$execute = ''
 $arguments = ''
-if ($task.Actions.Count -gt 0) { $arguments = [string]$task.Actions[0].Arguments }
-$windowHidden = [bool]$task.Settings.Hidden -and ($arguments -match '-WindowStyle\s+Hidden')
+if ($task.Actions.Count -gt 0) {
+    $execute = [string]$task.Actions[0].Execute
+    $arguments = [string]$task.Actions[0].Arguments
+}
+$hiddenWscript = ($execute -match '(?i)wscript(\.exe)?$') -and ($arguments -match '(?i)Run-UpdaterTaskHidden\.vbs')
+$windowHidden = [bool]$task.Settings.Hidden -and $hiddenWscript
 [pscustomobject]@{
     installed = $true
     taskName = $name
@@ -238,7 +243,7 @@ pub struct TaskStatusView {
     pub last_run: String,
     pub last_result: i64,
     /// True when the task setting `Hidden` is enabled *and* the action uses
-    /// `powershell.exe -WindowStyle Hidden`.
+    /// the hidden `wscript.exe` + `Run-UpdaterTaskHidden.vbs` launcher.
     pub window_hidden: bool,
     pub error: Option<String>,
 }
@@ -1482,6 +1487,13 @@ mod tests {
     }
 
     #[test]
+    fn task_query_recognizes_hidden_wscript_launcher() {
+        assert!(TASK_QUERY_COMMAND.contains("Run-UpdaterTaskHidden"));
+        assert!(TASK_QUERY_COMMAND.contains("wscript"));
+        assert!(!TASK_QUERY_COMMAND.contains("-WindowStyle"));
+    }
+
+    #[test]
     fn parses_task_status_without_hidden_action_flag() {
         let json = r#"{"installed":true,"taskName":"ServiceManager-Updater","state":"Ready","lastResult":0}"#;
         let status = parse_task_status_json("ServiceManager-Updater", json).unwrap();
@@ -1744,7 +1756,7 @@ mod tests {
         std::fs::write(&path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
 
         let error = load_settings_from_file_at(&path).unwrap_err();
-        assert!(error.contains("kontrol"), "{error}");
+        assert!(error.contains("control"), "{error}");
     }
 
     #[test]
@@ -1882,7 +1894,7 @@ mod tests {
         .unwrap();
 
         let error = migrate_trigger_at(&settings_file, &projects).unwrap_err();
-        assert!(error.contains("tidak valid"));
+        assert!(error.contains("invalid"));
         assert!(!settings_file.exists());
     }
 

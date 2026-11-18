@@ -81,7 +81,7 @@ PowerShell lama sudah dihapus dari repo.
 | Auto migration | **Tidak pernah** | `migrationPolicy` selalu `block`. |
 | Auto polling/scheduler | **Tidak ada** | Trigger manual atau SSH. |
 
-Test workspace saat ini: **485 test**. Release portable: **`dist\ServiceManager-RS-0.1.0.zip`**.
+Test workspace saat ini: **490 test**. Release portable: **`dist\ServiceManager-RS-0.1.0.zip`**.
 
 ---
 
@@ -153,7 +153,10 @@ hanya untuk deteksi/test di Settings dan Doctor; mengubah field itu **tidak** me
 yang dipakai operasi service. Ini penting saat troubleshooting.
 
 **Konsol tersembunyi.** Jalur GUI memakai `CommandNoWindow`/`CREATE_NO_WINDOW` untuk child process.
-Task action memakai `powershell.exe -NoProfile -WindowStyle Hidden` dan setting task `Hidden`.
+Task action memakai `wscript.exe //B //Nologo ...Run-UpdaterTaskHidden.vbs` (VBScript menjalankan
+PowerShell dengan window style `0`) dan setting task `Hidden`. Action lama
+`powershell.exe -WindowStyle Hidden` masih dapat memunculkan console window singkat saat Task
+Scheduler memulai proses; Repair Task diperlukan.
 `sm-updater.exe` dan `sm-diag.exe` tetap console karena memang tool CLI.
 
 ---
@@ -1115,7 +1118,7 @@ Kartu: Git, PHP, Composer, Node, npm, pnpm, yarn, Bun, Go, Apache, NSSM.
 
 - **Install Task** / **Repair Task**: memanggil `scripts/Install-UpdaterTask.ps1` dengan task name,
   user, logon type. Butuh Administrator. Repair memakai parameter yang sama dan menerapkan ulang
-  action `-WindowStyle Hidden` + setting `Hidden`.
+  action `wscript.exe` + `Run-UpdaterTaskHidden.vbs` serta setting `Hidden`.
 - **Remove Task**: `Unregister-ScheduledTask`; butuh Administrator.
 - **Test Task**: menjalankan `Invoke-UpdaterTask.ps1 -Check`; membuat request + task + state/history
   check. Tidak butuh elevation di command, tetapi task berjalan elevated.
@@ -1123,8 +1126,10 @@ Kartu: Git, PHP, Composer, Node, npm, pnpm, yarn, Bun, Go, Apache, NSSM.
   Install script CLI mendukung `-LogonType Password` dengan prompt.
 - `task_status` mengembalikan `installed`, `state`, `runLevel`, `user`, `logonType`, `lastRun`,
   `lastResult`, `windowHidden`, `error`.
-- `windowHidden=true` hanya jika task setting `Hidden` **dan** action args cocok
-  `-WindowStyle\s+Hidden`. Task lama yang belum di-repair akan `windowHidden=false` dan bisa
+- `windowHidden=true` hanya jika task setting `Hidden` **dan** action memakai hidden launcher
+  `wscript.exe` + `Run-UpdaterTaskHidden.vbs`. Task lama yang masih memakai
+  `powershell.exe -WindowStyle Hidden` akan `windowHidden=false` karena action itu masih bisa
+  memunculkan console window singkat; Repair Task diperlukan. Task lama yang belum di-repair bisa
   memunculkan jendela PowerShell; klik **Repair Task**.
 - `state=Ready`, `lastResult=0`, `windowHidden=true` adalah target readiness.
 - Task tidak punya trigger otomatis; hanya dijalankan manual/wrapper.
@@ -1910,9 +1915,9 @@ daftar service + status SCM. Exit 1 jika config service punya warning; bukan pen
 | Gejala | Kemungkinan penyebab | Tindakan aman |
 | --- | --- | --- |
 | Form Edit app blank/kosong | Regresi `allowedClientIPs` vs `allowedClientIps` pada build lama | Pakai build terbaru; kontrak UI = `allowedClientIPs`; jangan mengubah field menjadi `allowedClientIps`. |
-| Jendela `cmd`/PowerShell muncul sekilas | Task lama belum memakai `-WindowStyle Hidden`/setting `Hidden`; build lama tanpa `CREATE_NO_WINDOW` | Pakai build terbaru; **Repair Task** sebagai admin; cek `taskStatus.windowHidden`; source-audit test GUI. |
+| Jendela `cmd`/PowerShell muncul sekilas | Task lama masih memakai action `powershell.exe -WindowStyle Hidden` (sempat flash) atau belum memakai setting `Hidden`; build lama tanpa `CREATE_NO_WINDOW` | Pakai build terbaru; **Repair Task** sebagai admin agar action memakai `wscript.exe` + `Run-UpdaterTaskHidden.vbs`; cek `taskStatus.windowHidden`; source-audit test GUI. |
 | NSSM “not found” padahal path Settings diisi | Service manager memakai `ConfigPaths::nssm_path()`, bukan `settings.tools.nssm.path` | Letakkan `nssm.exe` di `C:\tools\nssm\nssm.exe` atau `<home>\..\nssm\nssm.exe`; Settings NSSM hanya test. |
-| Doctor warning “Task action is not hidden” | Task terpasang sebelum perubahan hidden, `windowHidden=false` | Repair Task; verifikasi `Hidden` + `-WindowStyle Hidden`. |
+| Doctor warning “Task action is not hidden” | Task terpasang sebelum perubahan hidden, `windowHidden=false` | Repair Task; verifikasi `Hidden` + hidden launcher `wscript.exe`/`Run-UpdaterTaskHidden.vbs`. |
 | Pending Apache hilang / apply no-op | Save Settings tidak menghasilkan pending baru (version-only/no affected/empty new path) lalu pending lama dihapus; atau service sudah menunjuk nilai baru | Apply pending sebelum save ulang; ubah path/root/config yang benar; cek affected services; jangan menghapus pending manual. |
 | Status `dirty` | Working tree kotor, atau entri dirty tidak cocok dengan `dirtyIgnore` | Commit/stash/backup perubahan yang disengaja; jangan reset paksa. Jika entri adalah artifact build yang sah, tambahkan pola repo-relative yang sempit (mis. `public/build/**`) hanya untuk path generated; jangan memakai `*`/`**` untuk menyembunyikan source. |
 | Status `blocked-migration` | Ada file `database/migrations/**` | Jalankan migration manual dengan persetujuan + backup, atau tangani migration; jangan menambahkan auto-migrate. |
@@ -1988,7 +1993,7 @@ cargo fmt --all -- --check
 git diff --check
 ```
 
-Baseline saat dokumen ini dibuat: **485 test** (16 + 38 + 2 + 167 + 8 + 195 + 59). Test GUI
+Baseline saat dokumen ini dibuat: **490 test** (16 + 38 + 2 + 172 + 8 + 195 + 59). Test GUI
 memerlukan `ui/dist`; jalankan frontend build dulu.
 
 Smoke CLI:
@@ -2030,7 +2035,7 @@ Isi portable (setelah perubahan dokumen ini):
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --workspace` (485 atau angka terbaru)
+- [ ] `cargo test --workspace` (490 atau angka terbaru)
 - [ ] `git diff --check`
 - [ ] `Build-Release.ps1` sukses; ZIP berisi `AGENTS.md` + `docs/AGENT-GUIDE.md`
 - [ ] `sm-gui.exe` release terbuka, Services/Updater/Settings/Remote berfungsi
@@ -2048,7 +2053,7 @@ Isi portable (setelah perubahan dokumen ini):
 Sebelum menyerahkan pekerjaan:
 
 1. **Ringkas perubahan** dan file yang disentuh; bedakan dokumentasi vs kode vs config.
-2. **Status test**: `cargo test --workspace` (485/angka terbaru), clippy, fmt, `git diff --check`.
+2. **Status test**: `cargo test --workspace` (490/angka terbaru), clippy, fmt, `git diff --check`.
 3. **Runtime aman**: tidak ada perubahan `data/*.json`, history, log, backup, atau `dist/`.
 4. **Secret**: grep diff untuk token/password (`git diff | Select-String ...`); tidak ada
    plaintext.

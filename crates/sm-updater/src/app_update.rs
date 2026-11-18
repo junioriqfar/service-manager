@@ -33,7 +33,7 @@ pub fn update_app(
     let (status, message) = match result {
         Ok(value) => value,
         Err(message) => {
-            logger.log(&format!("GAGAL: {message}"));
+            logger.log(&format!("FAILED: {message}"));
             (UpdateStatus::Failed, message)
         }
     };
@@ -41,7 +41,7 @@ pub fn update_app(
     notify(app, runner, &logger, status, &message);
 
     if status == UpdateStatus::Updated {
-        logger.log("DEPLOY SELESAI");
+        logger.log("DEPLOY COMPLETE");
     } else if status == UpdateStatus::Degraded {
         logger.log(&format!("DEGRADED: {message}"));
     }
@@ -64,10 +64,10 @@ fn execute_app(
 ) -> Result<(UpdateStatus, String), String> {
     let project = Path::new(&app.local_path);
     if app.branch.trim().is_empty() {
-        return Err(format!("Branch app '{}' belum diisi.", app.id));
+        return Err(format!("App branch '{}' is not set.", app.id));
     }
     if project.exists() && !project.is_dir() {
-        return Err(format!("Local path bukan folder: {}", project.display()));
+        return Err(format!("Local path is not a folder: {}", project.display()));
     }
 
     let lifecycle = Lifecycle::new(services, app.services.wait_timeout_seconds);
@@ -81,7 +81,8 @@ fn execute_app(
         if options.check_only {
             return Ok((
                 UpdateStatus::Check,
-                "Project belum ada; clone diperlukan (dry-run tidak melakukan clone).".to_string(),
+                "Project does not exist yet; a clone is required (dry-run does not clone)."
+                    .to_string(),
             ));
         }
         ensure_project(app, settings, runner, logger)?;
@@ -146,14 +147,14 @@ fn execute_app(
             restore_services(&lifecycle, logger);
             return Ok((
                 UpdateStatus::Check,
-                format!("{count} commit baru terdeteksi (dry-run)."),
+                format!("{count} new commit(s) detected (dry-run)."),
             ));
         }
         SyncResult::BlockedMigration(count) => {
             restore_services(&lifecycle, logger);
             return Ok((
                 UpdateStatus::BlockedMigration,
-                format!("Update diblokir: {count} file migration harus dijalankan manual."),
+                format!("Update blocked: {count} migration file(s) must be run manually."),
             ));
         }
         SyncResult::Merged(outcome) => outcome,
@@ -161,7 +162,7 @@ fn execute_app(
 
     let plan = plan_cell
         .into_inner()
-        .ok_or_else(|| "Rencana toolchain tidak tersedia.".to_string())?;
+        .ok_or_else(|| "Toolchain plan is unavailable.".to_string())?;
 
     if let Err(error) = lifecycle.stop_before_build(&app.services) {
         restore_services(&lifecycle, logger);
@@ -198,22 +199,22 @@ fn execute_app(
     if let Err(error) = lifecycle.finish(&app.services) {
         return Ok((
             UpdateStatus::Degraded,
-            format!("Update diterapkan tetapi service gagal dipulihkan: {error}"),
+            format!("Update applied, but the service could not be restored: {error}"),
         ));
     }
 
     if let Err(error) = run_health_check(app, runner, logger) {
         return Ok((
             UpdateStatus::Degraded,
-            format!("Update diterapkan tetapi health check gagal: {error}"),
+            format!("Update applied, but the health check failed: {error}"),
         ));
     }
 
     logger.log(&format!(
-        "Rollback kode: git reset --hard {}",
+        "Code rollback: git reset --hard {}",
         outcome.before
     ));
-    Ok((UpdateStatus::Updated, "Update berhasil.".to_string()))
+    Ok((UpdateStatus::Updated, "Update succeeded.".to_string()))
 }
 
 fn execute_first_clone(
@@ -279,18 +280,18 @@ fn execute_first_clone(
     if let Err(error) = lifecycle.finish(&app.services) {
         return Ok((
             UpdateStatus::Degraded,
-            format!("Clone selesai tetapi service gagal dipulihkan: {error}"),
+            format!("Clone finished, but the service could not be restored: {error}"),
         ));
     }
     if let Err(error) = run_health_check(app, runner, logger) {
         return Ok((
             UpdateStatus::Degraded,
-            format!("Clone selesai tetapi health check gagal: {error}"),
+            format!("Clone finished, but the health check failed: {error}"),
         ));
     }
     Ok((
         UpdateStatus::Updated,
-        "Clone pertama selesai; dependency/build dijalankan.".to_string(),
+        "First clone finished; dependencies/build were run.".to_string(),
     ))
 }
 
@@ -319,24 +320,24 @@ fn ensure_project(
     let project = Path::new(&app.local_path);
     if !app.clone_on_first_run {
         return Err(format!(
-            "Folder project tidak ditemukan: {} (cloneOnFirstRun=false)",
+            "Project folder not found: {} (cloneOnFirstRun=false)",
             project.display()
         ));
     }
     if app.repo_url.trim().is_empty() {
         return Err(format!(
-            "cloneOnFirstRun=true tetapi repoUrl app '{}' kosong.",
+            "cloneOnFirstRun=true but repoUrl for app '{}' is empty.",
             app.id
         ));
     }
     let git_path = Path::new(settings.git_path.trim());
     if !git_path.is_file() {
-        return Err(format!("Git tidak ditemukan: {}", git_path.display()));
+        return Err(format!("Git not found: {}", git_path.display()));
     }
     let parent = project.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     logger.log(&format!(
-        "Clone pertama kali: {} -> {}",
+        "First clone: {} -> {}",
         app.repo_url, app.local_path
     ));
     let output = run_command_owned(
@@ -355,11 +356,11 @@ fn ensure_project(
         logger,
     )?;
     if !output.success() {
-        return Err(format!("git clone gagal: {}", output.combined()));
+        return Err(format!("git clone failed: {}", output.combined()));
     }
     if !project.is_dir() {
         return Err(format!(
-            "git clone selesai tetapi folder tidak ditemukan: {}",
+            "git clone finished but the folder was not found: {}",
             project.display()
         ));
     }
@@ -376,13 +377,13 @@ fn run_health_check(
     }
     let url = app.health_check.url.trim();
     if url.is_empty() {
-        return Err("healthCheck.enabled=true tetapi url kosong.".to_string());
+        return Err("healthCheck.enabled=true but url is empty.".to_string());
     }
     if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return Err(format!("Health check URL tidak valid: {url}"));
+        return Err(format!("Health check URL is invalid: {url}"));
     }
     let curl = curl_path().ok_or_else(|| {
-        "curl.exe tidak ditemukan untuk health check. Install curl atau nonaktifkan healthCheck."
+        "curl.exe was not found for the health check. Install curl or disable healthCheck."
             .to_string()
     })?;
     let timeout = app.health_check.timeout_seconds.max(1);
@@ -404,7 +405,7 @@ fn run_health_check(
     )?;
     if !output.success() {
         return Err(format!(
-            "HTTP health check gagal (exit {}): {}",
+            "HTTP health check failed (exit {}): {}",
             output.exit_code,
             output.combined()
         ));
@@ -433,7 +434,7 @@ fn notify(
         return;
     }
     let Some(curl) = curl_path() else {
-        logger.log("WARNING notify: curl.exe tidak ditemukan.");
+        logger.log("WARNING notify: curl.exe not found.");
         return;
     };
     let payload = serde_json::json!({
@@ -465,7 +466,7 @@ fn notify(
     match result {
         Ok(output) if output.success() => logger.log("Notify webhook: OK"),
         Ok(output) => logger.log(&format!(
-            "WARNING notify webhook gagal (exit {}): {}",
+            "WARNING notify webhook failed (exit {}): {}",
             output.exit_code,
             output.combined()
         )),
@@ -528,7 +529,7 @@ fn run_planned(
     )?;
     if !output.success() {
         return Err(format!(
-            "{} gagal (exit {}): {}",
+            "{} failed (exit {}): {}",
             command.label,
             output.exit_code,
             output.combined()
@@ -552,7 +553,7 @@ fn run_custom_list(
             if spec.continue_on_error {
                 logger.log(&format!("WARNING {stage}: {error}"));
             } else {
-                return Err(format!("{stage} gagal: {error}"));
+                return Err(format!("{stage} failed: {error}"));
             }
         }
     }
@@ -585,7 +586,7 @@ fn run_shell_option(
     )?;
     if !output.success() {
         return Err(format!(
-            "{label} gagal (exit {}): {}",
+            "{label} failed (exit {}): {}",
             output.exit_code,
             output.combined()
         ));
@@ -887,7 +888,7 @@ mod tests {
         assert_eq!(outcome.status, UpdateStatus::Updated, "{}", outcome.message);
         let log = std::fs::read_to_string(outcome.log_path.as_ref().unwrap()).unwrap();
         assert!(
-            log.contains("INFO: 1 perubahan diabaikan oleh dirtyIgnore"),
+            log.contains("INFO: 1 change(s) ignored by dirtyIgnore"),
             "{log}"
         );
         assert!(runner.has_call("merge"));
@@ -917,18 +918,18 @@ mod tests {
 
         assert_eq!(outcome.status, UpdateStatus::Dirty);
         assert!(
-            outcome.message.contains("1 perubahan"),
+            outcome.message.contains("1 change(s)"),
             "{}",
             outcome.message
         );
         assert!(
-            outcome.message.contains("1 diabaikan oleh dirtyIgnore"),
+            outcome.message.contains("1 ignored by dirtyIgnore"),
             "{}",
             outcome.message
         );
         let log = std::fs::read_to_string(outcome.log_path.as_ref().unwrap()).unwrap();
         assert!(log.contains("M src/app.ts"), "{log}");
-        assert!(log.contains("INFO: 1 perubahan diabaikan oleh dirtyIgnore"));
+        assert!(log.contains("INFO: 1 change(s) ignored by dirtyIgnore"));
         assert!(!runner.has_call("fetch"));
         assert!(!runner.has_call("merge"));
         assert!(services.calls().is_empty());
@@ -958,7 +959,7 @@ mod tests {
         assert_eq!(outcome.status, UpdateStatus::Dirty);
         assert_eq!(
             outcome.message,
-            "Working tree tidak bersih; project dilewati."
+            "Working tree is not clean; project skipped."
         );
     }
 

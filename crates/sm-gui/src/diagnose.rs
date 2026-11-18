@@ -63,7 +63,7 @@ pub fn render(diagnostic: &Diagnostic) -> String {
     lines.push(format!("Config        : {}", diagnostic.services_path));
     lines.push(format!("Projects      : {}", diagnostic.projects_path));
     lines.push(format!(
-        "NSSM          : {} (ada: {})",
+        "NSSM          : {} (exists: {})",
         diagnostic.nssm_path, diagnostic.nssm_exists
     ));
     lines.push(format!("Administrator : {}", diagnostic.admin));

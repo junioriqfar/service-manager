@@ -205,19 +205,19 @@ pub fn plan_app(
     for state in &planned_services.states {
         if !state.error.is_empty() {
             warnings.push(format!(
-                "Gagal memeriksa service '{}': {}",
+                "Failed to check service '{}': {}",
                 state.name, state.error
             ));
         }
     }
     if !app.enabled {
-        warnings.push("App disabled; update otomatis tidak akan memproses app ini.".to_string());
+        warnings.push("App disabled; automatic updates will not process this app.".to_string());
     }
 
     if app.branch.trim().is_empty() {
         return build_app_plan(
             app,
-            GitScan::error(format!("Branch app '{}' belum diisi.", app.id)),
+            GitScan::error(format!("App branch '{}' is not set.", app.id)),
             Vec::new(),
             planned_services,
             health_check,
@@ -238,15 +238,14 @@ pub fn plan_app(
         if !commands.is_empty() {
             match scan.status {
                 PlanStatus::Dirty => warnings.push(
-                    "Working tree kotor; command toolchain tidak akan dijalankan sampai working tree bersih."
+                    "Working tree is dirty; toolchain commands will not run until it is clean."
                         .to_string(),
                 ),
-                PlanStatus::UpToDate => warnings.push(
-                    "Tidak ada commit baru; command toolchain tidak akan dijalankan.".to_string(),
-                ),
+                PlanStatus::UpToDate => {
+                    warnings.push("No new commits; toolchain commands will not run.".to_string())
+                }
                 PlanStatus::BlockedMigration => warnings.push(
-                    "Update diblokir migration; command toolchain tidak akan dijalankan."
-                        .to_string(),
+                    "Update is blocked by migrations; toolchain commands will not run.".to_string(),
                 ),
                 _ => {}
             }
@@ -288,36 +287,37 @@ fn scan_git_result(
 
     if app.local_path.trim().is_empty() || !project.exists() {
         if !git_path.is_file() {
-            warnings.push(format!("Git tidak ditemukan: {}", git_path.display()));
+            warnings.push(format!("Git not found: {}", git_path.display()));
         }
         if app.clone_on_first_run {
             warnings.push(
-                "cloneOnFirstRun=true; update akan melakukan clone pertama (plan tidak clone)."
+                "cloneOnFirstRun=true; the update will perform the first clone (plan does not clone)."
                     .to_string(),
             );
         } else {
             warnings.push(
-                "cloneOnFirstRun=false; update akan gagal sampai folder project dibuat atau di-clone manual."
+                "cloneOnFirstRun=false; the update will fail until the project folder is created or cloned manually."
                     .to_string(),
             );
         }
         if app.repo_url.trim().is_empty() {
-            warnings.push("repoUrl kosong; clone pertama tidak mungkin dilakukan.".to_string());
+            warnings.push("repoUrl is empty; the first clone cannot be performed.".to_string());
         }
         return Ok(GitScan {
             status: PlanStatus::CloneRequired,
-            message: "Folder project belum ada; clone diperlukan (plan tidak melakukan clone)."
-                .to_string(),
+            message:
+                "Project folder does not exist yet; a clone is required (plan does not clone)."
+                    .to_string(),
             warnings,
             ..GitScan::default()
         });
     }
 
     if !project.is_dir() {
-        return Err(format!("Local path bukan folder: {}", project.display()));
+        return Err(format!("Local path is not a folder: {}", project.display()));
     }
     if !git_path.is_file() {
-        return Err(format!("Git tidak ditemukan: {}", git_path.display()));
+        return Err(format!("Git not found: {}", git_path.display()));
     }
 
     let status_output = git_required(
@@ -326,7 +326,7 @@ fn scan_git_result(
         project,
         &["status", "--porcelain"],
         PREFLIGHT_TIMEOUT,
-        "Gagal membaca status Git",
+        "Failed to read Git status",
     )?;
     let scan = filter_status(&status_output.stdout, &app.dirty_ignore);
     if !scan.ignored.is_empty() {
@@ -335,7 +335,7 @@ fn scan_git_result(
         }
         if scan.ignored.len() > 10 {
             warnings.push(format!(
-                "dirtyIgnore: {} entri lain diabaikan.",
+                "dirtyIgnore: {} more entries ignored.",
                 scan.ignored.len() - 10
             ));
         }
@@ -346,7 +346,7 @@ fn scan_git_result(
         }
         if scan.blocking.len() > 30 {
             warnings.push(format!(
-                "Working tree: {} entri lain tidak ditampilkan.",
+                "Working tree: {} more entries not shown.",
                 scan.blocking.len() - 30
             ));
         }
@@ -362,9 +362,10 @@ fn scan_git_result(
             Ok(output) if output.success() => {
                 current_branch = output.stdout.trim().to_string();
             }
-            Ok(output) => {
-                warnings.push(format!("Gagal membaca branch aktif: {}", output.combined()))
-            }
+            Ok(output) => warnings.push(format!(
+                "Failed to read the active branch: {}",
+                output.combined()
+            )),
             Err(error) => warnings.push(error),
         }
 
@@ -379,13 +380,13 @@ fn scan_git_result(
             Ok(output) if output.success() => {
                 head_before = output.stdout.trim().to_string();
             }
-            Ok(output) => warnings.push(format!("Gagal membaca SHA HEAD: {}", output.combined())),
+            Ok(output) => warnings.push(format!("Failed to read HEAD SHA: {}", output.combined())),
             Err(error) => warnings.push(error),
         }
 
         return Ok(GitScan {
             status: PlanStatus::Dirty,
-            message: "Working tree tidak bersih; update akan dilewati.".to_string(),
+            message: "Working tree is not clean; the update will be skipped.".to_string(),
             current_branch,
             head_before,
             warnings,
@@ -399,16 +400,16 @@ fn scan_git_result(
         project,
         &["rev-parse", "--abbrev-ref", "HEAD"],
         PREFLIGHT_TIMEOUT,
-        "Gagal membaca branch Git",
+        "Failed to read the Git branch",
     )?;
     let current_branch = branch_output.stdout.trim().to_string();
     if current_branch.is_empty() {
-        return Err("Gagal membaca branch aktif Git.".to_string());
+        return Err("Failed to read the active Git branch.".to_string());
     }
     let configured_branch = app.branch.trim();
     if !current_branch.eq_ignore_ascii_case(configured_branch) {
         return Err(format!(
-            "Branch aktif '{current_branch}', bukan '{configured_branch}'."
+            "Active branch is '{current_branch}', not '{configured_branch}'."
         ));
     }
 
@@ -418,13 +419,13 @@ fn scan_git_result(
         project,
         &["rev-parse", "HEAD"],
         PREFLIGHT_TIMEOUT,
-        "Gagal membaca SHA HEAD",
+        "Failed to read HEAD SHA",
     )?
     .stdout
     .trim()
     .to_string();
     if head_before.is_empty() {
-        return Err("Gagal membaca SHA HEAD.".to_string());
+        return Err("Failed to read HEAD SHA.".to_string());
     }
 
     let probe = git(
@@ -436,7 +437,7 @@ fn scan_git_result(
     )?;
     if !probe.success() || is_auth_failure(&probe) {
         return Err(format!(
-            "Akses remote gagal. Kredensial Git belum ada/tidak valid. {}",
+            "Remote access failed. Git credentials are missing or invalid. {}",
             probe.combined()
         ));
     }
@@ -450,7 +451,7 @@ fn scan_git_result(
     )?;
     if !fetch.success() || is_auth_failure(&fetch) {
         return Err(format!(
-            "git fetch gagal. Kredensial Git belum ada/tidak valid. {}",
+            "git fetch failed. Git credentials are missing or invalid. {}",
             fetch.combined()
         ));
     }
@@ -464,7 +465,7 @@ fn scan_git_result(
         PREFLIGHT_TIMEOUT,
     )?;
     if !verify.success() {
-        return Err(format!("Remote {origin_ref} tidak ditemukan."));
+        return Err(format!("Remote {origin_ref} was not found."));
     }
     let remote_head = verify.stdout.trim().to_string();
 
@@ -475,19 +476,19 @@ fn scan_git_result(
         project,
         &["rev-list", "--count", &range],
         PREFLIGHT_TIMEOUT,
-        "Gagal membaca jumlah commit masuk",
+        "Failed to read the incoming commit count",
     )?
     .stdout
     .trim()
     .to_string();
     let count: usize = count_text
         .parse()
-        .map_err(|_| format!("Gagal membaca jumlah commit masuk: {count_text}"))?;
+        .map_err(|_| format!("Failed to read the incoming commit count: {count_text}"))?;
 
     if count == 0 {
         return Ok(GitScan {
             status: PlanStatus::UpToDate,
-            message: "Sudah terbaru; tidak ada commit baru.".to_string(),
+            message: "Already up to date; no new commits.".to_string(),
             current_branch,
             head_before,
             remote_head,
@@ -502,12 +503,12 @@ fn scan_git_result(
         project,
         &["log", "--format=%H%x09%s", &range],
         PREFLIGHT_TIMEOUT,
-        "Gagal membaca commit masuk",
+        "Failed to read incoming commits",
     )?;
     let incoming = parse_commits(&log_output.stdout);
     if incoming.is_empty() {
         warnings.push(format!(
-            "git log tidak mengembalikan commit meski rev-list menghitung {count}."
+            "git log returned no commits even though rev-list counted {count}."
         ));
     }
 
@@ -517,7 +518,7 @@ fn scan_git_result(
         project,
         &["diff", "--name-only", &range],
         PREFLIGHT_TIMEOUT,
-        "Gagal membaca daftar file berubah",
+        "Failed to read the changed file list",
     )?;
     let changed_files = split_lines(&diff_output.stdout);
     let migration_files: Vec<String> = changed_files
@@ -533,7 +534,7 @@ fn scan_git_result(
             app.migration_policy.trim()
         };
         warnings.push(format!(
-            "migrationPolicy={policy}: migration tidak dijalankan otomatis; update diblokir."
+            "migrationPolicy={policy}: migrations are not run automatically; the update is blocked."
         ));
     }
 
@@ -543,10 +544,10 @@ fn scan_git_result(
         PlanStatus::BlockedMigration
     };
     let message = if migration_files.is_empty() {
-        format!("{count} commit baru siap di-merge.")
+        format!("{count} new commit(s) ready to merge.")
     } else {
         format!(
-            "Update diblokir: {} file migration harus dijalankan manual.",
+            "Update blocked: {} migration file(s) must be run manually.",
             migration_files.len()
         )
     };
@@ -577,7 +578,7 @@ fn git(
     env.insert("GCM_INTERACTIVE".to_string(), "never".to_string());
     runner
         .run_with_env(git_path, &args, cwd, timeout, &env)
-        .map_err(|error| format!("Gagal menjalankan git: {error}"))
+        .map_err(|error| format!("Failed to run git: {error}"))
 }
 
 fn git_required(
@@ -613,7 +614,7 @@ fn resolve_commands(
         }
         Err(error) => (
             Vec::new(),
-            vec![format!("Toolchain tidak dapat direncanakan: {error}")],
+            vec![format!("Toolchain cannot be planned: {error}")],
         ),
     }
 }
@@ -708,12 +709,12 @@ fn plan_health(app: &AppConfig) -> (PlanHealth, Vec<String>) {
     let mut warnings = Vec::new();
     if app.health_check.enabled {
         if url.is_empty() {
-            warnings.push("Health check aktif tetapi URL kosong.".to_string());
+            warnings.push("Health check is enabled but the URL is empty.".to_string());
         } else if !(url.starts_with("http://") || url.starts_with("https://")) {
-            warnings.push(format!("Health check URL tidak valid: {url}"));
+            warnings.push(format!("Health check URL is invalid: {url}"));
         }
         if app.health_check.timeout_seconds == 0 {
-            warnings.push("Health check timeout 0; update memakai minimal 1 detik.".to_string());
+            warnings.push("Health check timeout is 0; updates use at least 1 second.".to_string());
         }
     }
     (
@@ -739,12 +740,12 @@ fn plan_notify(app: &AppConfig) -> (PlanNotify, Vec<String>) {
     let mut warnings = Vec::new();
     if enabled && on.is_empty() {
         warnings.push(
-            "Webhook diisi tetapi notify.on kosong; tidak ada notifikasi yang dikirim.".to_string(),
+            "Webhook URL is set but notify.on is empty; no notifications will be sent.".to_string(),
         );
     }
     if !enabled && !on.is_empty() {
         warnings.push(
-            "notify.on diisi tetapi webhookUrl kosong; notifikasi tidak dikirim.".to_string(),
+            "notify.on is set but webhookUrl is empty; notifications will not be sent.".to_string(),
         );
     }
     (
@@ -1269,14 +1270,14 @@ mod tests {
             .warnings
             .iter()
             .filter(|warning| {
-                warning.starts_with("Working tree: ") && !warning.contains("entri lain")
+                warning.starts_with("Working tree: ") && !warning.contains("more entries")
             })
             .count();
         assert_eq!(entries, 30);
         assert!(plan
             .warnings
             .iter()
-            .any(|warning| warning.contains("5 entri lain")));
+            .any(|warning| warning.contains("5 more entries")));
     }
 
     #[test]
@@ -1385,8 +1386,8 @@ mod tests {
         assert_eq!(plan.status, PlanStatus::CloneRequired);
         assert!(plan.message.contains("clone"));
         assert!(plan.warnings.iter().any(|warning| {
-            warning.contains("Folder project tidak ditemukan")
-                || warning.contains("Toolchain tidak dapat direncanakan")
+            warning.contains("Project folder not found")
+                || warning.contains("Toolchain cannot be planned")
         }));
         assert!(plan
             .warnings
@@ -1418,7 +1419,7 @@ mod tests {
         );
 
         assert_eq!(plan.status, PlanStatus::Error);
-        assert!(plan.message.contains("Git tidak ditemukan"));
+        assert!(plan.message.contains("Git not found"));
         assert!(plan.commands.is_empty());
         assert!(runner.calls().is_empty());
     }
@@ -1440,7 +1441,7 @@ mod tests {
         );
 
         assert_eq!(plan.status, PlanStatus::Error);
-        assert!(plan.message.contains("Branch aktif 'develop'"));
+        assert!(plan.message.contains("Active branch is 'develop'"));
         assert!(plan.message.contains("main"));
         assert!(!runner.has_call("ls-remote"));
         assert!(!runner.has_call("fetch"));
@@ -1467,7 +1468,7 @@ mod tests {
         assert!(plan
             .warnings
             .iter()
-            .any(|warning| warning.contains("ambigu")));
+            .any(|warning| warning.contains("Ambiguous")));
     }
 
     #[test]
@@ -1511,7 +1512,7 @@ mod tests {
         );
 
         assert_eq!(plan.status, PlanStatus::Error);
-        assert!(plan.message.contains("Akses remote gagal"));
+        assert!(plan.message.contains("Remote access failed"));
         assert!(!runner.has_call("fetch"));
     }
 

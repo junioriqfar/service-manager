@@ -35,15 +35,15 @@ impl Output {
 
 #[derive(Debug, Error)]
 pub enum RunnerError {
-    #[error("Gagal menjalankan '{program}': {source}")]
+    #[error("Failed to run '{program}': {source}")]
     Spawn {
         program: String,
         #[source]
         source: std::io::Error,
     },
-    #[error("'{program}' timeout setelah {timeout:?}.")]
+    #[error("'{program}' timed out after {timeout:?}.")]
     Timeout { program: String, timeout: Duration },
-    #[error("Gagal membaca output proses: {0}")]
+    #[error("Failed to read process output: {0}")]
     Io(String),
 }
 

@@ -31,7 +31,7 @@ impl DirtyScan {
 pub fn validate_patterns(patterns: &[String]) -> Result<(), String> {
     if patterns.len() > MAX_PATTERNS {
         return Err(format!(
-            "dirtyIgnore maksimal {MAX_PATTERNS} pola (ditemukan {}).",
+            "dirtyIgnore allows at most {MAX_PATTERNS} patterns (found {}).",
             patterns.len()
         ));
     }
@@ -105,15 +105,15 @@ impl PatternSpec {
 
 fn parse_pattern(raw: &str) -> Result<PatternSpec, String> {
     if raw.chars().any(char::is_control) {
-        return Err("mengandung karakter kontrol.".to_string());
+        return Err("contains control characters.".to_string());
     }
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err("pola kosong.".to_string());
+        return Err("pattern is empty.".to_string());
     }
     if trimmed.chars().count() > MAX_PATTERN_LENGTH {
         return Err(format!(
-            "terlalu panjang (maksimal {MAX_PATTERN_LENGTH} karakter)."
+            "is too long (maximum {MAX_PATTERN_LENGTH} characters)."
         ));
     }
 
@@ -122,11 +122,11 @@ fn parse_pattern(raw: &str) -> Result<PatternSpec, String> {
         text = rest.to_string();
     }
     if text.starts_with('/') {
-        return Err("harus relatif (tidak boleh diawali '/' atau '\\').".to_string());
+        return Err("must be relative (it must not start with '/' or '\\').".to_string());
     }
     let bytes = text.as_bytes();
     if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-        return Err("tidak boleh memakai drive letter (mis. C:/project).".to_string());
+        return Err("must not use a drive letter (for example C:/project).".to_string());
     }
 
     let dir_only = text.ends_with('/');
@@ -134,20 +134,20 @@ fn parse_pattern(raw: &str) -> Result<PatternSpec, String> {
         text.pop();
     }
     if text.is_empty() {
-        return Err("pola direktori kosong.".to_string());
+        return Err("directory pattern is empty.".to_string());
     }
 
     let mut segments = Vec::new();
     for segment in text.split('/') {
         match segment {
-            "" => return Err("mengandung segmen kosong ('//'); gunakan satu '/'.".to_string()),
+            "" => return Err("contains an empty segment ('//'); use a single '/'.".to_string()),
             "." => continue,
-            ".." => return Err("tidak boleh mengandung segmen '..'.".to_string()),
+            ".." => return Err("must not contain a '..' segment.".to_string()),
             other => segments.push(other.to_lowercase()),
         }
     }
     if segments.is_empty() {
-        return Err("pola tidak menunjuk path.".to_string());
+        return Err("pattern does not point to a path.".to_string());
     }
 
     let literal = segments
@@ -443,7 +443,7 @@ mod tests {
 
         let error = validate_patterns(&patterns(&["public/build/**", "/absolute"])).unwrap_err();
         assert!(error.contains("dirtyIgnore[2]"), "{error}");
-        assert!(error.contains("relatif"), "{error}");
+        assert!(error.contains("relative"), "{error}");
 
         let error = validate_patterns(&patterns(&["C:\\project\\**"])).unwrap_err();
         assert!(error.contains("drive letter"), "{error}");
@@ -452,10 +452,10 @@ mod tests {
         assert!(error.contains(".."), "{error}");
 
         let error = validate_patterns(&patterns(&[""])).unwrap_err();
-        assert!(error.contains("kosong"), "{error}");
+        assert!(error.contains("empty"), "{error}");
 
         let error = validate_patterns(&patterns(&["bad\npattern"])).unwrap_err();
-        assert!(error.contains("kontrol"), "{error}");
+        assert!(error.contains("control"), "{error}");
     }
 
     #[test]
@@ -464,11 +464,11 @@ mod tests {
             .map(|index| format!("build/{index}/**"))
             .collect();
         let error = validate_patterns(&too_many).unwrap_err();
-        assert!(error.contains("maksimal"), "{error}");
+        assert!(error.contains("at most"), "{error}");
 
         let too_long = "a".repeat(MAX_PATTERN_LENGTH + 1);
         let error = validate_patterns(&[too_long]).unwrap_err();
-        assert!(error.contains("terlalu panjang"), "{error}");
+        assert!(error.contains("too long"), "{error}");
     }
 
     #[test]

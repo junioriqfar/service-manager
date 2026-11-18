@@ -540,7 +540,7 @@ mod tests {
             &sink,
         )
         .unwrap_err();
-        assert!(error.contains("Folder project"), "{error}");
+        assert!(error.contains("Project folder"), "{error}");
 
         write_config(
             &config_path,

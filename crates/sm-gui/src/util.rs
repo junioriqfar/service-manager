@@ -25,7 +25,7 @@ pub fn read_log_tail(path: &Path, max_bytes: u64) -> String {
         Err(error) => return format!("(failed to read log metadata: {error})"),
     };
     if length == 0 {
-        return "(file log kosong)".to_string();
+        return "(log file is empty)".to_string();
     }
 
     let start = length.saturating_sub(max_bytes);
@@ -159,7 +159,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("empty.log");
         fs::write(&path, b"").unwrap();
-        assert_eq!(read_log_tail(&path, LOG_MAX_BYTES), "(file log kosong)");
+        assert_eq!(read_log_tail(&path, LOG_MAX_BYTES), "(log file is empty)");
     }
 
     #[test]

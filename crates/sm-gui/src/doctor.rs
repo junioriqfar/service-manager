@@ -735,7 +735,7 @@ pub(crate) fn task_check(task_name: &str, status: Result<TaskStatusView, String>
             format!(
                 "Scheduled Task '{task_name}' is installed but its action is not hidden. Triggering it may flash a PowerShell window."
             ),
-            "Click Repair Task in Settings > Privileged Execution as Administrator to apply -WindowStyle Hidden and the Hidden setting.",
+            "Click Repair Task in Settings > Privileged Execution as Administrator to apply the hidden wscript launcher and the Hidden setting.",
         ),
         Ok(status) => check(
             "task.status",
@@ -1767,7 +1767,7 @@ mod tests {
         let missing = registry_checks(false, &Ok(UpdaterConfig::default()), Some(&[]));
         assert_eq!(missing[0].status, DoctorStatus::Warning);
 
-        let invalid = registry_checks(true, &Err("Config JSON tidak valid".to_string()), Some(&[]));
+        let invalid = registry_checks(true, &Err("Config JSON is invalid".to_string()), Some(&[]));
         assert_eq!(invalid[0].status, DoctorStatus::Error);
         assert!(invalid[0].detail.contains("invalid"));
     }
