@@ -1101,6 +1101,7 @@ mod tests {
 
         let mut settings = crate::settings::Settings::default();
         settings.maintenance.enabled = true;
+        settings.tools.git.path = temp.path().join("git.exe").to_string_lossy().to_string();
         crate::settings::save_settings(&temp.path().join("data/settings.json"), &settings).unwrap();
 
         let error = run_registry_with(
