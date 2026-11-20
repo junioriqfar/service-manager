@@ -1,5 +1,6 @@
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 
+import { Hint } from "@/components/hint";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,17 +25,18 @@ export function ThemeToggle() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground"
-          title="Change theme"
-          aria-label="Change theme"
-        >
-          <CurrentIcon className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
+      <Hint label="Change theme" side="left">
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground"
+            aria-label="Change theme"
+          >
+            <CurrentIcon className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+      </Hint>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuLabel>Theme</DropdownMenuLabel>
         <DropdownMenuSeparator />

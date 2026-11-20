@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { Hint } from "@/components/hint";
+import { InfoHint } from "@/components/info-hint";
 import { PathInput } from "@/components/path-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,8 +70,11 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("space-y-1.5", className)} title={hint}>
-      <Label htmlFor={htmlFor}>{label}</Label>
+    <div className={cn("space-y-1.5", className)}>
+      <div className="flex items-center gap-1">
+        <Label htmlFor={htmlFor}>{label}</Label>
+        {hint ? <InfoHint label={hint} /> : null}
+      </div>
       {children}
       {description ? (
         <div className="flex items-start gap-1 text-xs text-muted-foreground">{description}</div>
@@ -239,17 +244,23 @@ export function RemoteTriggerView() {
             </p>
           </div>
           <Badge variant={running ? "warning" : "secondary"}>{status}</Badge>
-          <Button type="button" variant="outline" size="sm" onClick={() => void preview()} disabled={running} title="Show the SSH command without executing it">
-            <Eye />
-            Preview
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => void testSsh()} disabled={running} title="Test SSH authentication and connection">
-            <Terminal />
-            Test SSH
-          </Button>
-          <Button type="button" size="sm" onClick={() => void save()} disabled={running || loading} title="Save host, auth, and wrapper settings">
-            Save
-          </Button>
+          <Hint label="Show the SSH command without executing it">
+            <Button type="button" variant="outline" size="sm" onClick={() => void preview()} disabled={running}>
+              <Eye />
+              Preview
+            </Button>
+          </Hint>
+          <Hint label="Test SSH authentication and connection">
+            <Button type="button" variant="outline" size="sm" onClick={() => void testSsh()} disabled={running}>
+              <Terminal />
+              Test SSH
+            </Button>
+          </Hint>
+          <Hint label="Save host, auth, and wrapper settings">
+            <Button type="button" size="sm" onClick={() => void save()} disabled={running || loading}>
+              Save
+            </Button>
+          </Hint>
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -343,7 +354,6 @@ export function RemoteTriggerView() {
               value={config.wrapper}
               onChange={(event) => set("wrapper", event.target.value)}
               placeholder="C:\tools\ServiceManager\scripts\Invoke-UpdaterTask.ps1"
-              title={SERVER_PATH_HINT}
             />
           </Field>
           <Field
@@ -358,7 +368,6 @@ export function RemoteTriggerView() {
               value={config.remoteBin}
               onChange={(event) => set("remoteBin", event.target.value)}
               placeholder="C:\tools\ServiceManager\target\release\sm-updater.exe"
-              title={SERVER_PATH_HINT}
             />
           </Field>
           <Field
@@ -373,7 +382,6 @@ export function RemoteTriggerView() {
               value={config.remoteConfig}
               onChange={(event) => set("remoteConfig", event.target.value)}
               placeholder="C:\tools\ServiceManager\data\projects.json"
-              title={SERVER_PATH_HINT}
             />
           </Field>
           <Field label="App ID (optional)" htmlFor="remote-app" hint="App ID for Check App / Run App">
@@ -385,52 +393,56 @@ export function RemoteTriggerView() {
             />
           </Field>
           <div className="flex items-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void run(config.app.trim() || null, true)}
-              disabled={running || !config.app.trim()}
-              title="Check the configured app without changing files"
-            >
-              <Search />
-              Check App
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void run(config.app.trim() || null, false)}
-              disabled={running || !config.app.trim()}
-              title="Run update for the configured app"
-            >
-              <Play />
-              Run App
-            </Button>
+            <Hint label="Check the configured app without changing files">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void run(config.app.trim() || null, true)}
+                disabled={running || !config.app.trim()}
+              >
+                <Search />
+                Check App
+              </Button>
+            </Hint>
+            <Hint label="Run update for the configured app">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void run(config.app.trim() || null, false)}
+                disabled={running || !config.app.trim()}
+              >
+                <Play />
+                Run App
+              </Button>
+            </Hint>
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void run(null, true)}
-            disabled={running || loading}
-            title="Check all apps on the server"
-          >
-            {running ? <Loader2 className="animate-spin" /> : <Search />}
-            Check All
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void run(null, false)}
-            disabled={running || loading}
-            title="Update all apps; services may restart"
-          >
-            {running ? <Loader2 className="animate-spin" /> : <Play />}
-            Update All
-          </Button>
+          <Hint label="Check all apps on the server">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void run(null, true)}
+              disabled={running || loading}
+            >
+              {running ? <Loader2 className="animate-spin" /> : <Search />}
+              Check All
+            </Button>
+          </Hint>
+          <Hint label="Update all apps; services may restart">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void run(null, false)}
+              disabled={running || loading}
+            >
+              {running ? <Loader2 className="animate-spin" /> : <Play />}
+              Update All
+            </Button>
+          </Hint>
           <span className="text-xs text-muted-foreground">
             Update All can stop/restart services on the server.
           </span>
@@ -445,17 +457,18 @@ export function RemoteTriggerView() {
               Streamed from ssh stdout/stderr. {output.length} line(s).
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setOutput([])}
-            disabled={running || output.length === 0}
-            title="Clear the output panel"
-          >
-            <Trash2 />
-            Clear
-          </Button>
+          <Hint label="Clear the output panel">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setOutput([])}
+              disabled={running || output.length === 0}
+            >
+              <Trash2 />
+              Clear
+            </Button>
+          </Hint>
         </div>
         <div
           ref={outputRef}

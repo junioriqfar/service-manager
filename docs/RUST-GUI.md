@@ -65,7 +65,7 @@ Installer NSIS dan CI dijelaskan di [RUST-RELEASE.md](RUST-RELEASE.md).
 - UI React + TypeScript (Vite, Tailwind CSS, shadCN UI) sepenuhnya dalam Bahasa Inggris.
 - Tema terang/gelap/sistem dengan ikon Sun/Moon/Monitor; pilihan disimpan di `localStorage`, default mengikuti preferensi sistem.
 - Path fields use the reusable `PathInput`: a normal text input plus an icon-only **Browse** button
-  (`aria-label`, `title`, and `Hint` tooltip). Modes: existing file, directory, executable, and
+  (`aria-label` and `Hint` tooltip). Modes: existing file, directory, executable, and
   save/new file. `pick_file` and `pick_save_file` are Tauri commands in `commands.rs`; they reuse
   `pick_directory`/`pick_executable` behavior, seed the dialog from the current value, and accept
   an optional filter/default filename.
@@ -109,6 +109,22 @@ These conventions are shared by every tab and are covered by Rust UI source test
 - Dialogs that must not close while work is running (batch progress) pass
   `hideClose` and block Escape/outside interaction through `contentProps`.
 
+### Tooltips
+
+- All help text uses the shadCN/Radix `Hint` tooltip (`components/hint.tsx`). Native
+  browser `title` attributes are not allowed on DOM elements or UI primitives
+  (`Button`, `Badge`, `div`, `span`, `p`, `Input`, `SelectTrigger`, `TableCell`,
+  `Label`, `a`, and similar) because they produce a second, unstyled tooltip.
+- `TooltipText` (`components/tooltip-text.tsx`) renders truncated content (table
+  cells, paths, commit hashes, service summaries, errors) and exposes the full value
+  through `Hint`.
+- `InfoHint` (`components/info-hint.tsx`) is the small info icon used next to labels
+  and form fields for field-level help.
+- Component `title` props on `ModalShell`, `ConfirmDialog`, `PlanSection`, and
+  `DialogTitle` are dialog/section headings, not tooltips, and stay as-is.
+- A Rust source regression test in `crates/sm-gui/src/main.rs` scans every
+  `ui/src/**/*.ts`/`*.tsx` file and fails on native `title=` attributes.
+
 ### Status badges
 
 - `components/status-badge.tsx` renders `StatusBadge` (shadCN `Badge` + lucide icon +
@@ -127,10 +143,10 @@ These conventions are shared by every tab and are covered by Rust UI source test
 ### Updater row actions
 
 - The Actions column always shows only **Preview Plan** and **Check** as icon buttons.
-  Both have `aria-label`, `title`, and a `Hint` tooltip, and stop row-click propagation.
+  Both have `aria-label` and a `Hint` tooltip, and stop row-click propagation.
 - The rightmost `MoreHorizontal` button opens a `DropdownMenu` with Run, Test, Log,
-  History, Edit, a separator, and destructive Delete. Menu items carry titles and do
-  not select the row.
+  History, Edit, a separator, and destructive Delete. Menu items use visible labels
+  (no native `title`) and do not select the row.
 - The right-click context menu on the row is unchanged and still exposes the full
   action list (Preview Plan, Run, Check, Test, Log, History, Edit, Delete).
 
@@ -472,8 +488,10 @@ cargo test -p sm-gui
 cargo clippy -p sm-gui --all-targets -- -D warnings
 ```
 
-Test GUI mencakup (total workspace 490 test):
+Test GUI mencakup (total workspace 491 test):
 
+- UI source: regression scan for native `title=` attributes (only `ModalShell`,
+  `ConfirmDialog`, `PlanSection`, and `DialogTitle` title props are allowed).
 - Urutan dan paralelisme batch (dependency, stop reversal, concurrency, failure isolation, cancellation).
 - State: upsert/duplikat, simpan/muat config, batch lock.
 - Util: log tail, batas baris, export JSON, app log.

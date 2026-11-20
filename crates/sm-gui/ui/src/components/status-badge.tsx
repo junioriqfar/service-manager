@@ -50,7 +50,6 @@ export function StatusBadge({
       <Badge
         variant={tone}
         tabIndex={0}
-        title={hint}
         className={cn(
           "max-w-full gap-1 whitespace-nowrap px-2 py-0.5 text-[11px] font-semibold",
           className,

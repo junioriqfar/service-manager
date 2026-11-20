@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 
 import { ServiceStatusBadge } from "@/components/status-badge";
+import { Hint } from "@/components/hint";
+import { TooltipText } from "@/components/tooltip-text";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -82,25 +84,30 @@ export function ServiceTable({
           <span className="hidden text-xs text-muted-foreground min-[1100px]:inline">
             Right-click a service for actions
           </span>
-          <Button type="button" variant="outline" size="sm" onClick={onAdd} title="Add a new service configuration">
-            <Plus />
-            Add
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onImport}
-            disabled={importing}
-            title="Scan installed Windows services to import"
-          >
-            {importing ? <Loader2 className="animate-spin" /> : <ImportIcon />}
-            Import
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onRefresh} title="Reload service list and SCM status">
-            <RefreshCw className={cn(refreshing && "animate-spin")} />
-            Refresh
-          </Button>
+          <Hint label="Add a new service configuration">
+            <Button type="button" variant="outline" size="sm" onClick={onAdd}>
+              <Plus />
+              Add
+            </Button>
+          </Hint>
+          <Hint label="Scan installed Windows services to import">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onImport}
+              disabled={importing}
+            >
+              {importing ? <Loader2 className="animate-spin" /> : <ImportIcon />}
+              Import
+            </Button>
+          </Hint>
+          <Hint label="Reload service list and SCM status">
+            <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
+              <RefreshCw className={cn(refreshing && "animate-spin")} />
+              Refresh
+            </Button>
+          </Hint>
         </div>
       </CardHeader>
       <CardContent className="min-h-0 flex-1 p-0">
@@ -171,23 +178,21 @@ export function ServiceTable({
                             hint={service.error || undefined}
                           />
                         </TableCell>
-                        <TableCell className="truncate font-medium" title={service.name}>
-                          {service.name}
+                        <TableCell className="truncate font-medium">
+                          <TooltipText text={service.name}>{service.name}</TooltipText>
                         </TableCell>
-                        <TableCell
-                          className="truncate text-muted-foreground"
-                          title={service.displayName}
-                        >
-                          {service.displayName || "—"}
+                        <TableCell className="truncate text-muted-foreground">
+                          <TooltipText text={service.displayName}>
+                            {service.displayName || "—"}
+                          </TooltipText>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {typeLabel(service.serviceType)}
                         </TableCell>
-                        <TableCell
-                          className="truncate font-mono text-xs text-muted-foreground"
-                          title={service.executable}
-                        >
-                          {service.executable || "—"}
+                        <TableCell className="truncate font-mono text-xs text-muted-foreground">
+                          <TooltipText text={service.executable}>
+                            {service.executable || "—"}
+                          </TooltipText>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {startupLabel(service.startup)}

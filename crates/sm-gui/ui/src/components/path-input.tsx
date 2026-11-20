@@ -138,7 +138,6 @@ export function PathInput({
             size="icon"
             className="h-9 w-9 shrink-0"
             aria-label={accessibleLabel}
-            title={tooltip}
             onClick={() => void browse()}
             disabled={disabled || browsing}
           >

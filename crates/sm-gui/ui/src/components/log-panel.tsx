@@ -1,6 +1,7 @@
 import { ExternalLink, FileText, RefreshCw } from "lucide-react";
 import type { RefObject } from "react";
 
+import { TooltipText } from "@/components/tooltip-text";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -35,12 +36,12 @@ export function LogPanel({
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
           <CardTitle className="truncate text-sm font-semibold">{title}</CardTitle>
         </div>
-        <span
-          className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
-          title={logView?.path}
+        <TooltipText
+          text={logView?.path ?? ""}
+          className="min-w-0 flex-1 text-xs text-muted-foreground"
         >
           {logView?.path ?? ""}
-        </span>
+        </TooltipText>
         <div className="ml-auto flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <Switch

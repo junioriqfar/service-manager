@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 
 import { Hint } from "@/components/hint";
+import { InfoHint } from "@/components/info-hint";
 import { PathInput } from "@/components/path-input";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -311,26 +312,25 @@ function ToolCard({
           </div>
           <p className="text-xs text-muted-foreground">{definition.description}</p>
         </div>
-        <Badge
-          variant={badge.variant}
-          className="max-w-56 truncate"
-          title={badge.title || badge.label}
-        >
-          {badge.label}
-        </Badge>
+        <Hint label={badge.title || badge.label}>
+          <Badge variant={badge.variant} className="max-w-56 truncate">
+            {badge.label}
+          </Badge>
+        </Hint>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Input
-          value={value.path}
-          onChange={(event) =>
-            onChange({ path: event.target.value, version: "", detectedAt: "" })
-          }
-          placeholder="C:\\path\\to\\executable"
-          className="h-8 min-w-0 flex-1 font-mono text-xs"
-          title={`Path to ${definition.label}. You can type it, browse, or auto-detect.`}
-          aria-label={`${definition.label} path`}
-        />
+        <Hint label={`Path to ${definition.label}. You can type it, browse, or auto-detect.`}>
+          <Input
+            value={value.path}
+            onChange={(event) =>
+              onChange({ path: event.target.value, version: "", detectedAt: "" })
+            }
+            placeholder="C:\\path\\to\\executable"
+            className="h-8 min-w-0 flex-1 font-mono text-xs"
+            aria-label={`${definition.label} path`}
+          />
+        </Hint>
         <Hint label={`Browse for the ${definition.label} executable`}>
           <Button
             type="button"
@@ -600,10 +600,11 @@ function DoctorChecks({ checks }: { checks: DoctorCheck[] }) {
               <div
                 key={check.id}
                 className="min-w-0 rounded-md border bg-background/40 px-3 py-2"
-                title={`${check.id} · ${DOCTOR_STATUS_LABELS[check.status]}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 text-sm font-medium break-words">{check.label}</div>
+                  <Hint label={`${check.id} · ${DOCTOR_STATUS_LABELS[check.status]}`}>
+                    <div className="min-w-0 text-sm font-medium break-words">{check.label}</div>
+                  </Hint>
                   <Badge variant={doctorStatusVariant(check.status)}>
                     {DOCTOR_STATUS_LABELS[check.status]}
                   </Badge>
@@ -679,18 +680,18 @@ function DoctorCard({
           </Hint>
           {report && (
             <div className="flex flex-wrap gap-1.5 text-xs">
-              <Badge variant="success" title="Checks with status OK">
-                OK {report.counts.ok}
-              </Badge>
-              <Badge variant="warning" title="Checks that need attention">
-                Warning {report.counts.warning}
-              </Badge>
-              <Badge variant="destructive" title="Checks that block updates">
-                Error {report.counts.error}
-              </Badge>
-              <Badge variant="outline" title="Checks that were not applicable or unavailable">
-                Skipped {report.counts.skipped}
-              </Badge>
+              <Hint label="Checks with status OK">
+                <Badge variant="success">OK {report.counts.ok}</Badge>
+              </Hint>
+              <Hint label="Checks that need attention">
+                <Badge variant="warning">Warning {report.counts.warning}</Badge>
+              </Hint>
+              <Hint label="Checks that block updates">
+                <Badge variant="destructive">Error {report.counts.error}</Badge>
+              </Hint>
+              <Hint label="Checks that were not applicable or unavailable">
+                <Badge variant="outline">Skipped {report.counts.skipped}</Badge>
+              </Hint>
             </div>
           )}
         </div>
@@ -952,12 +953,11 @@ function GitCredentialsCard() {
               <div className="space-y-1">
                 <Label className="text-xs">Git host</Label>
                 <Select value={host || undefined} onValueChange={changeHost}>
-                  <SelectTrigger
-                    className="h-8"
-                    title="Hosts are parsed from app repoUrl values. Userinfo, port, path, and query are stripped."
-                  >
-                    <SelectValue placeholder="Select a Git host" />
-                  </SelectTrigger>
+                  <Hint label="Hosts are parsed from app repoUrl values. Userinfo, port, path, and query are stripped.">
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select a Git host" />
+                    </SelectTrigger>
+                  </Hint>
                   <SelectContent>
                     {hosts.map((view) => (
                       <SelectItem key={view.host} value={view.host}>
@@ -975,14 +975,15 @@ function GitCredentialsCard() {
                 <Label className="text-xs" htmlFor="settings-git-username">
                   Username
                 </Label>
-                <Input
-                  id="settings-git-username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="oauth2"
-                  className="h-8"
-                  title="Git credential username, for example oauth2 for GitLab or x-access-token for GitHub."
-                />
+                <Hint label="Git credential username, for example oauth2 for GitLab or x-access-token for GitHub.">
+                  <Input
+                    id="settings-git-username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="oauth2"
+                    className="h-8"
+                  />
+                </Hint>
               </div>
             </div>
 
@@ -993,16 +994,15 @@ function GitCredentialsCard() {
                 onValueChange={setAppId}
                 disabled={appChoices.length === 0}
               >
-                <SelectTrigger
-                  className="h-8"
-                  title="Test Remote runs git ls-remote for this app. Apps on the selected host are listed; all apps are available when the host has no registered apps."
-                >
-                  <SelectValue
-                    placeholder={
-                      apps.length === 0 ? "No updater apps registered" : "Select an app"
-                    }
-                  />
-                </SelectTrigger>
+                <Hint label="Test Remote runs git ls-remote for this app. Apps on the selected host are listed; all apps are available when the host has no registered apps.">
+                  <SelectTrigger className="h-8">
+                    <SelectValue
+                      placeholder={
+                        apps.length === 0 ? "No updater apps registered" : "Select an app"
+                      }
+                    />
+                  </SelectTrigger>
+                </Hint>
                 <SelectContent>
                   {appChoices.map((app) => (
                     <SelectItem key={app.id} value={app.id}>
@@ -1023,16 +1023,17 @@ function GitCredentialsCard() {
               <Label className="text-xs" htmlFor="settings-git-token">
                 Personal Access Token
               </Label>
-              <Input
-                id="settings-git-token"
-                type="password"
-                autoComplete="new-password"
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-                placeholder="Paste token (never shown after Store)"
-                className="h-8 font-mono text-xs"
-                title="Sent to git credential approve through stdin. Stored by Git Credential Manager with DPAPI; never written to settings.json or logs."
-              />
+              <Hint label="Sent to git credential approve through stdin. Stored by Git Credential Manager with DPAPI; never written to settings.json or logs.">
+                <Input
+                  id="settings-git-token"
+                  type="password"
+                  autoComplete="new-password"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                  placeholder="Paste token (never shown after Store)"
+                  className="h-8 font-mono text-xs"
+                />
+              </Hint>
             </div>
 
             <div className="flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
@@ -1272,10 +1273,15 @@ function SshFirewallCard() {
                     <tr
                       key={`${rule.name || rule.displayName}-${index}`}
                       className="border-t"
-                      title={`${rule.name || "(unnamed rule)"} · ${rule.direction || "direction unknown"}`}
                     >
                       <td className="max-w-64 break-words px-2 py-1.5 font-medium">
-                        {rule.displayName || rule.name || "(unnamed rule)"}
+                        <Hint
+                          label={`${rule.name || "(unnamed rule)"} · ${rule.direction || "direction unknown"}`}
+                        >
+                          <span className="break-words">
+                            {rule.displayName || rule.name || "(unnamed rule)"}
+                          </span>
+                        </Hint>
                       </td>
                       <td className="px-2 py-1.5">{rule.enabled || "—"}</td>
                       <td className="px-2 py-1.5">{rule.action || "—"}</td>
@@ -1353,10 +1359,12 @@ function ApacheChangePanel({
               {pending.newPath}
             </CardDescription>
           </div>
-          <Badge variant="warning" title="services.json has not been updated yet">
-            Not applied · {pending.services.length} service
-            {pending.services.length === 1 ? "" : "s"}
-          </Badge>
+          <Hint label="services.json has not been updated yet">
+            <Badge variant="warning">
+              Not applied · {pending.services.length} service
+              {pending.services.length === 1 ? "" : "s"}
+            </Badge>
+          </Hint>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0">
@@ -1480,13 +1488,12 @@ function ApacheChangePanel({
               ) : (
                 <div className="flex flex-wrap gap-1">
                   {pending.apps.map((app) => (
-                    <Badge
+                    <Hint
                       key={app.id}
-                      variant="outline"
-                      title={`webServerService links ${app.name} to an affected Apache service`}
+                      label={`webServerService links ${app.name} to an affected Apache service`}
                     >
-                      {app.name || app.id}
-                    </Badge>
+                      <Badge variant="outline">{app.name || app.id}</Badge>
+                    </Hint>
                   ))}
                 </div>
               )}
@@ -1548,15 +1555,16 @@ function ApacheApplyResultCard({
               Updated services: {result.services.join(", ") || "(none)"}
             </CardDescription>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            title="Hide this Apache apply result"
-          >
-            Close
-          </Button>
+          <Hint label="Hide this Apache apply result">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+            >
+              Close
+            </Button>
+          </Hint>
         </div>
       </CardHeader>
       <CardContent className="space-y-2 p-4 pt-0 text-xs">
@@ -2508,12 +2516,11 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                       setApacheMappingError(null);
                     }}
                   >
-                    <SelectTrigger
-                      className="h-8"
-                      title="Choose which Apache service config to scan. Multiple Apache services use different ServerRoot/Include trees."
-                    >
-                      <SelectValue placeholder="Select Apache service" />
-                    </SelectTrigger>
+                    <Hint label="Choose which Apache service config to scan. Multiple Apache services use different ServerRoot/Include trees.">
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Select Apache service" />
+                      </SelectTrigger>
+                    </Hint>
                     <SelectContent>
                       {apacheServiceChoices.map((service) => (
                         <SelectItem key={service.name} value={service.name}>
@@ -2524,14 +2531,13 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   </Select>
                 </div>
               ) : (
-                <Badge
-                  variant="outline"
-                  title="Apache services come from data/services.json"
-                >
-                  {apacheServiceChoices.length === 1
-                    ? `Service: ${apacheServiceChoices[0].name}`
-                    : "No Apache service"}
-                </Badge>
+                <Hint label="Apache services come from data/services.json">
+                  <Badge variant="outline">
+                    {apacheServiceChoices.length === 1
+                      ? `Service: ${apacheServiceChoices[0].name}`
+                      : "No Apache service"}
+                  </Badge>
+                </Hint>
               )}
               <Hint label="Parse the selected Apache config, ServerRoot, Include/IncludeOptional files, and Define variables to suggest app mappings">
                 <Button
@@ -2630,17 +2636,18 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                               {suggestion.appName || suggestion.appId}
                             </span>
                             <Badge variant="outline">{suggestion.appId}</Badge>
-                            <Badge
-                              variant={
-                                suggestion.confidence === "high" ? "success" : "warning"
-                              }
-                              title={`${suggestion.matchKind} match`}
-                            >
-                              {suggestion.confidence} confidence
-                            </Badge>
-                            <Badge variant="outline" title="How localPath relates to DocumentRoot">
-                              {suggestion.matchKind}
-                            </Badge>
+                            <Hint label={`${suggestion.matchKind} match`}>
+                              <Badge
+                                variant={
+                                  suggestion.confidence === "high" ? "success" : "warning"
+                                }
+                              >
+                                {suggestion.confidence} confidence
+                              </Badge>
+                            </Hint>
+                            <Hint label="How localPath relates to DocumentRoot">
+                              <Badge variant="outline">{suggestion.matchKind}</Badge>
+                            </Hint>
                           </span>
                           <span className="mt-1 block break-all font-mono text-muted-foreground">
                             {suggestion.localPath} → {suggestion.documentRoot}
@@ -2669,7 +2676,6 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                         checked
                         disabled
                         className="mt-0.5"
-                        title={`${item.appName || item.appId} is already mapped to ${item.existingService}`}
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -2677,7 +2683,11 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                             {item.appName || item.appId}
                           </span>
                           <Badge variant="outline">{item.existingService}</Badge>
-                          <Badge variant="success">Already mapped</Badge>
+                          <Hint
+                            label={`${item.appName || item.appId} is already mapped to ${item.existingService}`}
+                          >
+                            <Badge variant="success">Already mapped</Badge>
+                          </Hint>
                         </div>
                         <div className="mt-1 break-all font-mono text-muted-foreground">
                           {item.localPath}
@@ -2749,20 +2759,21 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   <Label className="text-xs" htmlFor="settings-max-concurrent">
                     Max concurrent checks (stage 1)
                   </Label>
-                  <Input
-                    id="settings-max-concurrent"
-                    type="number"
-                    min={1}
-                    max={32}
-                    value={draft.updater.maxConcurrentUpdates}
-                    onChange={(event) =>
-                      updateUpdater({
-                        maxConcurrentUpdates: Number.parseInt(event.target.value, 10) || 0,
-                      })
-                    }
-                    className="h-8"
-                    title="Stage 1: only Check All runs in parallel (1–32). Run/Update All and trigger runs remain serial to protect builds, installs, and services."
-                  />
+                  <Hint label="Stage 1: only Check All runs in parallel (1–32). Run/Update All and trigger runs remain serial to protect builds, installs, and services.">
+                    <Input
+                      id="settings-max-concurrent"
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={draft.updater.maxConcurrentUpdates}
+                      onChange={(event) =>
+                        updateUpdater({
+                          maxConcurrentUpdates: Number.parseInt(event.target.value, 10) || 0,
+                        })
+                      }
+                      className="h-8"
+                    />
+                  </Hint>
                   <p className="text-xs text-muted-foreground">
                     Stage 1: applies to <span className="font-medium">Check All</span> only.
                     Run/Update All and trigger runs stay serial.
@@ -2773,20 +2784,21 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                     Log retention days
                   </Label>
                   <div className="flex gap-2">
-                    <Input
-                      id="settings-retention"
-                      type="number"
-                      min={0}
-                      max={3650}
-                      value={draft.updater.logRetentionDays}
-                      onChange={(event) =>
-                        updateUpdater({
-                          logRetentionDays: Number.parseInt(event.target.value, 10) || 0,
-                        })
-                      }
-                      className="h-8 flex-1"
-                      title="Delete updater logs older than this many days (0–3650)."
-                    />
+                    <Hint label="Delete updater logs older than this many days (0–3650).">
+                      <Input
+                        id="settings-retention"
+                        type="number"
+                        min={0}
+                        max={3650}
+                        value={draft.updater.logRetentionDays}
+                        onChange={(event) =>
+                          updateUpdater({
+                            logRetentionDays: Number.parseInt(event.target.value, 10) || 0,
+                          })
+                        }
+                        className="h-8 flex-1"
+                      />
+                    </Hint>
                     <Hint label="Delete old updater and project logs now. Manual only; updates never prune automatically.">
                       <Button
                         type="button"
@@ -2799,7 +2811,6 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                           setPruneOpen(true);
                         }}
                         disabled={pruning}
-                        title="Clean Logs Now"
                       >
                         {pruning ? <Loader2 className="animate-spin" /> : <Trash2 />}
                         Clean Logs Now
@@ -2807,18 +2818,17 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                     </Hint>
                   </div>
                   {pruneResult && (
-                    <p
-                      className="text-xs text-muted-foreground"
-                      title={pruneResult.errors.join("\n")}
-                    >
-                      Last cleanup: {pruneResult.deletedFiles} file(s),{" "}
-                      {formatBytes(pruneResult.deletedBytes)} deleted; {pruneResult.skippedActive}{" "}
-                      active/recent skipped
-                      {pruneResult.errors.length > 0
-                        ? `, ${pruneResult.errors.length} error(s)`
-                        : ""}
-                      . History is not pruned.
-                    </p>
+                    <Hint label={pruneResult.errors.join(" · ")}>
+                      <p className="text-xs text-muted-foreground">
+                        Last cleanup: {pruneResult.deletedFiles} file(s),{" "}
+                        {formatBytes(pruneResult.deletedBytes)} deleted; {pruneResult.skippedActive}{" "}
+                        active/recent skipped
+                        {pruneResult.errors.length > 0
+                          ? `, ${pruneResult.errors.length} error(s)`
+                          : ""}
+                        . History is not pruned.
+                      </p>
+                    </Hint>
                   )}
                   {pruneError && <p className="text-xs text-destructive">{pruneError}</p>}
                 </div>
@@ -2827,24 +2837,28 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
               <div className="grid gap-3 sm:grid-cols-2">
                 {TIMEOUT_FIELDS.map((field) => (
                   <div className="space-y-1" key={field.key}>
-                    <Label className="text-xs" htmlFor={`settings-${field.key}`} title={field.hint}>
-                      {field.label}
-                    </Label>
-                    <Input
-                      id={`settings-${field.key}`}
-                      type="number"
-                      min={1}
-                      max={86400}
-                      value={draft.updater.timeouts[field.key]}
-                      onChange={(event) =>
-                        updateTimeout(
-                          field.key,
-                          Number.parseInt(event.target.value, 10) || 0,
-                        )
-                      }
-                      className="h-8"
-                      title={`${field.hint} Range: 1–86400 seconds.`}
-                    />
+                    <div className="flex items-center gap-1">
+                      <Label className="text-xs" htmlFor={`settings-${field.key}`}>
+                        {field.label}
+                      </Label>
+                      <InfoHint label={field.hint} />
+                    </div>
+                    <Hint label={`${field.hint} Range: 1–86400 seconds.`}>
+                      <Input
+                        id={`settings-${field.key}`}
+                        type="number"
+                        min={1}
+                        max={86400}
+                        value={draft.updater.timeouts[field.key]}
+                        onChange={(event) =>
+                          updateTimeout(
+                            field.key,
+                            Number.parseInt(event.target.value, 10) || 0,
+                          )
+                        }
+                        className="h-8"
+                      />
+                    </Hint>
                   </div>
                 ))}
               </div>
@@ -2895,26 +2909,28 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   <Label className="text-xs" htmlFor="settings-task-name">
                     Task name
                   </Label>
-                  <Input
-                    id="settings-task-name"
-                    value={draft.privilegedExecution.taskName}
-                    onChange={(event) => updatePrivileged({ taskName: event.target.value })}
-                    className="h-8"
-                    title="Windows Scheduled Task name. Letters, numbers, spaces, dots, underscores, and hyphens only."
-                  />
+                  <Hint label="Windows Scheduled Task name. Letters, numbers, spaces, dots, underscores, and hyphens only.">
+                    <Input
+                      id="settings-task-name"
+                      value={draft.privilegedExecution.taskName}
+                      onChange={(event) => updatePrivileged({ taskName: event.target.value })}
+                      className="h-8"
+                    />
+                  </Hint>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs" htmlFor="settings-user-id">
                     User
                   </Label>
-                  <Input
-                    id="settings-user-id"
-                    value={draft.privilegedExecution.userId}
-                    onChange={(event) => updatePrivileged({ userId: event.target.value })}
-                    placeholder="DOMAIN\\user or empty for current user"
-                    className="h-8"
-                    title="Account that owns the Scheduled Task. Leave empty to use the current user at install time."
-                  />
+                  <Hint label="Account that owns the Scheduled Task. Leave empty to use the current user at install time.">
+                    <Input
+                      id="settings-user-id"
+                      value={draft.privilegedExecution.userId}
+                      onChange={(event) => updatePrivileged({ userId: event.target.value })}
+                      placeholder="DOMAIN\\user or empty for current user"
+                      className="h-8"
+                    />
+                  </Hint>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Logon type</Label>
@@ -2922,12 +2938,11 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                     value={draft.privilegedExecution.logonType}
                     onValueChange={(value) => updatePrivileged({ logonType: value })}
                   >
-                    <SelectTrigger
-                      className="h-8"
-                      title="Interactive stores no password. S4U runs without a stored password."
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
+                    <Hint label="Interactive stores no password. S4U runs without a stored password.">
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </Hint>
                     <SelectContent>
                       <SelectItem value="Interactive">Interactive</SelectItem>
                       <SelectItem value="S4U">S4U</SelectItem>
@@ -2938,13 +2953,14 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   <Label className="text-xs" htmlFor="settings-task-state">
                     State
                   </Label>
-                  <Input
-                    id="settings-task-state"
-                    readOnly
-                    value={taskStatus?.state || (taskStatusError ? "Unavailable" : "Unknown")}
-                    className="h-8"
-                    title="Current Windows Scheduled Task state."
-                  />
+                  <Hint label="Current Windows Scheduled Task state.">
+                    <Input
+                      id="settings-task-state"
+                      readOnly
+                      value={taskStatus?.state || (taskStatusError ? "Unavailable" : "Unknown")}
+                      className="h-8"
+                    />
+                  </Hint>
                 </div>
               </div>
 
@@ -3057,15 +3073,16 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                     <div className="text-xs font-medium">
                       Task output (exit {taskOperation.exitCode})
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setTaskOperation(null)}
-                      title="Hide the last Scheduled Task output"
-                    >
-                      Close
-                    </Button>
+                    <Hint label="Hide the last Scheduled Task output">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setTaskOperation(null)}
+                      >
+                        Close
+                      </Button>
+                    </Hint>
                   </div>
                   <pre
                     className={cn(
@@ -3094,9 +3111,11 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   projects.json when the file exists.
                 </CardDescription>
               </div>
-              <Badge variant="outline" title="Detected from SSH_CONNECTION/SSH_CLIENT">
-                {view?.currentClientIp ? `Client IP: ${view.currentClientIp}` : "Client IP: not detected"}
-              </Badge>
+              <Hint label="Detected from SSH_CONNECTION/SSH_CLIENT">
+                <Badge variant="outline">
+                  {view?.currentClientIp ? `Client IP: ${view.currentClientIp}` : "Client IP: not detected"}
+                </Badge>
+              </Hint>
             </div>
           </CardHeader>
           <CardContent className="space-y-3 p-4 pt-0">
@@ -3104,15 +3123,16 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
               <Label className="text-xs" htmlFor="settings-trigger-ips">
                 Allowed IPs / CIDR
               </Label>
-              <textarea
-                id="settings-trigger-ips"
-                value={triggerIpsText}
-                onChange={(event) => changeTriggerIps(event.target.value)}
-                rows={3}
-                placeholder={"10.255.240.143, 10.255.240.0/24\n127.0.0.1, ::1"}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                title="Comma or newline separated. Accepts IPv4, IPv6, and CIDR. Empty list allows any remote IP."
-              />
+              <Hint label="Comma or newline separated. Accepts IPv4, IPv6, and CIDR. Empty list allows any remote IP.">
+                <textarea
+                  id="settings-trigger-ips"
+                  value={triggerIpsText}
+                  onChange={(event) => changeTriggerIps(event.target.value)}
+                  rows={3}
+                  placeholder={"10.255.240.143, 10.255.240.0/24\n127.0.0.1, ::1"}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+              </Hint>
               <p className="text-xs text-muted-foreground">
                 Comma or newline separated. Accepts IPv4, IPv6, and CIDR. An empty list allows
                 any remote IP; use Allow local to control non-SSH triggers.
@@ -3154,17 +3174,18 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                     modified. Unsaved edits in this form are discarded by the migration.
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void migrateTrigger()}
-                  disabled={migratingTrigger || saving || toolsBusy}
-                  title="Copy projects.json trigger into data/settings.json"
-                >
-                  {migratingTrigger ? <Loader2 className="animate-spin" /> : <ArrowRightLeft />}
-                  Migrate Trigger
-                </Button>
+                <Hint label="Copy projects.json trigger into data/settings.json">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void migrateTrigger()}
+                    disabled={migratingTrigger || saving || toolsBusy}
+                  >
+                    {migratingTrigger ? <Loader2 className="animate-spin" /> : <ArrowRightLeft />}
+                    Migrate Trigger
+                  </Button>
+                </Hint>
               </div>
             )}
           </CardContent>
@@ -3188,16 +3209,17 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   Check and dry-run plan still work while maintenance mode is enabled.
                 </CardDescription>
               </div>
-              <Badge
-                variant={draft.maintenance.enabled ? "warning" : "outline"}
-                title={
+              <Hint
+                label={
                   draft.maintenance.enabled
                     ? "Non-check update runs and the SSH trigger are rejected"
                     : "Updates and the SSH trigger are allowed"
                 }
               >
-                {draft.maintenance.enabled ? "Paused" : "Active"}
-              </Badge>
+                <Badge variant={draft.maintenance.enabled ? "warning" : "outline"}>
+                  {draft.maintenance.enabled ? "Paused" : "Active"}
+                </Badge>
+              </Hint>
             </div>
           </CardHeader>
           <CardContent className="space-y-3 p-4 pt-0">
@@ -3209,27 +3231,29 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                   Check and dry-run plan remain available.
                 </p>
               </div>
-              <Switch
-                id="settings-maintenance-enabled"
-                checked={draft.maintenance.enabled}
-                onCheckedChange={(checked) => updateMaintenance({ enabled: checked })}
-                title="Pause updates and the SSH trigger until maintenance mode is disabled here in Settings."
-              />
+              <Hint label="Pause updates and the SSH trigger until maintenance mode is disabled here in Settings.">
+                <Switch
+                  id="settings-maintenance-enabled"
+                  checked={draft.maintenance.enabled}
+                  onCheckedChange={(checked) => updateMaintenance({ enabled: checked })}
+                />
+              </Hint>
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs" htmlFor="settings-maintenance-message">
                 Maintenance message
               </Label>
-              <Input
-                id="settings-maintenance-message"
-                value={draft.maintenance.message}
-                onChange={(event) => updateMaintenance({ message: event.target.value })}
-                placeholder="Deploy window / maintenance reason"
-                maxLength={500}
-                className="h-8"
-                title="Optional reason shown in Doctor and the Updater warning banner. Maximum 500 characters; control characters are rejected."
-              />
+              <Hint label="Optional reason shown in Doctor and the Updater warning banner. Maximum 500 characters; control characters are rejected.">
+                <Input
+                  id="settings-maintenance-message"
+                  value={draft.maintenance.message}
+                  onChange={(event) => updateMaintenance({ message: event.target.value })}
+                  placeholder="Deploy window / maintenance reason"
+                  maxLength={500}
+                  className="h-8"
+                />
+              </Hint>
               <p className="text-xs text-muted-foreground">
                 Shown in Doctor and the Updater banner. Check and dry-run plan still work. Save
                 Settings to apply; disable maintenance mode here (the Updater banner has no
@@ -3281,34 +3305,37 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
         maxWidthClass="sm:max-w-3xl"
         footer={
           <>
-            <Button
-              type="button"
-              onClick={() => void applyPhpReferences("variable")}
-              disabled={phpApplying !== null}
-              title="Replace the old PHP path with ${PHP} and the old root with ${PHP_HOME}"
-            >
-              {phpApplying === "variable" ? <Loader2 className="animate-spin" /> : null}
-              {"Use ${PHP}"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void applyPhpReferences("new_path")}
-              disabled={phpApplying !== null || !phpPathChange?.newPath.trim()}
-              title="Replace the old PHP path/root with the saved new path/root in the listed apps"
-            >
-              {phpApplying === "new_path" ? <Loader2 className="animate-spin" /> : null}
-              Use new path
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => dismissPhpPathChange()}
-              disabled={phpApplying !== null}
-              title="Close this dialog without changing projects.json"
-            >
-              Leave
-            </Button>
+            <Hint label="Replace the old PHP path with ${PHP} and the old root with ${PHP_HOME}">
+              <Button
+                type="button"
+                onClick={() => void applyPhpReferences("variable")}
+                disabled={phpApplying !== null}
+              >
+                {phpApplying === "variable" ? <Loader2 className="animate-spin" /> : null}
+                {"Use ${PHP}"}
+              </Button>
+            </Hint>
+            <Hint label="Replace the old PHP path/root with the saved new path/root in the listed apps">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void applyPhpReferences("new_path")}
+                disabled={phpApplying !== null || !phpPathChange?.newPath.trim()}
+              >
+                {phpApplying === "new_path" ? <Loader2 className="animate-spin" /> : null}
+                Use new path
+              </Button>
+            </Hint>
+            <Hint label="Close this dialog without changing projects.json">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => dismissPhpPathChange()}
+                disabled={phpApplying !== null}
+              >
+                Leave
+              </Button>
+            </Hint>
           </>
         }
       >
@@ -3345,15 +3372,12 @@ export function SettingsView({ admin }: { admin: boolean | null }) {
                       <span className="font-medium">
                         {reference.appName || reference.appId}
                       </span>
-                      <Badge variant="outline" title="App id">
-                        {reference.appId}
-                      </Badge>
-                      <Badge
-                        variant="secondary"
-                        title="Command field that contains the old PHP path/root"
-                      >
-                        {reference.field}
-                      </Badge>
+                      <Hint label="App id">
+                        <Badge variant="outline">{reference.appId}</Badge>
+                      </Hint>
+                      <Hint label="Command field that contains the old PHP path/root">
+                        <Badge variant="secondary">{reference.field}</Badge>
+                      </Hint>
                     </div>
                     <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-muted-foreground">
                       {reference.value}

@@ -11,6 +11,7 @@ export function Hint({
   side?: "top" | "right" | "bottom" | "left";
   children: ReactNode;
 }) {
+  if (!label.trim()) return <>{children}</>;
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>

@@ -116,6 +116,8 @@ mod ui_tests {
     const CONFIRM_DIALOG: &str = include_str!("../ui/src/components/confirm-dialog.tsx");
     const STATUS_BADGE: &str = include_str!("../ui/src/components/status-badge.tsx");
     const PATH_INPUT: &str = include_str!("../ui/src/components/path-input.tsx");
+    const TOOLTIP_TEXT: &str = include_str!("../ui/src/components/tooltip-text.tsx");
+    const INFO_HINT: &str = include_str!("../ui/src/components/info-hint.tsx");
     const TYPES: &str = include_str!("../ui/src/lib/types.ts");
     const HINT: &str = include_str!("../ui/src/components/hint.tsx");
     const TOOLTIP: &str = include_str!("../ui/src/components/ui/tooltip.tsx");
@@ -152,8 +154,182 @@ mod ui_tests {
 
     fn all_sources() -> String {
         format!(
-            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{MODAL_SHELL}\n{CONFIRM_DIALOG}\n{STATUS_BADGE}\n{PATH_INPUT}\n{TYPES}\n{HINT}\n{TOOLTIP}\n{MAIN_TSX}\n{SERVICE_LIB}\n{TAURI_LIB}\n{UTILS_LIB}\n{BADGE}\n{BUTTON}\n{CARD}\n{CHECKBOX}\n{CONTEXT_MENU}\n{DIALOG}\n{DROPDOWN_MENU}\n{INPUT}\n{LABEL}\n{PROGRESS}\n{SCROLL_AREA}\n{SELECT}\n{SEPARATOR}\n{SONNER}\n{SWITCH}\n{TABLE}"
+            "{INDEX_HTML}\n{APP}\n{SERVICE_TABLE}\n{SERVICE_FORM}\n{SERVICE_ACTIONS}\n{LOG_PANEL}\n{BATCH_DIALOG}\n{IMPORT_DIALOG}\n{ABOUT_DIALOG}\n{ADMIN_BANNER}\n{THEME_TOGGLE}\n{THEME_PROVIDER}\n{UPDATER_VIEW}\n{UPDATER_FORM}\n{REMOTE_VIEW}\n{SETTINGS_VIEW}\n{MODAL_SHELL}\n{CONFIRM_DIALOG}\n{STATUS_BADGE}\n{PATH_INPUT}\n{TOOLTIP_TEXT}\n{INFO_HINT}\n{TYPES}\n{HINT}\n{TOOLTIP}\n{MAIN_TSX}\n{SERVICE_LIB}\n{TAURI_LIB}\n{UTILS_LIB}\n{BADGE}\n{BUTTON}\n{CARD}\n{CHECKBOX}\n{CONTEXT_MENU}\n{DIALOG}\n{DROPDOWN_MENU}\n{INPUT}\n{LABEL}\n{PROGRESS}\n{SCROLL_AREA}\n{SELECT}\n{SEPARATOR}\n{SONNER}\n{SWITCH}\n{TABLE}"
         )
+    }
+
+    /// Every `.ts`/`.tsx` file under `ui/src`, read from disk so new files are
+    /// covered automatically.
+    fn ui_source_files() -> Vec<std::path::PathBuf> {
+        fn collect(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).expect("read UI source directory") {
+                let path = entry.expect("read UI source entry").path();
+                if path.is_dir() {
+                    collect(&path, files);
+                } else if matches!(
+                    path.extension().and_then(|value| value.to_str()),
+                    Some("ts") | Some("tsx")
+                ) {
+                    files.push(path);
+                }
+            }
+        }
+
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("ui")
+            .join("src");
+        let mut files = Vec::new();
+        collect(&root, &mut files);
+        files.sort();
+        assert!(
+            !files.is_empty(),
+            "no UI sources found under {}",
+            root.display()
+        );
+        files
+    }
+
+    /// Opening JSX tags as `(start, end, name)`. Attribute expressions may
+    /// contain `>` inside `{}` or quoted strings, so a naive `find('>')` is not
+    /// enough. Overlapping spans are kept so the innermost tag can be chosen.
+    fn jsx_tags(source: &str) -> Vec<(usize, usize, String)> {
+        let bytes = source.as_bytes();
+        let mut tags = Vec::new();
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] == b'<' {
+                let name_start = index + 1;
+                if name_start < bytes.len()
+                    && (bytes[name_start].is_ascii_alphabetic() || bytes[name_start] == b'_')
+                {
+                    let mut cursor = name_start;
+                    while cursor < bytes.len()
+                        && (bytes[cursor].is_ascii_alphanumeric()
+                            || bytes[cursor] == b'_'
+                            || bytes[cursor] == b'.')
+                    {
+                        cursor += 1;
+                    }
+                    let name = source[name_start..cursor].to_string();
+                    let mut end = None;
+                    let mut brace_depth = 0usize;
+                    let mut quote: Option<u8> = None;
+                    let mut scan = cursor;
+                    while scan < bytes.len() {
+                        let byte = bytes[scan];
+                        if let Some(open) = quote {
+                            if byte == b'\\' {
+                                scan += 2;
+                                continue;
+                            }
+                            if byte == open {
+                                quote = None;
+                            }
+                        } else {
+                            match byte {
+                                b'"' | b'\'' | b'`' => quote = Some(byte),
+                                b'{' => brace_depth += 1,
+                                b'}' => brace_depth = brace_depth.saturating_sub(1),
+                                b'>' if brace_depth == 0 => {
+                                    end = Some(scan + 1);
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        scan += 1;
+                    }
+                    if let Some(end) = end {
+                        tags.push((index, end, name));
+                    }
+                }
+            }
+            index += 1;
+        }
+        tags
+    }
+
+    #[test]
+    fn ui_uses_only_shadcn_tooltips() {
+        const ALLOWED_TITLE_PROPS: [&str; 4] =
+            ["ModalShell", "ConfirmDialog", "PlanSection", "DialogTitle"];
+        let mut kept_props = Vec::new();
+        let mut seen_tags = Vec::new();
+
+        for file in ui_source_files() {
+            let source = std::fs::read_to_string(&file).expect("read UI source");
+            let tags = jsx_tags(&source);
+            for (index, _) in source.match_indices("title=") {
+                if let Some(previous) = source[..index].chars().next_back() {
+                    if previous.is_ascii_alphanumeric() || previous == '-' || previous == '_' {
+                        continue;
+                    }
+                }
+                let tag = tags
+                    .iter()
+                    .filter(|(start, end, _)| *start < index && index < *end)
+                    .min_by_key(|(start, end, _)| end - start)
+                    .map(|(_, _, name)| name.as_str());
+                let line = source[..index].lines().count();
+                match tag {
+                    Some(name) if ALLOWED_TITLE_PROPS.contains(&name) => {
+                        kept_props.push(name.to_string());
+                        seen_tags.push(name.to_string());
+                    }
+                    Some(name) => panic!(
+                        "{}:{}: native title= attribute on <{}>; use Hint/TooltipText instead",
+                        file.display(),
+                        line,
+                        name
+                    ),
+                    None => panic!(
+                        "{}:{}: title= is not inside a recognized JSX component; use Hint/TooltipText instead",
+                        file.display(),
+                        line
+                    ),
+                }
+            }
+        }
+
+        assert!(
+            !kept_props.is_empty(),
+            "expected component title props to remain"
+        );
+        for component in ["ModalShell", "ConfirmDialog", "PlanSection"] {
+            assert!(
+                seen_tags.iter().any(|tag| tag == component),
+                "expected {component} title prop to remain"
+            );
+        }
+
+        // Known double-tooltip regressions.
+        assert!(
+            !STATUS_BADGE.contains("title="),
+            "StatusBadge must rely on Hint only"
+        );
+        assert!(
+            !PATH_INPUT.contains("title="),
+            "PathInput browse button must rely on Hint only"
+        );
+        assert!(
+            !REMOTE_VIEW.contains("title="),
+            "Remote Field/inputs must use Hint or InfoHint instead of native title"
+        );
+        assert!(
+            !SERVICE_TABLE.contains("title="),
+            "service table keeps native title"
+        );
+        assert!(
+            !LOG_PANEL.contains("title="),
+            "log panel keeps native title"
+        );
+        assert!(
+            !THEME_TOGGLE.contains("title="),
+            "theme toggle keeps native title"
+        );
+        assert!(!APP.contains("title="), "App keeps native title");
+        assert!(TOOLTIP_TEXT.contains("Hint"));
+        assert!(INFO_HINT.contains("Hint"));
     }
 
     #[test]
@@ -233,8 +409,8 @@ mod ui_tests {
                 "missing path picker command: {command}"
             );
         }
-        assert!(PATH_INPUT.contains("aria-label"));
-        assert!(PATH_INPUT.contains("title={tooltip}"));
+        assert!(PATH_INPUT.contains("aria-label={accessibleLabel}"));
+        assert!(!PATH_INPUT.contains("title="));
         assert!(PATH_INPUT.contains("Hint"));
         assert!(SERVICE_FORM.contains("<PathInput"));
         assert!(SERVICE_FORM.contains("mode=\"executable\""));

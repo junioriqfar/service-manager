@@ -28,6 +28,7 @@ import { ServiceTable } from "@/components/service-table";
 import { SettingsView } from "@/components/settings-view";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { TooltipText } from "@/components/tooltip-text";
 import { UpdaterView } from "@/components/updater-view";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -575,139 +576,153 @@ function ServiceManager() {
             </div>
             <div className="min-w-0">
               <h1 className="truncate text-base font-semibold leading-tight">Service Manager</h1>
-              <p className="truncate text-xs text-muted-foreground" title={configHome}>
+              <TooltipText text={configHome} className="text-xs text-muted-foreground">
                 {configHome || "Loading paths..."}
-              </p>
+              </TooltipText>
             </div>
           </div>
 
           <div className="flex items-center gap-1 rounded-md border bg-background/60 p-1" role="tablist">
-            <Button
-              type="button"
-              size="sm"
-              variant={view === "services" ? "secondary" : "ghost"}
-              onClick={() => setView("services")}
-              role="tab"
-              aria-selected={view === "services"}
-              title="Services: install, start, stop, restart Windows services"
-            >
-              <ServerCog />
-              Services
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={view === "updater" ? "secondary" : "ghost"}
-              onClick={() => setView("updater")}
-              role="tab"
-              aria-selected={view === "updater"}
-              title="Updater: registry apps, toolchain, check/update"
-            >
-              <PackageOpen />
-              Updater
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={view === "remote" ? "secondary" : "ghost"}
-              onClick={() => setView("remote")}
-              role="tab"
-              aria-selected={view === "remote"}
-              title="Remote: trigger the server over SSH"
-            >
-              <RadioTower />
-              Remote
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={view === "settings" ? "secondary" : "ghost"}
-              onClick={() => setView("settings")}
-              role="tab"
-              aria-selected={view === "settings"}
-              title="Settings: toolchain paths, updater defaults, and privileged execution"
-            >
-              <SettingsIcon />
-              Settings
-            </Button>
+            <Hint label="Services: install, start, stop, restart Windows services">
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "services" ? "secondary" : "ghost"}
+                onClick={() => setView("services")}
+                role="tab"
+                aria-selected={view === "services"}
+              >
+                <ServerCog />
+                Services
+              </Button>
+            </Hint>
+            <Hint label="Updater: registry apps, toolchain, check/update">
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "updater" ? "secondary" : "ghost"}
+                onClick={() => setView("updater")}
+                role="tab"
+                aria-selected={view === "updater"}
+              >
+                <PackageOpen />
+                Updater
+              </Button>
+            </Hint>
+            <Hint label="Remote: trigger the server over SSH">
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "remote" ? "secondary" : "ghost"}
+                onClick={() => setView("remote")}
+                role="tab"
+                aria-selected={view === "remote"}
+              >
+                <RadioTower />
+                Remote
+              </Button>
+            </Hint>
+            <Hint label="Settings: toolchain paths, updater defaults, and privileged execution">
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "settings" ? "secondary" : "ghost"}
+                onClick={() => setView("settings")}
+                role="tab"
+                aria-selected={view === "settings"}
+              >
+                <SettingsIcon />
+                Settings
+              </Button>
+            </Hint>
           </div>
 
           <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-2">
             {view === "services" && (
               <>
                 <div className="flex items-center gap-1.5" role="group" aria-label="Batch actions">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void runBatch("start")}
-                    disabled={!hasInstalled || batchRunning}
-                    title="Start all installed services in dependency order"
-                  >
-                    <Play className="text-emerald-600 dark:text-emerald-400" />
-                    Start All
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void runBatch("stop")}
-                    disabled={!hasInstalled || batchRunning}
-                    title="Stop all installed services in reverse dependency order"
-                  >
-                    <Square className="fill-current text-red-600 dark:text-red-400" />
-                    Stop All
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void runBatch("restart")}
-                    disabled={!hasInstalled || batchRunning}
-                    title="Restart all installed services"
-                  >
-                    <RotateCcw className="text-blue-600 dark:text-blue-400" />
-                    Restart All
-                  </Button>
+                  <Hint label="Start all installed services in dependency order">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void runBatch("start")}
+                      disabled={!hasInstalled || batchRunning}
+                    >
+                      <Play className="text-emerald-600 dark:text-emerald-400" />
+                      Start All
+                    </Button>
+                  </Hint>
+                  <Hint label="Stop all installed services in reverse dependency order">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void runBatch("stop")}
+                      disabled={!hasInstalled || batchRunning}
+                    >
+                      <Square className="fill-current text-red-600 dark:text-red-400" />
+                      Stop All
+                    </Button>
+                  </Hint>
+                  <Hint label="Restart all installed services">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void runBatch("restart")}
+                      disabled={!hasInstalled || batchRunning}
+                    >
+                      <RotateCcw className="text-blue-600 dark:text-blue-400" />
+                      Restart All
+                    </Button>
+                  </Hint>
                 </div>
 
                 <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
 
                 <div className="flex items-center gap-1.5" role="group" aria-label="Global actions">
-                  <Button type="button" variant="outline" size="sm" onClick={() => void backupConfig()} title="Export service config to backup folder">
-                    <Download />
-                    Backup
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => restoreInputRef.current?.click()}
-                    title="Restore service config from a JSON file"
-                  >
-                    <Upload />
-                    Restore
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleOpenFolder} title="Open config folder">
-                    <FolderOpen />
-                    Folder
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleOpenAppLog} title="Open application log">
-                    <FileText />
-                    App Log
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void openAbout()} title="About Service Manager">
-                    <Info />
-                    About
-                  </Button>
+                  <Hint label="Export service config to backup folder">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void backupConfig()}>
+                      <Download />
+                      Backup
+                    </Button>
+                  </Hint>
+                  <Hint label="Restore service config from a JSON file">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => restoreInputRef.current?.click()}
+                    >
+                      <Upload />
+                      Restore
+                    </Button>
+                  </Hint>
+                  <Hint label="Open config folder">
+                    <Button type="button" variant="outline" size="sm" onClick={handleOpenFolder}>
+                      <FolderOpen />
+                      Folder
+                    </Button>
+                  </Hint>
+                  <Hint label="Open application log">
+                    <Button type="button" variant="outline" size="sm" onClick={handleOpenAppLog}>
+                      <FileText />
+                      App Log
+                    </Button>
+                  </Hint>
+                  <Hint label="About Service Manager">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void openAbout()}>
+                      <Info />
+                      About
+                    </Button>
+                  </Hint>
                 </div>
 
                 <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
               </>
             )}
-            <Hint label="Theme: light, dark, or system" side="left">
-              <ThemeToggle />
-            </Hint>
+            <ThemeToggle />
           </div>
         </header>
         <main className="flex min-h-0 flex-1 flex-col gap-3 p-3">

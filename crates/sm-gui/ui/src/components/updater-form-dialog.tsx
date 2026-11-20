@@ -321,10 +321,10 @@ export function UpdaterFormDialog({
       maxWidthClass="sm:max-w-3xl"
       footer={
         <>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} title="Discard changes">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={() => void save()} disabled={saving} title="Save this app to the registry">
+          <Button type="button" onClick={() => void save()} disabled={saving}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
             {saving ? "Saving…" : "Save"}
           </Button>
@@ -534,7 +534,6 @@ export function UpdaterFormDialog({
             >
               <SelectTrigger
                 id="updater-web-server"
-                title="Optional Apache service from data/services.json that serves this app."
               >
                 <SelectValue placeholder="Not linked" />
               </SelectTrigger>

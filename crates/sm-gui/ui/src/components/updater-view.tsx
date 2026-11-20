@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Hint } from "@/components/hint";
 import { ServiceStatusBadge, UpdaterStatusBadge } from "@/components/status-badge";
+import { TooltipText } from "@/components/tooltip-text";
 import { UpdaterFormDialog } from "@/components/updater-form-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -540,49 +541,53 @@ export function UpdaterView() {
               Manual SSH/GUI trigger only. No background polling.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void refresh(true)}
-            disabled={loading || running !== null}
-            title="Reload the app registry and status"
-          >
-            {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-            Refresh
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setForm({ open: true, edit: false, app: null })}
-            disabled={running !== null}
-            title="Register a new application"
-          >
-            <Plus />
-            Add App
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void run(null, true)}
-            disabled={running !== null || apps.length === 0}
-            title="Check all registered apps without changing files. Uses Max concurrent updates; Update All remains serial."
-          >
-            {running === "check" ? <Loader2 className="animate-spin" /> : <Search />}
-            Check All
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void run(null, false)}
-            disabled={running !== null || apps.length === 0}
-            title="Update all apps; services may restart"
-          >
-            {running === "update" ? <Loader2 className="animate-spin" /> : <Play />}
-            Update All
-          </Button>
+          <Hint label="Reload the app registry and status">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void refresh(true)}
+              disabled={loading || running !== null}
+            >
+              {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              Refresh
+            </Button>
+          </Hint>
+          <Hint label="Register a new application">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setForm({ open: true, edit: false, app: null })}
+              disabled={running !== null}
+            >
+              <Plus />
+              Add App
+            </Button>
+          </Hint>
+          <Hint label="Check all registered apps without changing files. Uses Max concurrent updates; Update All remains serial.">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void run(null, true)}
+              disabled={running !== null || apps.length === 0}
+            >
+              {running === "check" ? <Loader2 className="animate-spin" /> : <Search />}
+              Check All
+            </Button>
+          </Hint>
+          <Hint label="Update all apps; services may restart">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void run(null, false)}
+              disabled={running !== null || apps.length === 0}
+            >
+              {running === "update" ? <Loader2 className="animate-spin" /> : <Play />}
+              Update All
+            </Button>
+          </Hint>
         </div>
 
         {maintenance && maintenance.enabled && (
@@ -651,28 +656,32 @@ export function UpdaterView() {
                       </div>
                     )}
                     {app.webServerService && (
-                      <div
-                        className="text-xs text-muted-foreground"
-                        title={
+                      <Hint
+                        label={
                           app.apacheVersion
                             ? `Apache service ${app.webServerService} · ${app.apacheVersion}`
                             : `Apache service ${app.webServerService}`
                         }
                       >
-                        Web server {app.webServerService}
-                        {app.apacheVersion ? ` · ${app.apacheVersion}` : ""}
-                      </div>
+                        <div className="text-xs text-muted-foreground">
+                          Web server {app.webServerService}
+                          {app.apacheVersion ? ` · ${app.apacheVersion}` : ""}
+                        </div>
+                      </Hint>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-56 truncate text-xs" title={serviceSummary(app)}>
-                    {serviceSummary(app)}
+                  <TableCell className="max-w-56 truncate text-xs">
+                    <TooltipText text={serviceSummary(app)}>{serviceSummary(app)}</TooltipText>
                   </TableCell>
                   <TableCell>
                     <UpdaterStatusBadge status={app.status} />
                     {app.lastError && (
-                      <div className="mt-1 max-w-56 truncate text-xs text-destructive" title={app.lastError}>
+                      <TooltipText
+                        text={app.lastError}
+                        className="mt-1 max-w-56 text-xs text-destructive"
+                      >
                         {app.lastError}
-                      </div>
+                      </TooltipText>
                     )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
@@ -687,7 +696,6 @@ export function UpdaterView() {
                           size="icon"
                           className="h-8 w-8"
                           aria-label="Preview Plan"
-                          title="Preview Plan"
                           disabled={running !== null || planDialog.loading}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -708,7 +716,6 @@ export function UpdaterView() {
                           size="icon"
                           className="h-8 w-8"
                           aria-label="Check"
-                          title="Check"
                           disabled={running !== null}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -727,7 +734,6 @@ export function UpdaterView() {
                               size="icon"
                               className="h-8 w-8"
                               aria-label="More actions"
-                              title="More actions"
                               onClick={(event) => event.stopPropagation()}
                             >
                               <MoreHorizontal />
@@ -741,44 +747,30 @@ export function UpdaterView() {
                         >
                           <DropdownMenuItem
                             disabled={running !== null}
-                            title="Run the updater for this app; services may restart"
                             onSelect={() => void run(app.id, false)}
                           >
                             <Play />
                             Run
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            title="Detect path, branch, remote, and toolchain without changing files"
-                            onSelect={() => void testApp(app)}
-                          >
+                          <DropdownMenuItem onSelect={() => void testApp(app)}>
                             <FlaskConical />
                             Test
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            title="Show the latest updater log for this app"
-                            onSelect={() => setSelectedId(app.id)}
-                          >
+                          <DropdownMenuItem onSelect={() => setSelectedId(app.id)}>
                             <FileText />
                             Log
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            title="Show the latest 50 update history entries for this app"
-                            onSelect={() => void openHistory(app)}
-                          >
+                          <DropdownMenuItem onSelect={() => void openHistory(app)}>
                             <History />
                             History
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            title="Edit this updater app"
-                            onSelect={() => setForm({ open: true, edit: true, app })}
-                          >
+                          <DropdownMenuItem onSelect={() => setForm({ open: true, edit: true, app })}>
                             <Pencil />
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                            title="Remove this app from the registry; project files are not deleted"
                             onSelect={() => setDeleteTarget(app)}
                           >
                             <Trash2 />
@@ -793,7 +785,6 @@ export function UpdaterView() {
                   <ContextMenuContent className="w-48">
                     <ContextMenuItem
                       disabled={running !== null || planDialog.loading}
-                      title="Dry run: fetch remote refs and preview the plan without merging or changing services"
                       onSelect={() => void previewPlan(app)}
                     >
                       {planDialog.loading && planDialog.appId === app.id ? (
@@ -827,10 +818,7 @@ export function UpdaterView() {
                       <FileText />
                       Log
                     </ContextMenuItem>
-                    <ContextMenuItem
-                      title="Show the latest 50 update history entries for this app"
-                      onSelect={() => void openHistory(app)}
-                    >
+                    <ContextMenuItem onSelect={() => void openHistory(app)}>
                       <History />
                       History
                     </ContextMenuItem>
@@ -861,21 +849,25 @@ export function UpdaterView() {
               <div className="text-sm font-medium">
                 {selected ? `Log: ${selected.id}` : "Updater log"}
               </div>
-              <div className="truncate text-xs text-muted-foreground" title={logView?.path ?? ""}>
+              <TooltipText
+                text={logView?.path ?? ""}
+                className="text-xs text-muted-foreground"
+              >
                 {logView?.path || "Select an app to show its latest log."}
-              </div>
+              </TooltipText>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void loadLog(selectedId)}
-              disabled={!selectedId || logLoading}
-              title="Reload the latest log for the selected app"
-            >
-              {logLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              Reload
-            </Button>
+            <Hint label="Reload the latest log for the selected app">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void loadLog(selectedId)}
+                disabled={!selectedId || logLoading}
+              >
+                {logLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                Reload
+              </Button>
+            </Hint>
           </div>
           <pre className="min-h-24 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs">
             {logView?.text || "No log loaded."}
@@ -974,21 +966,21 @@ export function UpdaterView() {
                 <div className="flex flex-wrap items-center gap-2">
                   <UpdaterStatusBadge status={entry.status} />
                   <span className="text-muted-foreground">{formatWhen(entry.timestamp)}</span>
-                  <span
+                  <TooltipText
+                    text={entry.commit || "No commit recorded"}
                     className="ml-auto font-mono text-muted-foreground"
-                    title={entry.commit || "No commit recorded"}
                   >
                     {shortSha(entry.commit)}
-                  </span>
+                  </TooltipText>
                 </div>
                 <p className="mt-1 whitespace-pre-wrap break-words text-sm">
                   {entry.message || "—"}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
                   <span>Duration: {formatDuration(entry.durationMs)}</span>
-                  <span title="Trigger client IP recorded for audit">
-                    Client IP: {entry.clientIp || "—"}
-                  </span>
+                  <Hint label="Trigger client IP recorded for audit">
+                    <span>Client IP: {entry.clientIp || "—"}</span>
+                  </Hint>
                 </div>
               </div>
             ))}

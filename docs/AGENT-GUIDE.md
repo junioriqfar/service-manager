@@ -81,7 +81,7 @@ PowerShell lama sudah dihapus dari repo.
 | Auto migration | **Tidak pernah** | `migrationPolicy` selalu `block`. |
 | Auto polling/scheduler | **Tidak ada** | Trigger manual atau SSH. |
 
-Test workspace saat ini: **490 test**. Release portable: **`dist\ServiceManager-RS-0.1.0.zip`**.
+Test workspace saat ini: **491 test**. Release portable: **`dist\ServiceManager-RS-0.1.0.zip`**.
 
 ---
 
@@ -1993,7 +1993,7 @@ cargo fmt --all -- --check
 git diff --check
 ```
 
-Baseline saat dokumen ini dibuat: **490 test** (16 + 38 + 2 + 172 + 8 + 195 + 59). Test GUI
+Baseline saat dokumen ini dibuat: **491 test** (16 + 38 + 2 + 173 + 8 + 195 + 59). Test GUI
 memerlukan `ui/dist`; jalankan frontend build dulu.
 
 Smoke CLI:
@@ -2035,7 +2035,7 @@ Isi portable (setelah perubahan dokumen ini):
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --workspace` (490 atau angka terbaru)
+- [ ] `cargo test --workspace` (491 atau angka terbaru)
 - [ ] `git diff --check`
 - [ ] `Build-Release.ps1` sukses; ZIP berisi `AGENTS.md` + `docs/AGENT-GUIDE.md`
 - [ ] `sm-gui.exe` release terbuka, Services/Updater/Settings/Remote berfungsi
@@ -2053,7 +2053,7 @@ Isi portable (setelah perubahan dokumen ini):
 Sebelum menyerahkan pekerjaan:
 
 1. **Ringkas perubahan** dan file yang disentuh; bedakan dokumentasi vs kode vs config.
-2. **Status test**: `cargo test --workspace` (490/angka terbaru), clippy, fmt, `git diff --check`.
+2. **Status test**: `cargo test --workspace` (491/angka terbaru), clippy, fmt, `git diff --check`.
 3. **Runtime aman**: tidak ada perubahan `data/*.json`, history, log, backup, atau `dist/`.
 4. **Secret**: grep diff untuk token/password (`git diff | Select-String ...`); tidak ada
    plaintext.
